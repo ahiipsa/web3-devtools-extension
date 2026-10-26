@@ -93,8 +93,8 @@ describe("RPC Request table", () => {
   it("puts rows without a value last in both directions", () => {
     const table = buildTable([
       row("1", {}),
-      row("2", { contract: "WETH" }),
-      row("3", { contract: "DAI" }),
+      row("2", { contractLabel: "WETH" }),
+      row("3", { contractLabel: "DAI" }),
     ]);
 
     clickHeader(table, "contract");

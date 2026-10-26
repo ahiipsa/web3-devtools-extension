@@ -16,7 +16,12 @@ const textColumn = {
 
 export const rpcRequestColumns = [
   column.accessor("method", { ...textColumn, header: "Method", size: 160 }),
-  column.accessor("contract", { ...textColumn, header: "Contract", size: 140 }),
+  column.accessor("contractLabel", {
+    id: "contract",
+    ...textColumn,
+    header: "Contract",
+    size: 140,
+  }),
   column.accessor("functionName", {
     ...textColumn,
     id: "function",

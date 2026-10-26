@@ -29,6 +29,7 @@ import { isScrolledToBottom } from "../table/isScrolledToBottom.ts";
 const ROW_HEIGHT = 21;
 
 const SORT_ARROWS = { asc: "▲", desc: "▼" } as const;
+const ARIA_SORT = { asc: "ascending", desc: "descending" } as const;
 
 export const RequestTable = () => {
   const appContext = useContext(AppContext);
@@ -76,6 +77,8 @@ export const RequestTable = () => {
     }
   }, [rows.length]);
 
+  const pressedResizer = useRef(false);
+
   const totalWidth = table.getTotalSize();
 
   return (
@@ -108,16 +111,20 @@ export const RequestTable = () => {
                   <div
                     key={header.id}
                     role="columnheader"
-                    aria-sort={
-                      sorted
-                        ? sorted === "asc"
-                          ? "ascending"
-                          : "descending"
-                        : "none"
-                    }
+                    aria-sort={sorted ? ARIA_SORT[sorted] : "none"}
                     className="rpc-table-cell rpc-table-header-cell"
                     style={{ width: header.getSize() }}
-                    onClick={header.column.getToggleSortingHandler()}
+                    onMouseDown={(event) => {
+                      pressedResizer.current =
+                        event.target instanceof Element &&
+                        event.target.classList.contains("rpc-table-resizer");
+                    }}
+                    onClick={(event) => {
+                      // A drag released over the header must not sort it
+                      if (!pressedResizer.current) {
+                        header.column.getToggleSortingHandler()?.(event);
+                      }
+                    }}
                   >
                     <span className="rpc-table-cell-text">
                       {flexRender(
@@ -138,7 +145,6 @@ export const RequestTable = () => {
                       onMouseDown={header.getResizeHandler()}
                       onTouchStart={header.getResizeHandler()}
                       onDoubleClick={() => header.column.resetSize()}
-                      onClick={(event) => event.stopPropagation()}
                     />
                   </div>
                 );

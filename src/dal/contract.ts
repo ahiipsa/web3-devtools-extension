@@ -12,7 +12,8 @@ type ContractStore = Record<string, Contract>;
 export const normalizeAddress = (address: `0x${string}`) =>
   address.toLowerCase() as `0x${string}`;
 
-const readContracts = async (): Promise<ContractStore> => {
+// Keyed by normalized address
+export const getContracts = async (): Promise<ContractStore> => {
   const { contracts } = await chrome.storage.local.get({ contracts: {} });
   return contracts;
 };
@@ -45,7 +46,7 @@ export function parseAbiJson(json: string): Abi {
 
 export async function saveContract(contract: Contract): Promise<Contract> {
   const saved = { ...contract, address: normalizeAddress(contract.address) };
-  const contracts = await readContracts();
+  const contracts = await getContracts();
 
   contracts[saved.address] = saved;
   await chrome.storage.local.set({ contracts });
@@ -53,14 +54,9 @@ export async function saveContract(contract: Contract): Promise<Contract> {
   return saved;
 }
 
-// Keyed by normalized address
-export async function getContracts(): Promise<Record<string, Contract>> {
-  return readContracts();
-}
-
 export async function getContract(
   address: `0x${string}`,
 ): Promise<Contract | null> {
-  const contracts = await readContracts();
+  const contracts = await getContracts();
   return contracts[normalizeAddress(address)] ?? null;
 }

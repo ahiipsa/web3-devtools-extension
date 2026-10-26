@@ -54,13 +54,13 @@ describe("buildRpcRequestRow", () => {
   it("names the Contract when it is labelled", () => {
     const row = buildRpcRequestRow(rpcRequest(), () => token);
 
-    expect(row.contract).toBe("USDC");
+    expect(row.contractLabel).toBe("USDC");
   });
 
   it("shortens the address of an unlabelled Contract", () => {
     const row = buildRpcRequestRow(rpcRequest(), noContracts);
 
-    expect(row.contract).toBe("0x0000...00aa");
+    expect(row.contractLabel).toBe("0x0000...00aa");
     expect(row.functionName).toBeUndefined();
   });
 
@@ -72,7 +72,7 @@ describe("buildRpcRequestRow", () => {
       noContracts,
     );
 
-    expect(row.contract).toBeUndefined();
+    expect(row.contractLabel).toBeUndefined();
     expect(row.functionName).toBeUndefined();
   });
 

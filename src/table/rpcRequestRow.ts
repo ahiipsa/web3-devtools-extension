@@ -10,7 +10,7 @@ export interface RpcRequestRow {
   request: RpcRequest;
   method: string;
   // The Contract's name, else its short address; none when no Contract is called
-  contract?: string;
+  contractLabel?: string;
   functionName?: string;
   status?: string;
   // Any status other than ok
@@ -86,7 +86,7 @@ export function buildRpcRequestRow(
   return {
     request,
     method: request.requestBody.method,
-    contract:
+    contractLabel:
       callParams && (contract?.name || trimContractAddress(callParams.to)),
     functionName:
       contract && callParams?.data
