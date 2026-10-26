@@ -1,6 +1,15 @@
-import {RpcLog} from "./types/main.ts";
+import { RpcRequest } from "./types/main.ts";
 
-const methods = ['eth_chainId', 'eth_getBlockByNumber', 'eth_call', 'eth_sendTransaction', 'eth_getTransactionByHash', 'eth_estimateGas']
+const methods = [
+  "eth_chainId",
+  "eth_blockNumber",
+  "eth_getBlockByNumber",
+  "eth_call",
+  "eth_sendTransaction",
+  "eth_getTransactionByHash",
+  "eth_getTransactionReceipt",
+  "eth_estimateGas",
+];
 
 // Объект для хранения соединений с DevTools-окном по tabId
 const devtoolsPorts: Record<number, chrome.runtime.Port> = {};
@@ -34,11 +43,8 @@ chrome.runtime.onConnect.addListener((port) => {
 const decoder = new TextDecoder("utf-8");
 
 chrome.webRequest.onBeforeRequest.addListener(
-  function(details) {
+  function (details) {
     if (details.method === "POST" && details.requestBody) {
-
-
-
       if (!details.requestBody.raw) {
         return;
       }
@@ -49,37 +55,34 @@ chrome.webRequest.onBeforeRequest.addListener(
 
       try {
         const requestBody = decoder.decode(details.requestBody.raw[0].bytes);
-        const json = JSON.parse(requestBody);
+        const requestData = JSON.parse(requestBody);
 
-
-
-
-        const data: RpcLog = {
+        const data: RpcRequest = {
+          id: details.requestId,
           tabId: details.tabId,
-          rpcURL: details.url,
-          requestId: details.requestId,
-          id: json.id,
-          method: json.method,
-          contract: json.params[0].to,
-          data: json.params[0].data
-        }
+          url: details.url,
+          requestBody: {
+            ...requestData,
+          },
+        };
 
-        devtoolsPorts[details.tabId].postMessage({ type: "request", data });
+        if (methods.includes(requestData.method)) {
+          devtoolsPorts[details.tabId].postMessage({ type: "request", data });
 
-        if (methods.includes(json.method)) {
           chrome.storage.local.get("rpcLogs", (data) => {
             const logs = data.rpcLogs || [];
             logs.push(data);
+
             chrome.storage.local.set({ rpcLogs: logs });
           });
         }
       } catch (error) {
-        console.log('### error', error);
+        console.log("### error", error);
       }
     }
   },
   { urls: ["<all_urls>"] },
-  ["requestBody"]
+  ["requestBody"],
 );
 
 chrome.runtime.onInstalled.addListener((details) => {

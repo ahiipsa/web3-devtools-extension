@@ -1,7 +1,7 @@
-import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
-import { viteStaticCopy } from 'vite-plugin-static-copy';
-import tailwindcss from '@tailwindcss/vite'
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+import { viteStaticCopy } from "vite-plugin-static-copy";
+import tailwindcss from "@tailwindcss/vite";
 
 export default defineConfig({
   plugins: [
@@ -10,29 +10,29 @@ export default defineConfig({
     viteStaticCopy({
       targets: [
         {
-          src: 'public/manifest.json',
-          dest: '.',
-        }
+          src: "public/manifest.json",
+          dest: ".",
+        },
       ],
     }),
   ],
   build: {
-    outDir: 'build',
+    outDir: "build",
+    sourcemap: false,
     rollupOptions: {
       input: {
-        main: './index.html',
-        background: './src/background.ts',
+        main: "./index.html",
+        background: "./src/background.ts",
       },
       output: {
         entryFileNames: (chunkInfo) => {
-          if (chunkInfo.name === 'background') {
-            return '[name].js';
+          if (chunkInfo.name === "background") {
+            return "[name].js";
           }
-          return '[name]-[hash].js';
+          return "[name]-[hash].js";
         },
-        format: "esm"
-      }
+        format: "esm",
+      },
     },
   },
-
 });
