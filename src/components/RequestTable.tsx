@@ -236,7 +236,16 @@ export const RequestTable = () => {
                   }
                 >
                   {collapsed && (
-                    <div role="gridcell" className="rpc-table-cell">
+                    <div
+                      role="gridcell"
+                      className="rpc-table-cell"
+                      title={[
+                        row.original.method,
+                        formatContractCall(row.original),
+                      ]
+                        .filter(Boolean)
+                        .join("\n")}
+                    >
                       <span className="rpc-table-cell-text">
                         {row.original.method}
                       </span>

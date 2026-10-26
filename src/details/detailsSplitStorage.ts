@@ -1,6 +1,7 @@
 // Kept in the Panel's localStorage, so the split survives closing DevTools
 const TABLE_WIDTH_KEY = "rpcRequestDetails.tableWidth";
 
+// Match .rpc-details-table in RequestDetails.css
 const MIN_TABLE_WIDTH = 120;
 const MIN_DETAILS_WIDTH = 240;
 

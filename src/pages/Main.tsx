@@ -33,6 +33,8 @@ export const Main = () => {
         !event.defaultPrevented &&
         !isEditable(event.target)
       ) {
+        // Keep DevTools from also toggling its drawer
+        event.preventDefault();
         setRequestId(null);
       }
     };

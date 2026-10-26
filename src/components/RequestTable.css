@@ -201,6 +201,7 @@
   display: none;
 }
 
+/* 34px matches COLLAPSED_ROW_HEIGHT in RequestTable.tsx */
 .rpc-table-collapsed .rpc-table-row {
   height: 34px;
 }

@@ -1,7 +1,7 @@
 import "./RequestDetails.css";
 import cx from "classnames";
-import { ReactNode, useContext, useMemo } from "react";
-import { RpcRequest } from "../types/main.ts";
+import { Fragment, ReactNode, useContext, useMemo } from "react";
+import { ContractCall, RpcRequest } from "../types/main.ts";
 import { AppContext } from "./AppContext.tsx";
 import { ContractForm } from "./ContractForm.tsx";
 import { useContractQuery } from "../hooks/useContractQuery.ts";
@@ -20,8 +20,9 @@ export const RequestDetails = ({ request, onClose }: RequestDetailsProps) => {
   const { detailsTab, setDetailsTab } = useContext(AppContext);
 
   const callParams = getContractCallParams(request);
-  const tabs = getDetailsTabs(callParams !== undefined);
-  const shownTab = getShownDetailsTab(detailsTab, callParams !== undefined);
+  const callsContract = callParams !== undefined;
+  const tabs = getDetailsTabs(callsContract);
+  const shownTab = getShownDetailsTab(detailsTab, callsContract);
 
   const contractQuery = useContractQuery({ contractAddress: callParams?.to });
   const contract = contractQuery.data ?? undefined;
@@ -60,11 +61,16 @@ export const RequestDetails = ({ request, onClose }: RequestDetailsProps) => {
 
       <div className="rpc-details-body" role="tabpanel">
         {shownTab === "Overview" && (
-          <Overview request={request} contractName={contract?.name} />
+          <Overview
+            request={request}
+            callParams={callParams}
+            contractName={contract?.name}
+          />
         )}
         {shownTab === "Params" && (
           <Params
             request={request}
+            callParams={callParams}
             hasContract={!!contract}
             decoding={decoding}
           />
@@ -93,10 +99,10 @@ const Section = (props: { title: string; children: ReactNode }) => (
 const Fields = (props: { fields: [string, ReactNode][] }) => (
   <div className="rpc-details-fields">
     {props.fields.map(([name, value]) => (
-      <div key={name} className="contents">
+      <Fragment key={name}>
         <div className="rpc-details-field-name">{name}</div>
         <div className="rpc-details-field-value">{value}</div>
-      </div>
+      </Fragment>
     ))}
   </div>
 );
@@ -109,15 +115,15 @@ const Code = (props: { value: unknown }) => (
   </pre>
 );
 
-const Mismatch = (props: { children: ReactNode }) => (
+const DecodingMismatch = (props: { children: ReactNode }) => (
   <div className="rpc-details-failed">{props.children}</div>
 );
 
-const formatStatus = (request: RpcRequest) => {
+const StatusLabel = ({ request }: { request: RpcRequest }) => {
   const status = getRpcRequestStatus(request);
   switch (status?.kind) {
     case "ok":
-      return "ok";
+      return <span>ok</span>;
     case "error":
       return (
         <span className="rpc-details-failed">
@@ -133,21 +139,24 @@ const formatStatus = (request: RpcRequest) => {
         <span className="rpc-details-muted">
           {request.hasRpcResponseBody
             ? "No RPC Response with this id"
-            : "No JSON-RPC response"}
+            : "No RPC Response"}
         </span>
       );
   }
 };
 
-const Overview = (props: { request: RpcRequest; contractName?: string }) => {
-  const { request, contractName } = props;
-  const callParams = getContractCallParams(request);
+const Overview = (props: {
+  request: RpcRequest;
+  callParams: ContractCall | undefined;
+  contractName?: string;
+}) => {
+  const { request, callParams, contractName } = props;
 
   const fields: [string, ReactNode][] = [
     ["Endpoint", request.url],
     ["Method", request.requestBody.method],
     ["JSON-RPC id", JSON.stringify(request.requestBody.id ?? null)],
-    ["Status", formatStatus(request)],
+    ["Status", <StatusLabel request={request} />],
     ["HTTP status", request.httpStatus],
     ["Duration", formatDuration(request.time)],
     ["Started", new Date(request.startedDateTime).toLocaleString()],
@@ -164,29 +173,31 @@ const Overview = (props: { request: RpcRequest; contractName?: string }) => {
 
 const Params = (props: {
   request: RpcRequest;
+  callParams: ContractCall | undefined;
   hasContract: boolean;
   decoding: Decoding | undefined;
 }) => {
-  const { request, hasContract, decoding } = props;
-  const callParams = getContractCallParams(request);
+  const { request, callParams, hasContract, decoding } = props;
 
   return (
     <>
       {callParams && (
         <Section title="Decoded input">
+          {callParams.data && (
+            <Fields fields={[["Selector", callParams.data.slice(0, 10)]]} />
+          )}
           {decoding?.status === "decoded" && (
             <Fields
               fields={[
                 ["Function", decoding.signature],
-                ["Selector", callParams.data?.slice(0, 10)],
                 ["Arguments", stringifyArgs(decoding.args)],
               ]}
             />
           )}
           {decoding?.status === "mismatch" && (
-            <Mismatch>
+            <DecodingMismatch>
               The Contract&apos;s ABI does not match this RPC Request
-            </Mismatch>
+            </DecodingMismatch>
           )}
           {!decoding && (
             <div className="rpc-details-muted">
@@ -214,7 +225,7 @@ const Response = (props: {
   const { response } = request;
 
   if (!response) {
-    return <div className="rpc-details-muted">{formatStatus(request)}</div>;
+    return <StatusLabel request={request} />;
   }
 
   return (
@@ -228,9 +239,9 @@ const Response = (props: {
       )}
       {decoding?.status === "decoded" && decoding.returnValueMismatch && (
         <Section title="Decoded return value">
-          <Mismatch>
+          <DecodingMismatch>
             The RPC Response does not match the Contract&apos;s ABI
-          </Mismatch>
+          </DecodingMismatch>
         </Section>
       )}
       <Section title={response.error ? "Raw error" : "Raw result"}>
