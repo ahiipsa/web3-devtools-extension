@@ -23,6 +23,8 @@ The extension requests no host permissions and no access to the websites you vis
 
 ## Deleting your data
 
+To delete a single Contract, open the Contract tab of an RPC Request sent to its address, press "Delete" and confirm. It is removed from `chrome.storage.local` at once.
+
 Removing the extension from Chrome deletes everything it stored.
 
 ## Contact

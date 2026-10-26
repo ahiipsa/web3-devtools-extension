@@ -60,3 +60,10 @@ export async function getContract(
   const contracts = await getContracts();
   return contracts[normalizeAddress(address)] ?? null;
 }
+
+export async function deleteContract(address: `0x${string}`): Promise<void> {
+  const contracts = await getContracts();
+
+  delete contracts[normalizeAddress(address)];
+  await chrome.storage.local.set({ contracts });
+}

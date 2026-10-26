@@ -19,9 +19,10 @@ Build `release/evm-rpc-inspector-<version>.zip` (see [Release](#release)), then:
 1. Open DevTools on the page you want to debug and switch to the **EVM RPC** tab (the Panel).
 2. Use the dApp. RPC Requests appear in the list as they finish. Traffic sent before the Panel was first opened is not captured, so reload the page if needed.
 3. Select an RPC Request to see its params and RPC Response.
-4. For an RPC Request to a contract, click the settings icon to add the Contract: give it a name and paste its ABI (for a proxy, the implementation's ABI). RPC Requests to that address are then decoded.
+4. For an RPC Request to a contract, open its **Contract** tab to add the Contract: give it a name and paste its ABI (for a proxy, the implementation's ABI). RPC Requests to that address are then decoded.
+5. To remove a Contract, open its **Contract** tab again, press "Delete" and confirm. RPC Requests to that address are no longer decoded.
 
-The list is cleared when the page navigates or reloads, or with the "Clear" button. Contracts are kept until you remove the extension.
+The list is cleared when the page navigates or reloads, or with the "Clear" button. Contracts are kept until you delete them or remove the extension.
 
 ## Development
 

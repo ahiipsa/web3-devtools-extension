@@ -1,5 +1,5 @@
-import { parseAbiJson, saveContract } from "../dal/contract.ts";
-import { useEffect } from "react";
+import { deleteContract, parseAbiJson, saveContract } from "../dal/contract.ts";
+import { useEffect, useState } from "react";
 import { useContractQuery } from "../hooks/useContractQuery.ts";
 import { Button, Form, FormProps, Input, message } from "antd";
 
@@ -23,8 +23,12 @@ export const ContractForm = (props: ContractInfoProps) => {
 
   const [form] = Form.useForm();
 
+  // Inline confirmation instead of a browser confirm() dialog
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+
   useEffect(() => {
     form.resetFields();
+    setConfirmingDelete(false);
   }, [contract, form]);
 
   const [messageApi, messageContextHolder] = message.useMessage();
@@ -41,6 +45,19 @@ export const ContractForm = (props: ContractInfoProps) => {
       messageApi.error(
         `Failed to save contract: ${error instanceof Error ? error.message : String(error)}`,
       );
+    }
+  };
+
+  const onDelete = async () => {
+    try {
+      await deleteContract(contractAddress);
+      messageApi.success("Contract deleted");
+    } catch (error) {
+      messageApi.error(
+        `Failed to delete contract: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    } finally {
+      setConfirmingDelete(false);
     }
   };
 
@@ -93,7 +110,24 @@ export const ContractForm = (props: ContractInfoProps) => {
               <Button type="primary" htmlType="submit">
                 Save
               </Button>
+              {contract && !confirmingDelete && (
+                <Button danger onClick={() => setConfirmingDelete(true)}>
+                  Delete
+                </Button>
+              )}
             </div>
+            {contract && confirmingDelete && (
+              <div className="flex flex-row items-center gap-4 mt-4">
+                <span>
+                  Delete this Contract? Its RPC Requests will no longer be
+                  decoded.
+                </span>
+                <Button danger type="primary" onClick={onDelete}>
+                  Yes, delete
+                </Button>
+                <Button onClick={() => setConfirmingDelete(false)}>Keep</Button>
+              </div>
+            )}
           </Form.Item>
         </div>
       </Form>

@@ -1,6 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Abi } from "viem";
-import { getContract, parseAbiJson, saveContract } from "./contract.ts";
+import {
+  deleteContract,
+  getContract,
+  parseAbiJson,
+  saveContract,
+} from "./contract.ts";
 
 const erc20Abi = [
   {
@@ -64,6 +69,28 @@ describe("Contract data layer", () => {
 
   it("returns null for an address without a Contract", async () => {
     expect(await getContract(LOWER_CASE)).toBeNull();
+  });
+
+  it("deletes a Contract by its address in any case", async () => {
+    await saveContract({ address: LOWER_CASE, name: "Token", abi: erc20Abi });
+
+    await deleteContract(MIXED_CASE);
+
+    expect(await getContract(LOWER_CASE)).toBeNull();
+  });
+
+  it("keeps other Contracts when one is deleted", async () => {
+    const OTHER = "0x1111111111111111111111111111111111111111";
+    await saveContract({ address: LOWER_CASE, name: "Token", abi: erc20Abi });
+    await saveContract({ address: OTHER, name: "Other", abi: erc20Abi });
+
+    await deleteContract(LOWER_CASE);
+
+    expect(await getContract(OTHER)).toMatchObject({ name: "Other" });
+  });
+
+  it("does nothing when deleting an address without a Contract", async () => {
+    await expect(deleteContract(LOWER_CASE)).resolves.toBeUndefined();
   });
 });
 
