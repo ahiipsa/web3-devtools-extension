@@ -2,11 +2,69 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>React Chrome Extension</title>
+    <title>EVM RPC Inspector</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --fg: #202124;
+        --muted: #5f6368;
+        --bg: #ffffff;
+        --kbd-bg: #f1f3f4;
+        --kbd-border: #dadce0;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --fg: #e8eaed;
+          --muted: #9aa0a6;
+          --bg: #202124;
+          --kbd-bg: #35363a;
+          --kbd-border: #5f6368;
+        }
+      }
+      body {
+        width: 280px;
+        margin: 0;
+        padding: 16px;
+        font: 13px/1.5 system-ui, sans-serif;
+        color: var(--fg);
+        background: var(--bg);
+      }
+      header {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 8px;
+      }
+      h1 {
+        margin: 0;
+        font-size: 15px;
+      }
+      p {
+        margin: 0;
+        color: var(--muted);
+      }
+      strong {
+        color: var(--fg);
+      }
+      kbd {
+        padding: 0 4px;
+        font: inherit;
+        font-size: 12px;
+        border: 1px solid var(--kbd-border);
+        border-radius: 4px;
+        background: var(--kbd-bg);
+      }
+    </style>
   </head>
   <body>
-    <div id="root">not supported</div>
+    <header>
+      <img src="icons/icon-48.png" width="24" height="24" alt="" />
+      <h1>EVM RPC Inspector</h1>
+    </header>
+    <p>
+      Open DevTools (<kbd>Ctrl+Shift+I</kbd>, or <kbd>⌥⌘I</kbd> on Mac) and
+      switch to the
+      <strong>EVM RPC</strong> tab.
+    </p>
   </body>
 </html>
