@@ -46,7 +46,7 @@ Project layout:
 - `src/`: the Panel (React), RPC capture, Decoding and Contract storage
 - `manifest.ts`: source of the generated `manifest.json`; the version comes from `package.json`
 - `public/`: popup and icons, copied into the build as-is
-- `assets/icon.svg`: source of the PNG icons
+- `assets/icon.svg`: source of the PNG icons; after editing it, run `npm run icons` to regenerate `public/icons/icon-{16,48,128}.png` (needs `rsvg-convert` from librsvg, e.g. `brew install librsvg`)
 - `GLOSSARY.md` and `docs/adr/`: domain language and architecture decisions
 
 ## Release
