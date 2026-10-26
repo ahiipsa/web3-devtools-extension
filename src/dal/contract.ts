@@ -1,79 +1,61 @@
+import { Abi } from "viem";
+
 export interface Contract {
-  contractAddress: `0x${string}`;
+  address: `0x${string}`;
   name: string;
-  abiId?: string;
+  abi: Abi;
 }
 
-export async function createContract(params: {
-  name: string;
-  contractAddress: `0x${string}`;
-  abiId?: string;
-}) {
-  const { name, contractAddress, abiId } = params;
+type ContractStore = Record<string, Contract>;
 
-  let contract = await getContract(contractAddress);
+// Contracts are identified by address alone: case-insensitive, chain-independent
+export const normalizeAddress = (address: `0x${string}`) =>
+  address.toLowerCase() as `0x${string}`;
 
-  if (contract) {
-    throw new Error("Contract already exists");
+const readContracts = async (): Promise<ContractStore> => {
+  const { contracts } = await chrome.storage.local.get({ contracts: {} });
+  return contracts;
+};
+
+// Throws an Error whose message is fit to show the user
+export function parseAbiJson(json: string): Abi {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(json);
+  } catch {
+    throw new Error("ABI is not valid JSON");
   }
 
-  const { contracts = {} } = await chrome.storage.local.get("contracts");
+  if (!Array.isArray(parsed)) {
+    throw new Error("ABI must be a JSON array");
+  }
 
-  contract = {
-    contractAddress: contractAddress,
-    name: name,
-    abiId: abiId,
-  };
+  if (parsed.length === 0) {
+    throw new Error("ABI has no entries");
+  }
 
-  contracts[contract.contractAddress] = contract;
-  // Save the updated object back to storage
-  await chrome.storage.local.set({ contracts });
+  parsed.forEach((entry, index) => {
+    if (typeof entry?.type !== "string") {
+      throw new Error(`ABI entry ${index} has no type`);
+    }
+  });
 
-  return contract;
+  return parsed as Abi;
 }
 
-export async function updateContract(contract: {
-  contractAddress: `0x${string}`;
-  name?: string;
-  abiId?: string;
-}) {
-  const { contractAddress } = contract;
-  const { contracts = {} } = await chrome.storage.local.get("contracts");
+export async function saveContract(contract: Contract): Promise<Contract> {
+  const saved = { ...contract, address: normalizeAddress(contract.address) };
+  const contracts = await readContracts();
 
-  const contractOld = contracts[contractAddress];
-
-  contracts[contractAddress] = {
-    ...contractOld,
-    ...contract,
-  };
-  // Save the updated object back to storage
+  contracts[saved.address] = saved;
   await chrome.storage.local.set({ contracts });
 
-  return contract;
+  return saved;
 }
 
 export async function getContract(
-  contractAddress: `0x${string}`,
+  address: `0x${string}`,
 ): Promise<Contract | null> {
-  const { contracts = {} } = await chrome.storage.local.get({ contracts: {} });
-
-  return contracts[contractAddress];
-}
-
-export async function linkOrCreateContractToAbi(params: {
-  contractAddress: `0x${string}`;
-  abiId: string;
-}) {
-  const { contractAddress, abiId } = params;
-  const contract = await getContract(contractAddress);
-
-  if (!contract) {
-    return await createContract({
-      contractAddress: contractAddress,
-      name: "",
-      abiId: abiId,
-    });
-  }
-
-  return await updateContract({ ...contract, abiId: abiId });
+  const contracts = await readContracts();
+  return contracts[normalizeAddress(address)] ?? null;
 }

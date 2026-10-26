@@ -1,7 +1,5 @@
 import { RpcRequest } from "../types/main.ts";
 import { useContractQuery } from "../hooks/useContractQuery.ts";
-import { useABIQuery } from "../hooks/useABIQuery.ts";
-import { Abi } from "viem";
 import { useMemo } from "react";
 import { Button } from "antd";
 import { CloseOutlined, SettingOutlined } from "@ant-design/icons";
@@ -92,19 +90,7 @@ const RowContractDetails = (props: { request: RpcRequest }) => {
     contractAddress: callParams?.to,
   });
 
-  const abiQuery = useABIQuery({ abiId: contractQuery.data?.abiId || "" });
-
-  const abi: Abi | null = useMemo(() => {
-    if (!abiQuery.data?.json) {
-      return null;
-    }
-
-    try {
-      return JSON.parse(abiQuery.data?.json);
-    } catch {
-      return null;
-    }
-  }, [abiQuery.data?.json]);
+  const abi = contractQuery.data?.abi;
 
   const decoding = useMemo(
     () => (abi ? decodeRpcRequest(request, abi) : undefined),

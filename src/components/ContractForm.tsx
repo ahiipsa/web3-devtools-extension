@@ -1,22 +1,12 @@
-import { createContract, updateContract } from "../dal/contract.ts";
+import { parseAbiJson, saveContract } from "../dal/contract.ts";
 import { useEffect } from "react";
-import { createABI, updateABI } from "../dal/abi.ts";
 import { useContractQuery } from "../hooks/useContractQuery.ts";
-import { useABIQuery } from "../hooks/useABIQuery.ts";
 import { Button, Form, FormProps, Input, message } from "antd";
 
 interface ContractInfoProps {
   contractAddress: `0x${string}`;
   onClose: (open: boolean) => void;
 }
-
-const isAbiJson = (value: string) => {
-  try {
-    return Array.isArray(JSON.parse(value));
-  } catch {
-    return false;
-  }
-};
 
 type FieldType = {
   contractName: string;
@@ -31,35 +21,22 @@ export const ContractForm = (props: ContractInfoProps) => {
   });
 
   const contract = contractQuery.data;
-  const abiQuery = useABIQuery({ abiId: contract?.abiId || "" });
-  const abi = abiQuery.data;
 
   const [form] = Form.useForm();
 
   useEffect(() => {
     form.resetFields();
-  }, [contract, abi, form]);
+  }, [contract, form]);
 
   const [messageApi, messageContextHolder] = message.useMessage();
 
   const onFinish: FormProps<FieldType>["onFinish"] = async (values) => {
     try {
-      if (!contract) {
-        const newAbi = await createABI({ name: "", json: values.abi });
-        await createContract({
-          name: values.contractName,
-          contractAddress,
-          abiId: newAbi.id,
-        });
-      } else {
-        await updateContract({
-          contractAddress: contract.contractAddress,
-          name: values.contractName,
-        });
-        if (abi) {
-          await updateABI(abi.id, { name: "", json: values.abi });
-        }
-      }
+      await saveContract({
+        address: contractAddress,
+        name: values.contractName,
+        abi: parseAbiJson(values.abi),
+      });
       messageApi.success("Contract saved");
     } catch (error) {
       messageApi.error(
@@ -77,7 +54,7 @@ export const ContractForm = (props: ContractInfoProps) => {
         layout="vertical"
         initialValues={{
           contractName: contract?.name || "",
-          abi: abi?.json || "",
+          abi: contract ? JSON.stringify(contract.abi, null, 2) : "",
         }}
         onFinish={onFinish}
         autoComplete="off"
@@ -97,9 +74,10 @@ export const ContractForm = (props: ContractInfoProps) => {
             rules={[
               { required: true, message: "Required" },
               {
+                // parseAbiJson's message is shown under the field
                 validator: async (_rule, value) => {
-                  if (value && !isAbiJson(value)) {
-                    throw new Error("Invalid ABI format");
+                  if (value) {
+                    parseAbiJson(value);
                   }
                 },
               },

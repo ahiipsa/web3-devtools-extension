@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { getContract } from "../dal/contract.ts";
+import { getContract, normalizeAddress } from "../dal/contract.ts";
 
 export const useContractQuery = (params: {
   contractAddress?: `0x${string}`;
@@ -8,14 +8,14 @@ export const useContractQuery = (params: {
   const { contractAddress } = params;
 
   const query = useQuery({
-    queryKey: ["contract", params.contractAddress],
+    queryKey: ["contract", contractAddress && normalizeAddress(contractAddress)],
     queryFn: async () => {
-      if (params?.contractAddress) {
-        return getContract(params?.contractAddress);
+      if (contractAddress) {
+        return getContract(contractAddress);
       }
       return null;
     },
-    enabled: !!params.contractAddress,
+    enabled: !!contractAddress,
   });
 
   useEffect(() => {
