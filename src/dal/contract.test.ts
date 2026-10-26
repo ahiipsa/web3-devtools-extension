@@ -80,13 +80,13 @@ describe("Contract data layer", () => {
   });
 
   it("keeps other Contracts when one is deleted", async () => {
-    const OTHER = "0x1111111111111111111111111111111111111111";
+    const otherAddress = "0x1111111111111111111111111111111111111111";
     await saveContract({ address: LOWER_CASE, name: "Token", abi: erc20Abi });
-    await saveContract({ address: OTHER, name: "Other", abi: erc20Abi });
+    await saveContract({ address: otherAddress, name: "Other", abi: erc20Abi });
 
     await deleteContract(LOWER_CASE);
 
-    expect(await getContract(OTHER)).toMatchObject({ name: "Other" });
+    expect(await getContract(otherAddress)).toMatchObject({ name: "Other" });
   });
 
   it("does nothing when deleting an address without a Contract", async () => {

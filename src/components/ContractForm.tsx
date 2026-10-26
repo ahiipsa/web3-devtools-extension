@@ -43,7 +43,7 @@ export const ContractForm = (props: ContractInfoProps) => {
       messageApi.success("Contract saved");
     } catch (error) {
       messageApi.error(
-        `Failed to save contract: ${error instanceof Error ? error.message : String(error)}`,
+        `Failed to save Contract: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
   };
@@ -54,7 +54,7 @@ export const ContractForm = (props: ContractInfoProps) => {
       messageApi.success("Contract deleted");
     } catch (error) {
       messageApi.error(
-        `Failed to delete contract: ${error instanceof Error ? error.message : String(error)}`,
+        `Failed to delete Contract: ${error instanceof Error ? error.message : String(error)}`,
       );
     } finally {
       setConfirmingDelete(false);
