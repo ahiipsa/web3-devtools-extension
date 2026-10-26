@@ -11,27 +11,20 @@ const methods = [
   "eth_estimateGas",
 ];
 
-// Объект для хранения соединений с DevTools-окном по tabId
+// Open DevTools panel ports, keyed by inspected tabId
 const devtoolsPorts: Record<number, chrome.runtime.Port> = {};
 
-// Слушаем установку соединения от любых компонентов расширения
 chrome.runtime.onConnect.addListener((port) => {
   if (port.name === "devtools-page") {
-    // Ожидаем сообщение инициализации от окна DevTools
     port.onMessage.addListener((msg) => {
       if (msg.type === "init" && msg.tabId !== undefined) {
-        // Сохраняем порт, привязанный к конкретному tabId
         devtoolsPorts[msg.tabId] = port;
-        console.log("DevTools подключён для tabId:", msg.tabId);
       }
     });
 
-    // Обработка отключения окна DevTools
     port.onDisconnect.addListener(() => {
-      // Найдем и удалим порт, соответствующий отключившейся вкладке
       for (const tab in devtoolsPorts) {
         if (devtoolsPorts[tab] === port) {
-          console.log("DevTools отключён для tabId:", tab);
           delete devtoolsPorts[tab];
           break;
         }
@@ -76,8 +69,8 @@ chrome.webRequest.onBeforeRequest.addListener(
             chrome.storage.local.set({ rpcLogs: logs });
           });
         }
-      } catch (error) {
-        console.log("### error", error);
+      } catch {
+        // Not a JSON-RPC body
       }
     }
   },
@@ -88,9 +81,7 @@ chrome.webRequest.onBeforeRequest.addListener(
 chrome.runtime.onInstalled.addListener((details) => {
   if (details.reason === "update") {
     const newVersion = chrome.runtime.getManifest().version;
-    console.log("Расширение обновлено до версии:", newVersion);
-
-    // Уведомляем все активные DevTools панели об обновлении
+    // Tell open panels to reload with the new code
     for (const tabId in devtoolsPorts) {
       const port = devtoolsPorts[tabId];
       port.postMessage({ type: "extensionUpdated", newVersion });

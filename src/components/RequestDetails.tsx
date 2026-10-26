@@ -121,8 +121,7 @@ const RowContractDetails = (props: {
           abi: abi,
           data: callParams.data,
         });
-      } catch (error) {
-        console.log("### error", error);
+      } catch {
         return null;
       }
     }
@@ -198,6 +197,16 @@ const RowContractDetails = (props: {
             </td>
           </tr>
         </>
+      )}
+      {hasContractAbi && callParams.data && !functionData && (
+        <tr>
+          <td className="px-2 py-1 align-top whitespace-nowrap">
+            Decoded input
+          </td>
+          <td className="px-2 py-1 text-red-500">
+            The Contract's ABI does not match this RPC Request
+          </td>
+        </tr>
       )}
       {hasContractAbi && functionData && (
         <>

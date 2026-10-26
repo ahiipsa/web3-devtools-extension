@@ -23,10 +23,6 @@ export async function createABI(params: {
   // Save the updated object back to storage
   await chrome.storage.local.set({ abi: abis });
 
-  // if (contractAddress) {
-  //   await linkOrCreateContractToAbi({contractAddress: params.contractAddress, abiId: abi.id})
-  // }
-
   return abi;
 }
 
