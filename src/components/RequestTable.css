@@ -90,6 +90,16 @@
   overflow-anchor: none;
 }
 
+/* The selected row shows where the keyboard is; outline only Tab focus */
+.rpc-table-scroll:focus {
+  outline: none;
+}
+
+.rpc-table-scroll:focus-visible {
+  outline: 1px solid var(--rpc-table-resizer);
+  outline-offset: -1px;
+}
+
 .rpc-table-header {
   position: sticky;
   top: 0;

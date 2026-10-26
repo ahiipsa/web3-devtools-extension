@@ -4,8 +4,8 @@ import { RpcRequest } from "../types/main.ts";
 import { DetailsTab } from "../details/detailsTabs.ts";
 
 interface AppContext {
-  requestId: number | string | null;
-  setRequestId: (requestId: number | string | null) => void;
+  requestId: string | null;
+  setRequestId: (requestId: string | null) => void;
   // Kept while another RPC Request is selected
   detailsTab: DetailsTab;
   setDetailsTab: (detailsTab: DetailsTab) => void;
@@ -16,7 +16,7 @@ interface AppContext {
 export const AppContext = React.createContext<AppContext>({
   requestId: null,
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  setRequestId: (_requestId: number | null | string) => {},
+  setRequestId: (_requestId: string | null) => {},
   detailsTab: "Overview",
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   setDetailsTab: (_detailsTab: DetailsTab) => {},
@@ -29,7 +29,7 @@ export const AppContextProvider = ({
 }: {
   children: React.ReactNode;
 }) => {
-  const [requestId, setRequestId] = useState<number | string | null>(null);
+  const [requestId, setRequestId] = useState<string | null>(null);
   const [detailsTab, setDetailsTab] = useState<DetailsTab>("Overview");
 
   const { rpcRequestList, clearRpcRequestList } = useRpcRequestList();

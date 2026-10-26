@@ -25,6 +25,7 @@ import {
   saveColumnSizing,
 } from "../table/columnSizingStorage.ts";
 import { isScrolledToBottom } from "../table/isScrolledToBottom.ts";
+import { moveSelection, SelectionMove } from "../table/moveSelection.ts";
 import { matchesRpcRequestFilter } from "../table/rpcRequestFilter.ts";
 import { formatContractCall } from "../table/rpcRequestRow.ts";
 import {
@@ -46,6 +47,13 @@ const COLLAPSED_COLUMNS: VisibilityState = {
 
 const SORT_ARROWS = { asc: "▲", desc: "▼" } as const;
 const ARIA_SORT = { asc: "ascending", desc: "descending" } as const;
+
+const KEY_MOVES: Partial<Record<string, SelectionMove>> = {
+  ArrowDown: "next",
+  ArrowUp: "previous",
+  Home: "first",
+  End: "last",
+};
 
 export const RequestTable = () => {
   const appContext = useContext(AppContext);
@@ -136,6 +144,39 @@ export const RequestTable = () => {
     }
   }, [virtualizer, rowHeight]);
 
+  // The selection outlives the details: Esc closes them and Enter reopens them
+  const [selectedId, setSelectedId] = useState(requestId);
+  const selection = requestId ?? selectedId;
+
+  const select = (id: string, openDetails: boolean) => {
+    setSelectedId(id);
+    setRequestId(openDetails ? id : null);
+  };
+
+  const onGridKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) {
+      return;
+    }
+    const ids = rows.map((row) => row.id);
+    const move = KEY_MOVES[event.key];
+    if (move) {
+      event.preventDefault();
+      const next = moveSelection(ids, selection, move);
+      if (next !== null) {
+        // The details follow the selection while they are open
+        select(next, requestId !== null);
+        virtualizer.scrollToIndex(ids.indexOf(next), { align: "auto" });
+      }
+    } else if (
+      event.key === "Enter" &&
+      selection !== null &&
+      ids.includes(selection)
+    ) {
+      event.preventDefault();
+      select(selection, true);
+    }
+  };
+
   const pressedResizer = useRef(false);
 
   const totalWidth = collapsed ? 0 : table.getTotalSize();
@@ -153,6 +194,8 @@ export const RequestTable = () => {
         className="rpc-table-scroll"
         role="grid"
         aria-rowcount={rows.length + 1}
+        tabIndex={0}
+        onKeyDown={onGridKeyDown}
         onScroll={(event) => {
           stickToBottom.current = isScrolledToBottom(event.currentTarget);
         }}
@@ -221,19 +264,17 @@ export const RequestTable = () => {
                   key={row.id}
                   role="row"
                   aria-rowindex={virtualRow.index + 2}
-                  aria-selected={requestId === row.id}
+                  aria-selected={selection === row.id}
                   className={cx("rpc-table-row", {
                     "rpc-table-row-striped": virtualRow.index % 2 === 1,
                     "rpc-table-row-failed": row.original.failed,
-                    "rpc-table-row-selected": requestId === row.id,
+                    "rpc-table-row-selected": selection === row.id,
                   })}
                   style={{
                     transform: `translateY(${virtualRow.start - virtualizer.options.scrollMargin}px)`,
                   }}
                   // Clicking the selected row again closes the details
-                  onClick={() =>
-                    setRequestId(requestId === row.id ? null : row.id)
-                  }
+                  onClick={() => select(row.id, requestId !== row.id)}
                 >
                   {collapsed && (
                     <div

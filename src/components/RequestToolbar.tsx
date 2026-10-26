@@ -1,5 +1,6 @@
 import cx from "classnames";
-import { Button, Checkbox, Input } from "antd";
+import { useEffect, useRef } from "react";
+import { Button, Checkbox, Input, InputRef } from "antd";
 import { ClearOutlined } from "@ant-design/icons";
 import { METHOD_CATEGORIES } from "../types/main.ts";
 import {
@@ -27,6 +28,24 @@ export const RequestToolbar = ({
       ? filter.methodCategories.length === 0
       : filter.methodCategories.includes(chip);
 
+  const searchRef = useRef<InputRef>(null);
+
+  // Ctrl/⌘+F jumps to the search box from anywhere in the Panel
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (
+        (event.ctrlKey || event.metaKey) &&
+        !event.altKey &&
+        event.key.toLowerCase() === "f"
+      ) {
+        event.preventDefault();
+        searchRef.current?.focus({ cursor: "all" });
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
   return (
     <div className="rpc-table-toolbar">
       <Button
@@ -42,10 +61,18 @@ export const RequestToolbar = ({
         className="rpc-table-search"
         placeholder="Filter"
         aria-label="Filter"
+        ref={searchRef}
         value={filter.search}
         onChange={(event) =>
           onFilterChange({ ...filter, search: event.target.value })
         }
+        onKeyDown={(event) => {
+          // An empty box lets Esc through to DevTools
+          if (event.key === "Escape" && filter.search !== "") {
+            event.preventDefault();
+            onFilterChange({ ...filter, search: "" });
+          }
+        }}
       />
       <div
         className="rpc-table-chips"
