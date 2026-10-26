@@ -1,34 +1,38 @@
-import {
-  ContractCall,
-  RpcRequest,
-  RpcRequestEstimateGas,
-  RpcRequestCall,
-} from "../types/main.ts";
+import { ContractCall, RpcRequest } from "../types/main.ts";
 import { Abi, AbiFunction, AbiParameter } from "viem";
 
-export function isContractCall(
-  request: RpcRequest,
-): request is RpcRequestCall | RpcRequestEstimateGas {
-  return (
-    request.requestBody.method === "eth_call" ||
-    request.requestBody.method === "eth_estimateGas"
-  );
+const CONTRACT_CALL_METHODS = [
+  "eth_call",
+  "eth_estimateGas",
+  "eth_sendTransaction",
+];
+
+export function isContractCall(request: RpcRequest): boolean {
+  return getContractCallParams(request) !== undefined;
 }
 
 export function getContractAddress(request: RpcRequest) {
-  if (isContractCall(request)) {
-    return getContractCallParams(request).to;
-  }
-
-  return null;
+  return getContractCallParams(request)?.to ?? null;
 }
 
-export function getContractCallParams(request: RpcRequest): ContractCall {
-  if (isContractCall(request)) {
-    return request.requestBody.params[0];
+export function getContractCallParams(
+  request: RpcRequest,
+): ContractCall | undefined {
+  const { method, params } = request.requestBody;
+  if (!CONTRACT_CALL_METHODS.includes(method) || !Array.isArray(params)) {
+    return undefined;
   }
 
-  throw new Error("Invalid contract call request");
+  const [call] = params;
+  if (
+    typeof call !== "object" ||
+    call === null ||
+    typeof call.to !== "string"
+  ) {
+    return undefined;
+  }
+
+  return { ...call, data: call.data ?? call.input };
 }
 
 export function stringifyArgs(args: unknown[] | unknown): string {

@@ -4,4 +4,4 @@ RPC Requests are read from `chrome.devtools.network.onRequestFinished` inside th
 
 ## Consequences
 
-Traffic sent before DevTools is opened is not captured, same as the built-in Network tab. Do not reintroduce a background capture path without revisiting the permission cost.
+Traffic sent before the Panel is first shown is not captured: the Panel page only starts listening once the user opens the "EVM RPC" tab. The built-in Network tab has the same limitation for traffic sent before DevTools is opened. Do not reintroduce a background capture path without revisiting the permission cost.

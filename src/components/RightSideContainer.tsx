@@ -3,7 +3,7 @@ import { RequestDetails } from "./RequestDetails.tsx";
 import { ContractForm } from "./ContractForm.tsx";
 import { useContext } from "react";
 import { AppContext } from "./AppContext.tsx";
-import { isContractCall } from "../utils/requestUtils.ts";
+import { getContractAddress } from "../utils/requestUtils.ts";
 
 export const RightSideContainer = () => {
   const appContext = useContext(AppContext);
@@ -19,6 +19,8 @@ export const RightSideContainer = () => {
   if (!rpcRequest) {
     return null;
   }
+
+  const contractAddress = getContractAddress(rpcRequest);
 
   return (
     <>
@@ -36,11 +38,11 @@ export const RightSideContainer = () => {
           }}
         />
       </div>
-      {appContext.editForm && isContractCall(rpcRequest) && (
+      {appContext.editForm && contractAddress && (
         <div className="grow">
           <div className="px-4 py-2">
             <ContractForm
-              rpcRequest={rpcRequest}
+              contractAddress={contractAddress}
               onClose={appContext.setEditForm}
             />
           </div>

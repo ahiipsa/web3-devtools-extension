@@ -6,10 +6,7 @@
     "action": {
       "default_popup": "popup.html"
     },
-    "background": {
-        "service_worker": "background.js"
-    },
-    "devtools_page": "index.html",
+    "devtools_page": "devtools.html",
     "host_permissions": ["<all_urls>"],
     "permissions": ["storage", "nativeMessaging", "webRequest", "activeTab", "scripting", "debugger"]
 }

@@ -3,6 +3,8 @@ import { RpcRequest } from "../types/main.ts";
 import { RequestTableRow } from "./RequestTableRow.tsx";
 import { AppContext } from "./AppContext.tsx";
 import { useContext } from "react";
+import { Button } from "antd";
+import { ClearOutlined } from "@ant-design/icons";
 
 export const RequestTable = () => {
   const appContext = useContext(AppContext);
@@ -17,7 +19,16 @@ export const RequestTable = () => {
         <tr className="text-xs sticky top-0 h-7">
           <th className="px-4 text-left text-xs sticky top-0">RPC</th>
           <th className={cx("px-4 text-left text-xs sticky top-0")}>
-            Contract
+            <div className="flex flex-row items-center justify-between">
+              Contract
+              <Button
+                size="small"
+                type="text"
+                title="Clear"
+                icon={<ClearOutlined />}
+                onClick={appContext.clearRpcRequestList}
+              />
+            </div>
           </th>
         </tr>
       </thead>

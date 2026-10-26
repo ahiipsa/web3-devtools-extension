@@ -1,14 +1,12 @@
-import { RpcRequestEstimateGas, RpcRequestCall } from "../types/main.ts";
 import { createContract, updateContract } from "../dal/contract.ts";
 import { useEffect } from "react";
 import { createABI, updateABI } from "../dal/abi.ts";
 import { useContractQuery } from "../hooks/useContractQuery.ts";
 import { useABIQuery } from "../hooks/useABIQuery.ts";
 import { Button, Form, FormProps, Input, message } from "antd";
-import { getContractCallParams } from "../utils/requestUtils.ts";
 
 interface ContractInfoProps {
-  rpcRequest: RpcRequestCall | RpcRequestEstimateGas;
+  contractAddress: `0x${string}`;
   onClose: (open: boolean) => void;
 }
 
@@ -26,12 +24,10 @@ type FieldType = {
 };
 
 export const ContractForm = (props: ContractInfoProps) => {
-  const { rpcRequest, onClose } = props;
-
-  const callParams = getContractCallParams(rpcRequest);
+  const { contractAddress, onClose } = props;
 
   const contractQuery = useContractQuery({
-    contractAddress: callParams.to,
+    contractAddress,
   });
 
   const contract = contractQuery.data;
@@ -52,7 +48,7 @@ export const ContractForm = (props: ContractInfoProps) => {
         const newAbi = await createABI({ name: "", json: values.abi });
         await createContract({
           name: values.contractName,
-          contractAddress: callParams.to,
+          contractAddress,
           abiId: newAbi.id,
         });
       } else {

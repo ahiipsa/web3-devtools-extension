@@ -1,22 +1,16 @@
-import {
-  RpcRequest,
-  RpcRequestEstimateGas,
-  RpcRequestCall,
-} from "../types/main.ts";
+import { RpcRequest } from "../types/main.ts";
 import { useContractQuery } from "../hooks/useContractQuery.ts";
 import { useABIQuery } from "../hooks/useABIQuery.ts";
-import { Abi, decodeFunctionData, decodeFunctionResult } from "viem";
+import { Abi } from "viem";
 import { useMemo } from "react";
 import { Button } from "antd";
 import { CloseOutlined, SettingOutlined } from "@ant-design/icons";
 import {
-  buildFunctionSignatureFromAbi,
   getContractCallParams,
   isContractCall,
   stringifyArgs,
 } from "../utils/requestUtils.ts";
-import { responses } from "../hooks/useRpcRequestList.ts";
-import { ErrorBoundary } from "react-error-boundary";
+import { decodeRpcRequest } from "../decoding/decodeRpcRequest.ts";
 
 interface RequestDetailsProps {
   request: RpcRequest;
@@ -66,7 +60,7 @@ export const RequestDetails = (props: RequestDetailsProps) => {
             {isContractCall(request) && (
               <RowContractDetails request={request} />
             )}
-            {responses[request.requestBody.id] && (
+            {request.response && (
               <tr>
                 <td className="px-2 py-1 align-top whitespace-nowrap">
                   Response Raw:
@@ -74,7 +68,7 @@ export const RequestDetails = (props: RequestDetailsProps) => {
                 <td className="px-2 py-1">
                   <div className="rounded-md border p-2 whitespace-pre-wrap break-all max-h-[100px] overflow-y-scroll">
                     {JSON.stringify(
-                      responses[request.requestBody.id].result,
+                      request.response.error ?? request.response.result,
                       null,
                       4,
                     )}
@@ -89,15 +83,13 @@ export const RequestDetails = (props: RequestDetailsProps) => {
   );
 };
 
-const RowContractDetails = (props: {
-  request: RpcRequestCall | RpcRequestEstimateGas;
-}) => {
+const RowContractDetails = (props: { request: RpcRequest }) => {
   const { request } = props;
 
   const callParams = getContractCallParams(request);
 
   const contractQuery = useContractQuery({
-    contractAddress: callParams.to,
+    contractAddress: callParams?.to,
   });
 
   const abiQuery = useABIQuery({ abiId: contractQuery.data?.abiId || "" });
@@ -109,136 +101,83 @@ const RowContractDetails = (props: {
 
     try {
       return JSON.parse(abiQuery.data?.json);
-    } catch (error) {
+    } catch {
       return null;
     }
   }, [abiQuery.data?.json]);
 
-  const functionData = useMemo(() => {
-    if (callParams.data && abi) {
-      try {
-        return decodeFunctionData({
-          abi: abi,
-          data: callParams.data,
-        });
-      } catch {
-        return null;
-      }
-    }
+  const decoding = useMemo(
+    () => (abi ? decodeRpcRequest(request, abi) : undefined),
+    [abi, request],
+  );
 
+  if (!callParams) {
     return null;
-  }, [abi, callParams.data]);
-
-  const functionSignature = useMemo(() => {
-    if (!functionData || !abi) {
-      return "";
-    }
-
-    return buildFunctionSignatureFromAbi(
-      functionData.functionName,
-      functionData.args?.length || 0,
-      abi,
-    );
-  }, [abi, functionData]);
-
-  const hasContractAbi = !!abiQuery.data?.json;
-
-  const _res = responses[request.requestBody.id];
-  const response = useMemo(() => {
-    if (_res && _res.result && abi && functionData) {
-      try {
-        return decodeFunctionResult({
-          abi,
-          functionName: functionData.functionName,
-          data: responses[request.requestBody.id]
-            .result as unknown as `0x${string}`,
-        });
-      } catch (error) {
-        if (error instanceof Error) {
-          return error.message;
-        }
-
-        return "decode error";
-      }
-    }
-    return null;
-  }, [abi, functionData, request.requestBody.id, _res]);
+  }
 
   return (
     <>
-      {isContractCall(request) && (
-        <>
-          <tr>
-            <td className="px-2 py-1 whitespace-nowrap">Contract:</td>
-            <td className="px-2 py-1 whitespace-pre-wrap break-all">
-              {callParams.to}
-            </td>
-          </tr>
-          <tr>
-            <td className="px-2 py-1 whitespace-nowrap">Method:</td>
-            <td className="px-2 py-1">
-              <p className="flex flex-row gap-1">
-                {callParams.data && <span>{callParams.data.slice(0, 10)}</span>}
+      <tr>
+        <td className="px-2 py-1 whitespace-nowrap">Contract:</td>
+        <td className="px-2 py-1 whitespace-pre-wrap break-all">
+          {callParams.to}
+        </td>
+      </tr>
+      <tr>
+        <td className="px-2 py-1 whitespace-nowrap">Method:</td>
+        <td className="px-2 py-1">
+          <p className="flex flex-row gap-1">
+            {callParams.data && <span>{callParams.data.slice(0, 10)}</span>}
 
-                {functionSignature && (
-                  <span className="font-bold">{functionSignature}</span>
-                )}
-              </p>
-            </td>
-          </tr>
-          <tr>
-            <td className="px-2 py-1 align-top whitespace-nowrap">
-              Raw input:
-            </td>
-            <td className="px-2 py-1">
-              <div className="rounded-md border p-2 whitespace-pre-wrap break-all max-h-[100px] overflow-y-scroll">
-                {callParams.data}
-              </div>
-            </td>
-          </tr>
-        </>
-      )}
-      {hasContractAbi && callParams.data && !functionData && (
+            {decoding?.status === "decoded" && (
+              <span className="font-bold">{decoding.signature}</span>
+            )}
+          </p>
+        </td>
+      </tr>
+      <tr>
+        <td className="px-2 py-1 align-top whitespace-nowrap">Raw input:</td>
+        <td className="px-2 py-1">
+          <div className="rounded-md border p-2 whitespace-pre-wrap break-all max-h-[100px] overflow-y-scroll">
+            {callParams.data}
+          </div>
+        </td>
+      </tr>
+      {decoding?.status === "mismatch" && (
         <tr>
           <td className="px-2 py-1 align-top whitespace-nowrap">
             Decoded input
           </td>
           <td className="px-2 py-1 text-red-500">
-            The Contract's ABI does not match this RPC Request
+            The Contract&apos;s ABI does not match this RPC Request
           </td>
         </tr>
       )}
-      {hasContractAbi && functionData && (
+      {decoding?.status === "decoded" && (
         <>
           <tr>
             <td className="px-2 py-1 align-top whitespace-nowrap">
               Decoded input
             </td>
-            <td className="px-2 py-1">
-              {functionData.args && stringifyArgs(functionData.args)}
-            </td>
+            <td className="px-2 py-1">{stringifyArgs(decoding.args)}</td>
           </tr>
-          {response && abi && functionData && (
+          {"returnValue" in decoding && (
             <tr>
               <td className="px-2 py-1 align-top whitespace-nowrap">
-                Decoded Response:
+                Decoded return value:
               </td>
-              <td className={`px-2 py-1`}>
-                <ErrorBoundary fallback={<div>Error</div>}>
-                  {
-                    JSON.stringify(
-                      response,
-                      function (_key, value) {
-                        if (typeof value === "bigint") {
-                          return value.toString();
-                        } else {
-                          return value;
-                        }
-                      },
-                      4,
-                    ) as string
-                  }
-                </ErrorBoundary>
+              <td className="px-2 py-1">
+                {stringifyArgs(decoding.returnValue)}
+              </td>
+            </tr>
+          )}
+          {decoding.returnValueMismatch && (
+            <tr>
+              <td className="px-2 py-1 align-top whitespace-nowrap">
+                Decoded return value:
+              </td>
+              <td className="px-2 py-1 text-red-500">
+                The RPC Response does not match the Contract&apos;s ABI
               </td>
             </tr>
           )}

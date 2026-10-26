@@ -1,64 +1,63 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { RpcRequest } from "../types/main.ts";
+import { parseRpcExchange } from "../capture/parseRpcExchange.ts";
 
-let currentTabId = 0;
+let nextRpcRequestId = 0;
 
-if (chrome && chrome.devtools) {
-  currentTabId = chrome.devtools.inspectedWindow.tabId;
-}
+const decodeBase64Utf8 = (base64: string) => {
+  try {
+    const bytes = Uint8Array.from(atob(base64), (char) => char.charCodeAt(0));
+    return new TextDecoder().decode(bytes);
+  } catch {
+    return "";
+  }
+};
 
 export const useRpcRequestList = () => {
-  const [rpcRequests, setRpcRequests] = useState<RpcRequest[]>([]);
+  const [rpcRequestList, setRpcRequestList] = useState<RpcRequest[]>([]);
 
   useEffect(() => {
-    if (!currentTabId) {
+    const network =
+      typeof chrome === "undefined" ? undefined : chrome.devtools?.network;
+    if (!network) {
       return;
     }
 
-    chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
-      if (changeInfo.status === "loading" && tabId === currentTabId) {
-        setRpcRequests([]);
+    const onRequestFinished = (entry: chrome.devtools.network.Request) => {
+      const requestText = entry.request.postData?.text;
+      if (
+        entry.request.method !== "POST" ||
+        !requestText ||
+        parseRpcExchange(requestText, "").length === 0
+      ) {
+        return;
       }
-    });
 
-    // Register this panel with the background script for the inspected tab
-    const port = chrome.runtime.connect({ name: "devtools-page" });
-    port.postMessage({ type: "init", tabId: currentTabId });
+      entry.getContent((content, encoding) => {
+        const responseText =
+          encoding === "base64" ? decodeBase64Utf8(content) : (content ?? "");
+        const captured = parseRpcExchange(requestText, responseText).map(
+          (exchange) => ({
+            ...exchange,
+            id: String(++nextRpcRequestId),
+            url: entry.request.url,
+          }),
+        );
+        setRpcRequestList((prev) => [...prev, ...captured]);
+      });
+    };
 
-    port.onMessage.addListener((message) => {
-      if (message.type === "request") {
-        setRpcRequests((prev) => [...prev, message.data]);
-      } else if (message.type === "extensionUpdated") {
-        // Reload the panel to pick up the new extension code
-        location.reload();
-      }
-    });
+    const onNavigated = () => setRpcRequestList([]);
+
+    network.onRequestFinished.addListener(onRequestFinished);
+    network.onNavigated.addListener(onNavigated);
+    return () => {
+      network.onRequestFinished.removeListener(onRequestFinished);
+      network.onNavigated.removeListener(onNavigated);
+    };
   }, []);
 
-  return rpcRequests;
+  const clearRpcRequestList = useCallback(() => setRpcRequestList([]), []);
+
+  return { rpcRequestList, clearRpcRequestList };
 };
-
-export const responses: Record<number, { id: number; result: object }> = {};
-
-if (chrome && chrome.devtools.network) {
-  chrome.devtools.network.onRequestFinished.addListener((request) => {
-    if (
-      request.request.method === "POST" &&
-      request.request?.postData?.mimeType === "application/json"
-    ) {
-      request.getContent((content) => {
-        try {
-          const data = JSON.parse(content);
-
-          const isJsonRpcResponse = typeof data?.jsonrpc !== "undefined";
-
-          if (isJsonRpcResponse) {
-            responses[data.id] = data;
-          }
-        } catch {
-          // Not a JSON response body
-        }
-      });
-    }
-  });
-}
