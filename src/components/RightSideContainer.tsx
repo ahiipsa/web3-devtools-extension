@@ -1,4 +1,3 @@
-import cx from "classnames";
 import { RequestDetails } from "./RequestDetails.tsx";
 import { ContractForm } from "./ContractForm.tsx";
 import { useContext } from "react";
@@ -24,12 +23,7 @@ export const RightSideContainer = () => {
 
   return (
     <>
-      <div
-        className={cx(
-          "min-h-[200px] border-r-1 overflow-y-scroll max-h-screen",
-          appContext.editForm ? "col-span-2" : "col-span-3",
-        )}
-      >
+      <div className="flex-1 min-w-0 border-r-1 overflow-y-auto h-full">
         <RequestDetails
           request={rpcRequest}
           onClose={() => appContext.setRequestId(null)}
@@ -39,7 +33,7 @@ export const RightSideContainer = () => {
         />
       </div>
       {appContext.editForm && contractAddress && (
-        <div className="grow">
+        <div className="w-1/4 shrink-0 overflow-y-auto h-full">
           <div className="px-4 py-2">
             <ContractForm
               contractAddress={contractAddress}

@@ -53,6 +53,11 @@ export async function saveContract(contract: Contract): Promise<Contract> {
   return saved;
 }
 
+// Keyed by normalized address
+export async function getContracts(): Promise<Record<string, Contract>> {
+  return readContracts();
+}
+
 export async function getContract(
   address: `0x${string}`,
 ): Promise<Contract | null> {

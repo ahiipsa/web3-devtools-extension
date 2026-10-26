@@ -1,0 +1,48 @@
+import {
+  createColumnHelper,
+  getCoreRowModel,
+  getSortedRowModel,
+  TableOptions,
+} from "@tanstack/react-table";
+import { formatDuration, RpcRequestRow } from "./rpcRequestRow.ts";
+
+const column = createColumnHelper<RpcRequestRow>();
+
+const textColumn = {
+  sortingFn: "alphanumeric",
+  sortUndefined: "last",
+  cell: (info: { getValue: () => unknown }) => info.getValue() ?? "",
+} as const;
+
+export const rpcRequestColumns = [
+  column.accessor("method", { ...textColumn, header: "Method", size: 160 }),
+  column.accessor("contract", { ...textColumn, header: "Contract", size: 140 }),
+  column.accessor("functionName", {
+    ...textColumn,
+    id: "function",
+    header: "Function",
+    size: 140,
+  }),
+  column.accessor("status", { ...textColumn, header: "Status", size: 80 }),
+  column.accessor("endpoint", { ...textColumn, header: "Endpoint", size: 160 }),
+  column.accessor("time", {
+    header: "Time",
+    size: 70,
+    sortingFn: "basic",
+    cell: (info) => formatDuration(info.getValue()),
+  }),
+];
+
+// Everything but data and state, shared by the Panel and the tests.
+// Clicking a header cycles ascending → descending → arrival order (no sorting).
+export const rpcRequestTableOptions = {
+  columns: rpcRequestColumns,
+  getRowId: (row) => row.request.id,
+  getCoreRowModel: getCoreRowModel(),
+  getSortedRowModel: getSortedRowModel(),
+  sortDescFirst: false,
+  enableSortingRemoval: true,
+  enableMultiSort: false,
+  columnResizeMode: "onChange",
+  defaultColumn: { minSize: 40 },
+} satisfies Omit<TableOptions<RpcRequestRow>, "data">;

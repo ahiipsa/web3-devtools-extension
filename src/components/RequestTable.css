@@ -1,0 +1,153 @@
+/* Modelled on the DevTools Network tab */
+.rpc-table {
+  --rpc-table-row-height: 21px;
+  --rpc-table-bg: #ffffff;
+  --rpc-table-text: #1f1f1f;
+  --rpc-table-header-bg: #f1f3f4;
+  --rpc-table-separator: #dadce0;
+  --rpc-table-stripe: #f8f9fa;
+  --rpc-table-hover: #eef3fd;
+  --rpc-table-selected: #d3e3fd;
+  --rpc-table-failed: #d93025;
+  --rpc-table-resizer: #1a73e8;
+
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-width: 0;
+  background: var(--rpc-table-bg);
+  color: var(--rpc-table-text);
+  font-family: system-ui, sans-serif;
+  font-size: 12px;
+  line-height: var(--rpc-table-row-height);
+}
+
+.dark .rpc-table {
+  --rpc-table-bg: #202124;
+  --rpc-table-text: #e3e3e3;
+  --rpc-table-header-bg: #292a2d;
+  --rpc-table-separator: #3c4043;
+  --rpc-table-stripe: #242528;
+  --rpc-table-hover: #2c3339;
+  --rpc-table-selected: #1f3760;
+  --rpc-table-failed: #f28b82;
+  --rpc-table-resizer: #8ab4f8;
+}
+
+.rpc-table-toolbar {
+  display: flex;
+  align-items: center;
+  height: 26px;
+  padding: 0 4px;
+  border-bottom: 1px solid var(--rpc-table-separator);
+  background: var(--rpc-table-header-bg);
+}
+
+.rpc-table-scroll {
+  flex: 1;
+  overflow: auto;
+  /* Scroll anchoring would fight the auto-scroll to new rows */
+  overflow-anchor: none;
+}
+
+.rpc-table-header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  height: var(--rpc-table-row-height);
+  background: var(--rpc-table-header-bg);
+  border-bottom: 1px solid var(--rpc-table-separator);
+  box-sizing: border-box;
+}
+
+.rpc-table-body {
+  position: relative;
+}
+
+.rpc-table-row {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: flex;
+  width: 100%;
+  height: var(--rpc-table-row-height);
+  cursor: default;
+}
+
+.rpc-table-row-striped {
+  background: var(--rpc-table-stripe);
+}
+
+.rpc-table-row:hover {
+  background: var(--rpc-table-hover);
+}
+
+.rpc-table-row-failed {
+  color: var(--rpc-table-failed);
+}
+
+.rpc-table-row-selected,
+.rpc-table-row-selected:hover {
+  background: var(--rpc-table-selected);
+}
+
+.rpc-table-cell {
+  position: relative;
+  display: flex;
+  flex: none;
+  align-items: center;
+  padding: 0 4px;
+  border-right: 1px solid var(--rpc-table-separator);
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.rpc-table-cell-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rpc-table-header-cell {
+  cursor: pointer;
+  user-select: none;
+}
+
+.rpc-table-header-cell:hover {
+  background: var(--rpc-table-hover);
+}
+
+.rpc-table-sort-arrow {
+  margin-left: auto;
+  padding-left: 4px;
+  font-size: 8px;
+}
+
+.rpc-table-filler {
+  flex: 1;
+}
+
+.rpc-table-resizer {
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: 2;
+  width: 6px;
+  height: 100%;
+  cursor: col-resize;
+}
+
+.rpc-table-resizer-active {
+  background: var(--rpc-table-resizer);
+  opacity: 0.5;
+}
+
+.rpc-table-status-bar {
+  height: 26px;
+  padding: 0 8px;
+  line-height: 26px;
+  border-top: 1px solid var(--rpc-table-separator);
+  background: var(--rpc-table-header-bg);
+  white-space: nowrap;
+}
