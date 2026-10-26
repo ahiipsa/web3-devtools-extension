@@ -1,66 +1,64 @@
-# React Chrome Extension Template
+# EVM RPC Inspector
 
-This is a template for creating a Chrome extension using React and [Vite](https://vitejs.dev/) with TypeScript.
+A Chrome DevTools extension that lets web3 developers inspect and decode the EVM JSON-RPC traffic of the page they are debugging.
 
+- Lists every JSON-RPC request the page sends as an RPC Request, one per entry of a batch, paired with its RPC Response
+- Decodes `eth_call`, `eth_estimateGas` and `eth_sendTransaction` into a function name and named arguments using an ABI you provide
+- Needs only the `storage` permission; nothing leaves your device (see [PRIVACY.md](PRIVACY.md))
 
-## Getting Started
+## Install
 
-### Prerequisites
+Build `release/evm-rpc-inspector-<version>.zip` (see [Release](#release)), then:
 
-Make sure you have [Node.js](https://nodejs.org/) (version 18+ or 20+) installed on your machine.
+1. Unzip the archive.
+2. Open `chrome://extensions` and enable "Developer mode".
+3. Click "Load unpacked" and select the unzipped folder.
 
-### Setup
+## Usage
 
-1. Clone or fork the repository :
+1. Open DevTools on the page you want to debug and switch to the **EVM RPC** tab (the Panel).
+2. Use the dApp. RPC Requests appear in the list as they finish. Traffic sent before the Panel was first opened is not captured, so reload the page if needed.
+3. Select an RPC Request to see its params and RPC Response.
+4. For an RPC Request to a contract, click the settings icon to add the Contract: give it a name and paste its ABI (for a proxy, the implementation's ABI). RPC Requests to that address are then decoded.
 
-    ```sh
-    # To clone
-    git clone https://github.com/5tigerjelly/chrome-extension-react-template
-    cd chrome-extension-react-template
-    ```
+The list is cleared when the page navigates or reloads, or with the "Clear" button. Contracts are kept until you remove the extension.
 
-2. Install the dependencies:
+## Development
 
-    ```sh
-    npm install
-    ```
-
-## 🏗️ Development
-
-To start the development server:
+Requires Node.js 18+.
 
 ```sh
-npm run dev
+npm install
+npm run watch   # rebuild into build/ on every change
 ```
 
-This will start the Vite development server and open your default browser.
-
-## 📦 Build 
-
-To create a production build:
+Load the `build/` folder as an unpacked extension (see [Install](#install)), and reload it from `chrome://extensions` after a rebuild.
 
 ```sh
-npm run build
+npm test        # unit tests (Vitest)
+npm run lint
+npm run build   # typecheck and production build into build/
 ```
 
-This will generate the build files in the `build` directory.
+Project layout:
 
-## 📂 Load Extension in Chrome
+- `src/`: the Panel (React), RPC capture, Decoding and Contract storage
+- `manifest.ts`: source of the generated `manifest.json`; the version comes from `package.json`
+- `public/`: popup and icons, copied into the build as-is
+- `assets/icon.svg`: source of the PNG icons
+- `GLOSSARY.md` and `docs/adr/`: domain language and architecture decisions
 
-1. Open Chrome and navigate to `chrome://extensions/`.
-2. Enable "Developer mode" using the toggle switch in the top right corner.
-3. Click "Load unpacked" and select the `build` directory.
+## Release
 
-Your React app should now be loaded as a Chrome extension!
+1. Set the new version in `package.json`.
+2. Run `npm run release` (needs `zip`, available on macOS and Linux).
 
-## 🗂️ Project Structure
+This writes `release/evm-rpc-inspector-<version>.zip`, ready to upload to the Chrome Web Store.
 
-- `public/`: Contains static files and the `manifest.json`.
-- `src/`: Contains the React app source code.
-- `vite.config.ts`: Vite configuration file.
-- `tsconfig.json`: TypeScript configuration file.
-- `package.json`: Contains the project dependencies and scripts.
+## Acknowledgements
+
+Started from [5tigerjelly/chrome-extension-react-template](https://github.com/5tigerjelly/chrome-extension-react-template) by Chris Oh (MIT).
 
 ## License
 
-This project is licensed under the MIT License.
+[MIT](LICENSE)
