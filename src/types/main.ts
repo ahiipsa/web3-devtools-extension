@@ -22,9 +22,26 @@ export interface ContractCall {
   to: `0x${string}`;
 }
 
+export type MethodCategory =
+  | "Calls"
+  | "Transactions"
+  | "Logs"
+  | "Chain"
+  | "Other";
+
+export type RpcRequestStatus =
+  | { kind: "ok" }
+  | { kind: "error"; code: number; message: string }
+  | { kind: "http"; code: number };
+
 export interface RpcRequest {
   id: string;
   url: string;
   requestBody: RpcRequestBody;
   response?: RpcResponseBody;
+  methodCategory: MethodCategory;
+  // Taken from the network entry; shared by all RPC Requests of one batch.
+  startedDateTime: string;
+  time: number;
+  httpStatus: number;
 }

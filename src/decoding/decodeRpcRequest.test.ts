@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { Abi } from "viem";
 import { decodeRpcRequest } from "./decodeRpcRequest.ts";
 import { RpcRequest } from "../types/main.ts";
+import { getMethodCategory } from "../capture/getMethodCategory.ts";
 
 const erc20Abi = [
   {
@@ -29,6 +30,10 @@ const rpcRequest = (
 ): RpcRequest => ({
   id: "1",
   url: "https://rpc.example",
+  methodCategory: getMethodCategory(method),
+  startedDateTime: "2026-01-01T00:00:00.000Z",
+  time: 10,
+  httpStatus: 200,
   requestBody: { jsonrpc: "2.0", id: 1, method, params },
   response:
     result === undefined ? undefined : { jsonrpc: "2.0", id: 1, result },

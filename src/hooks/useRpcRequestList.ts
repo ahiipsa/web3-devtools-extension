@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { RpcRequest } from "../types/main.ts";
 import { parseRpcExchange } from "../capture/parseRpcExchange.ts";
+import { getMethodCategory } from "../capture/getMethodCategory.ts";
 
 let nextRpcRequestId = 0;
 
@@ -41,6 +42,10 @@ export const useRpcRequestList = () => {
             ...exchange,
             id: String(++nextRpcRequestId),
             url: entry.request.url,
+            methodCategory: getMethodCategory(exchange.requestBody.method),
+            startedDateTime: entry.startedDateTime,
+            time: entry.time,
+            httpStatus: entry.response.status,
           }),
         );
         setRpcRequestList((prev) => [...prev, ...captured]);
