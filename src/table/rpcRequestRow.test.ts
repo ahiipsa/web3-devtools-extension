@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { Abi } from "viem";
-import { buildRpcRequestRow, formatDuration } from "./rpcRequestRow.ts";
+import {
+  buildRpcRequestRow,
+  formatContractCall,
+  formatDuration,
+} from "./rpcRequestRow.ts";
 import { RpcRequest } from "../types/main.ts";
 import { Contract } from "../dal/contract.ts";
 import { getMethodCategory } from "../capture/getMethodCategory.ts";
@@ -140,5 +144,30 @@ describe("formatDuration", () => {
   it("shows milliseconds below a second and seconds above", () => {
     expect(formatDuration(42.4)).toBe("42 ms");
     expect(formatDuration(1534)).toBe("1.53 s");
+  });
+});
+
+describe("formatContractCall", () => {
+  it("joins the Contract and the decoded function", () => {
+    const row = buildRpcRequestRow(rpcRequest(), () => token);
+
+    expect(formatContractCall(row)).toBe("USDC / balanceOf");
+  });
+
+  it("shows only the Contract when the function is not decoded", () => {
+    const row = buildRpcRequestRow(rpcRequest(), noContracts);
+
+    expect(formatContractCall(row)).toBe("0x0000...00aa");
+  });
+
+  it("is empty for an RPC Request that calls no Contract", () => {
+    const row = buildRpcRequestRow(
+      rpcRequest({
+        requestBody: { jsonrpc: "2.0", id: 1, method: "eth_blockNumber" },
+      }),
+      noContracts,
+    );
+
+    expect(formatContractCall(row)).toBe("");
   });
 });

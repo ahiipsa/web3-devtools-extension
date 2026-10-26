@@ -1,23 +1,25 @@
 import React, { useEffect, useState } from "react";
 import { useRpcRequestList } from "../hooks/useRpcRequestList.ts";
 import { RpcRequest } from "../types/main.ts";
+import { DetailsTab } from "../details/detailsTabs.ts";
 
 interface AppContext {
   requestId: number | string | null;
-  editForm: boolean;
   setRequestId: (requestId: number | string | null) => void;
-  setEditForm: (editForm: boolean) => void;
+  // Kept while another RPC Request is selected
+  detailsTab: DetailsTab;
+  setDetailsTab: (detailsTab: DetailsTab) => void;
   rpcRequestList: RpcRequest[];
   clearRpcRequestList: () => void;
 }
 
 export const AppContext = React.createContext<AppContext>({
   requestId: null,
-  editForm: false,
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   setRequestId: (_requestId: number | null | string) => {},
+  detailsTab: "Overview",
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  setEditForm: (_editForm: boolean) => {},
+  setDetailsTab: (_detailsTab: DetailsTab) => {},
   rpcRequestList: [],
   clearRpcRequestList: () => {},
 });
@@ -28,7 +30,7 @@ export const AppContextProvider = ({
   children: React.ReactNode;
 }) => {
   const [requestId, setRequestId] = useState<number | string | null>(null);
-  const [editForm, setEditForm] = useState(false);
+  const [detailsTab, setDetailsTab] = useState<DetailsTab>("Overview");
 
   const { rpcRequestList, clearRpcRequestList } = useRpcRequestList();
 
@@ -36,7 +38,6 @@ export const AppContextProvider = ({
   useEffect(() => {
     if (rpcRequestList.length === 0) {
       setRequestId(null);
-      setEditForm(false);
     }
   }, [rpcRequestList.length]);
 
@@ -45,8 +46,8 @@ export const AppContextProvider = ({
       value={{
         requestId,
         setRequestId,
-        editForm,
-        setEditForm,
+        detailsTab,
+        setDetailsTab,
         rpcRequestList,
         clearRpcRequestList,
       }}

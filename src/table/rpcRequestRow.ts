@@ -109,3 +109,11 @@ export function formatDuration(milliseconds: number) {
     ? `${Math.round(milliseconds)} ms`
     : `${(milliseconds / 1000).toFixed(2)} s`;
 }
+
+// The second line under the method while the details are open
+export function formatContractCall({
+  contractLabel,
+  functionName,
+}: Pick<RpcRequestRow, "contractLabel" | "functionName">) {
+  return [contractLabel, functionName].filter(Boolean).join(" / ");
+}

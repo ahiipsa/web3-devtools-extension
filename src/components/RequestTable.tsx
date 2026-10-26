@@ -5,6 +5,7 @@ import {
   flexRender,
   SortingState,
   useReactTable,
+  VisibilityState,
 } from "@tanstack/react-table";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
@@ -25,13 +26,23 @@ import {
 } from "../table/columnSizingStorage.ts";
 import { isScrolledToBottom } from "../table/isScrolledToBottom.ts";
 import { matchesRpcRequestFilter } from "../table/rpcRequestFilter.ts";
+import { formatContractCall } from "../table/rpcRequestRow.ts";
 import {
   loadRpcRequestFilter,
   saveRpcRequestFilter,
 } from "../table/rpcRequestFilterStorage.ts";
 
-// Matches --rpc-table-row-height in RequestTable.css
+// Match --rpc-table-row-height and .rpc-table-collapsed in RequestTable.css
 const ROW_HEIGHT = 21;
+const COLLAPSED_ROW_HEIGHT = 34;
+
+const COLLAPSED_COLUMNS: VisibilityState = {
+  contract: false,
+  function: false,
+  status: false,
+  endpoint: false,
+  time: false,
+};
 
 const SORT_ARROWS = { asc: "▲", desc: "▼" } as const;
 const ARIA_SORT = { asc: "ascending", desc: "descending" } as const;
@@ -53,16 +64,19 @@ export const RequestTable = () => {
   );
 
   // A filtered-out RPC Request can no longer be selected
-  const { requestId, setRequestId, setEditForm } = appContext;
+  const { requestId, setRequestId } = appContext;
   useEffect(() => {
     if (
       requestId !== null &&
       !filteredData.some((row) => row.request.id === requestId)
     ) {
       setRequestId(null);
-      setEditForm(false);
     }
-  }, [filteredData, requestId, setRequestId, setEditForm]);
+  }, [filteredData, requestId, setRequestId]);
+
+  // With the details open only the Method column is left, Network-style
+  const collapsed = requestId !== null;
+  const rowHeight = collapsed ? COLLAPSED_ROW_HEIGHT : ROW_HEIGHT;
 
   const [sorting, setSorting] = useState<SortingState>([]);
   const [columnSizing, setColumnSizing] = useState<ColumnSizingState>(() =>
@@ -72,7 +86,11 @@ export const RequestTable = () => {
   const table = useReactTable({
     ...rpcRequestTableOptions,
     data: filteredData,
-    state: { sorting, columnSizing },
+    state: {
+      sorting,
+      columnSizing,
+      columnVisibility: collapsed ? COLLAPSED_COLUMNS : {},
+    },
     onSortingChange: setSorting,
     onColumnSizingChange: setColumnSizing,
   });
@@ -91,7 +109,7 @@ export const RequestTable = () => {
   const virtualizer = useVirtualizer({
     count: rows.length,
     getScrollElement: () => scrollRef.current,
-    estimateSize: () => ROW_HEIGHT,
+    estimateSize: () => rowHeight,
     // The sticky header sits above the first row inside the scroll element
     scrollMargin: ROW_HEIGHT,
     overscan: 20,
@@ -106,12 +124,24 @@ export const RequestTable = () => {
     }
   }, [rows.length]);
 
+  // Rows change height as the details open and close; keep the selected one
+  // in view through the change
+  const selectedIndex = rows.findIndex((row) => row.id === requestId);
+  const selectedIndexRef = useRef(selectedIndex);
+  selectedIndexRef.current = selectedIndex;
+  useLayoutEffect(() => {
+    virtualizer.measure();
+    if (selectedIndexRef.current >= 0) {
+      virtualizer.scrollToIndex(selectedIndexRef.current, { align: "auto" });
+    }
+  }, [virtualizer, rowHeight]);
+
   const pressedResizer = useRef(false);
 
-  const totalWidth = table.getTotalSize();
+  const totalWidth = collapsed ? 0 : table.getTotalSize();
 
   return (
-    <div className="rpc-table">
+    <div className={cx("rpc-table", { "rpc-table-collapsed": collapsed })}>
       <RequestToolbar
         filter={filter}
         onFilterChange={setFilter}
@@ -138,7 +168,7 @@ export const RequestTable = () => {
                     role="columnheader"
                     aria-sort={sorted ? ARIA_SORT[sorted] : "none"}
                     className="rpc-table-cell rpc-table-header-cell"
-                    style={{ width: header.getSize() }}
+                    style={{ width: collapsed ? undefined : header.getSize() }}
                     onMouseDown={(event) => {
                       pressedResizer.current =
                         event.target instanceof Element &&
@@ -162,15 +192,17 @@ export const RequestTable = () => {
                         {SORT_ARROWS[sorted]}
                       </span>
                     )}
-                    <div
-                      className={cx("rpc-table-resizer", {
-                        "rpc-table-resizer-active":
-                          header.column.getIsResizing(),
-                      })}
-                      onMouseDown={header.getResizeHandler()}
-                      onTouchStart={header.getResizeHandler()}
-                      onDoubleClick={() => header.column.resetSize()}
-                    />
+                    {!collapsed && (
+                      <div
+                        className={cx("rpc-table-resizer", {
+                          "rpc-table-resizer-active":
+                            header.column.getIsResizing(),
+                        })}
+                        onMouseDown={header.getResizeHandler()}
+                        onTouchStart={header.getResizeHandler()}
+                        onDoubleClick={() => header.column.resetSize()}
+                      />
+                    )}
                   </div>
                 );
               })}
@@ -189,37 +221,51 @@ export const RequestTable = () => {
                   key={row.id}
                   role="row"
                   aria-rowindex={virtualRow.index + 2}
-                  aria-selected={appContext.requestId === row.id}
+                  aria-selected={requestId === row.id}
                   className={cx("rpc-table-row", {
                     "rpc-table-row-striped": virtualRow.index % 2 === 1,
                     "rpc-table-row-failed": row.original.failed,
-                    "rpc-table-row-selected": appContext.requestId === row.id,
+                    "rpc-table-row-selected": requestId === row.id,
                   })}
                   style={{
                     transform: `translateY(${virtualRow.start - virtualizer.options.scrollMargin}px)`,
                   }}
-                  onClick={() => appContext.setRequestId(row.id)}
+                  // Clicking the selected row again closes the details
+                  onClick={() =>
+                    setRequestId(requestId === row.id ? null : row.id)
+                  }
                 >
-                  {row.getVisibleCells().map((cell) => {
-                    const value = cell.getValue();
-                    return (
-                      <div
-                        key={cell.id}
-                        role="gridcell"
-                        className="rpc-table-cell"
-                        style={{ width: cell.column.getSize() }}
-                        // Full text of a cell the column width truncates
-                        title={typeof value === "string" ? value : undefined}
-                      >
-                        <span className="rpc-table-cell-text">
-                          {flexRender(
-                            cell.column.columnDef.cell,
-                            cell.getContext(),
-                          )}
-                        </span>
-                      </div>
-                    );
-                  })}
+                  {collapsed && (
+                    <div role="gridcell" className="rpc-table-cell">
+                      <span className="rpc-table-cell-text">
+                        {row.original.method}
+                      </span>
+                      <span className="rpc-table-cell-text rpc-table-cell-subtitle">
+                        {formatContractCall(row.original)}
+                      </span>
+                    </div>
+                  )}
+                  {!collapsed &&
+                    row.getVisibleCells().map((cell) => {
+                      const value = cell.getValue();
+                      return (
+                        <div
+                          key={cell.id}
+                          role="gridcell"
+                          className="rpc-table-cell"
+                          style={{ width: cell.column.getSize() }}
+                          // Full text of a cell the column width truncates
+                          title={typeof value === "string" ? value : undefined}
+                        >
+                          <span className="rpc-table-cell-text">
+                            {flexRender(
+                              cell.column.columnDef.cell,
+                              cell.getContext(),
+                            )}
+                          </span>
+                        </div>
+                      );
+                    })}
                   <div className="rpc-table-filler" />
                 </div>
               );

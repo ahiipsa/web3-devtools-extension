@@ -191,3 +191,28 @@
   background: var(--rpc-table-header-bg);
   white-space: nowrap;
 }
+
+/* With the details open: the Method column alone, Contract / Function below */
+.rpc-table-collapsed .rpc-table-cell {
+  flex: 1;
+}
+
+.rpc-table-collapsed .rpc-table-filler {
+  display: none;
+}
+
+.rpc-table-collapsed .rpc-table-row {
+  height: 34px;
+}
+
+.rpc-table-collapsed .rpc-table-row .rpc-table-cell {
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: center;
+  line-height: 15px;
+}
+
+.rpc-table-cell-subtitle {
+  min-height: 15px;
+  opacity: 0.7;
+}

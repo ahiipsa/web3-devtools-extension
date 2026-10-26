@@ -5,7 +5,6 @@ import { Button, Form, FormProps, Input, message } from "antd";
 
 interface ContractInfoProps {
   contractAddress: `0x${string}`;
-  onClose: (open: boolean) => void;
 }
 
 type FieldType = {
@@ -14,7 +13,7 @@ type FieldType = {
 };
 
 export const ContractForm = (props: ContractInfoProps) => {
-  const { contractAddress, onClose } = props;
+  const { contractAddress } = props;
 
   const contractQuery = useContractQuery({
     contractAddress,
@@ -87,11 +86,8 @@ export const ContractForm = (props: ContractInfoProps) => {
           </Form.Item>
           <Form.Item label={null}>
             <div className="flex flex-row gap-4">
-              <Button
-                type="default"
-                htmlType="reset"
-                onClick={() => onClose(false)}
-              >
+              {/* Discards unsaved edits */}
+              <Button type="default" htmlType="reset">
                 Cancel
               </Button>
               <Button type="primary" htmlType="submit">
