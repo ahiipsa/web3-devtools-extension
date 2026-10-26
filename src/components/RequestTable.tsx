@@ -11,12 +11,12 @@ import {
   useContext,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
-import { Button } from "antd";
-import { ClearOutlined } from "@ant-design/icons";
 import { AppContext } from "./AppContext.tsx";
+import { RequestToolbar } from "./RequestToolbar.tsx";
 import { useRpcRequestRows } from "../hooks/useRpcRequestRows.ts";
 import { rpcRequestTableOptions } from "../table/rpcRequestTable.ts";
 import {
@@ -24,6 +24,11 @@ import {
   saveColumnSizing,
 } from "../table/columnSizingStorage.ts";
 import { isScrolledToBottom } from "../table/isScrolledToBottom.ts";
+import { matchesRpcRequestFilter } from "../table/rpcRequestFilter.ts";
+import {
+  loadRpcRequestFilter,
+  saveRpcRequestFilter,
+} from "../table/rpcRequestFilterStorage.ts";
 
 // Matches --rpc-table-row-height in RequestTable.css
 const ROW_HEIGHT = 21;
@@ -35,6 +40,30 @@ export const RequestTable = () => {
   const appContext = useContext(AppContext);
   const data = useRpcRequestRows(appContext.rpcRequestList);
 
+  const [filter, setFilter] = useState(() =>
+    loadRpcRequestFilter(localStorage),
+  );
+  useEffect(() => {
+    saveRpcRequestFilter(localStorage, filter);
+  }, [filter]);
+
+  const filteredData = useMemo(
+    () => data.filter((row) => matchesRpcRequestFilter(row, filter)),
+    [data, filter],
+  );
+
+  // A filtered-out RPC Request can no longer be selected
+  const { requestId, setRequestId, setEditForm } = appContext;
+  useEffect(() => {
+    if (
+      requestId !== null &&
+      !filteredData.some((row) => row.request.id === requestId)
+    ) {
+      setRequestId(null);
+      setEditForm(false);
+    }
+  }, [filteredData, requestId, setRequestId, setEditForm]);
+
   const [sorting, setSorting] = useState<SortingState>([]);
   const [columnSizing, setColumnSizing] = useState<ColumnSizingState>(() =>
     loadColumnSizing(localStorage),
@@ -42,7 +71,7 @@ export const RequestTable = () => {
 
   const table = useReactTable({
     ...rpcRequestTableOptions,
-    data,
+    data: filteredData,
     state: { sorting, columnSizing },
     onSortingChange: setSorting,
     onColumnSizingChange: setColumnSizing,
@@ -83,15 +112,11 @@ export const RequestTable = () => {
 
   return (
     <div className="rpc-table">
-      <div className="rpc-table-toolbar">
-        <Button
-          size="small"
-          type="text"
-          title="Clear"
-          icon={<ClearOutlined />}
-          onClick={appContext.clearRpcRequestList}
-        />
-      </div>
+      <RequestToolbar
+        filter={filter}
+        onFilterChange={setFilter}
+        onClear={appContext.clearRpcRequestList}
+      />
 
       <div
         ref={scrollRef}

@@ -10,6 +10,7 @@
   --rpc-table-selected: #d3e3fd;
   --rpc-table-failed: #d93025;
   --rpc-table-resizer: #1a73e8;
+  --rpc-table-chip-pressed: #d3e3fd;
 
   display: flex;
   flex-direction: column;
@@ -32,6 +33,7 @@
   --rpc-table-selected: #1f3760;
   --rpc-table-failed: #f28b82;
   --rpc-table-resizer: #8ab4f8;
+  --rpc-table-chip-pressed: #1f3760;
 }
 
 .rpc-table-toolbar {
@@ -41,6 +43,44 @@
   padding: 0 4px;
   border-bottom: 1px solid var(--rpc-table-separator);
   background: var(--rpc-table-header-bg);
+  gap: 6px;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.rpc-table-search {
+  flex: 0 1 200px;
+  min-width: 80px;
+}
+
+.rpc-table-chips {
+  display: flex;
+  gap: 2px;
+}
+
+.rpc-table-chip {
+  padding: 0 8px;
+  height: 18px;
+  line-height: 18px;
+  border: none;
+  border-radius: 9px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.rpc-table-chip:hover {
+  background: var(--rpc-table-hover);
+}
+
+.rpc-table-chip-pressed,
+.rpc-table-chip-pressed:hover {
+  background: var(--rpc-table-chip-pressed);
+}
+
+.rpc-table-errors {
+  font-size: inherit;
 }
 
 .rpc-table-scroll {

@@ -11,6 +11,9 @@ export interface RpcRequestRow {
   method: string;
   // The Contract's name, else its short address; none when no Contract is called
   contractLabel?: string;
+  // The full address and the label, for search; none when no Contract is called
+  contractAddress?: string;
+  contractName?: string;
   functionName?: string;
   status?: string;
   // Any status other than ok
@@ -88,6 +91,8 @@ export function buildRpcRequestRow(
     method: request.requestBody.method,
     contractLabel:
       callParams && (contract?.name || trimContractAddress(callParams.to)),
+    contractAddress: callParams?.to,
+    contractName: contract?.name || undefined,
     functionName:
       contract && callParams?.data
         ? getFunctionName(contract.abi, callParams.data)
