@@ -71,16 +71,27 @@ export const RequestTable = () => {
     [data, filter],
   );
 
-  // A filtered-out RPC Request can no longer be selected
   const { requestId, setRequestId } = appContext;
+
+  // The selection outlives the details: Esc closes them and Enter reopens them
+  const [selectedId, setSelectedId] = useState(requestId);
+  const selection = requestId ?? selectedId;
+
+  const select = (id: string, openDetails: boolean) => {
+    setSelectedId(id);
+    setRequestId(openDetails ? id : null);
+  };
+
+  // A filtered-out RPC Request can no longer be selected
   useEffect(() => {
     if (
-      requestId !== null &&
-      !filteredData.some((row) => row.request.id === requestId)
+      selection !== null &&
+      !filteredData.some((row) => row.request.id === selection)
     ) {
+      setSelectedId(null);
       setRequestId(null);
     }
-  }, [filteredData, requestId, setRequestId]);
+  }, [filteredData, selection, setRequestId]);
 
   // With the details open only the Method column is left, Network-style
   const collapsed = requestId !== null;
@@ -120,6 +131,8 @@ export const RequestTable = () => {
     estimateSize: () => rowHeight,
     // The sticky header sits above the first row inside the scroll element
     scrollMargin: ROW_HEIGHT,
+    // Keep rows scrolled into view from under the sticky header
+    scrollPaddingStart: ROW_HEIGHT,
     overscan: 20,
   });
 
@@ -143,15 +156,6 @@ export const RequestTable = () => {
       virtualizer.scrollToIndex(selectedIndexRef.current, { align: "auto" });
     }
   }, [virtualizer, rowHeight]);
-
-  // The selection outlives the details: Esc closes them and Enter reopens them
-  const [selectedId, setSelectedId] = useState(requestId);
-  const selection = requestId ?? selectedId;
-
-  const select = (id: string, openDetails: boolean) => {
-    setSelectedId(id);
-    setRequestId(openDetails ? id : null);
-  };
 
   const onGridKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
     if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) {
@@ -194,6 +198,9 @@ export const RequestTable = () => {
         className="rpc-table-scroll"
         role="grid"
         aria-rowcount={rows.length + 1}
+        aria-activedescendant={
+          selection === null ? undefined : `rpc-table-row-${selection}`
+        }
         tabIndex={0}
         onKeyDown={onGridKeyDown}
         onScroll={(event) => {
@@ -262,6 +269,7 @@ export const RequestTable = () => {
               return (
                 <div
                   key={row.id}
+                  id={`rpc-table-row-${row.id}`}
                   role="row"
                   aria-rowindex={virtualRow.index + 2}
                   aria-selected={selection === row.id}

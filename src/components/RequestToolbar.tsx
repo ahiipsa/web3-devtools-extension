@@ -36,7 +36,10 @@ export const RequestToolbar = ({
       if (
         (event.ctrlKey || event.metaKey) &&
         !event.altKey &&
-        event.key.toLowerCase() === "f"
+        !event.shiftKey &&
+        // By key position, so it works on non-Latin layouts too
+        event.code === "KeyF" &&
+        !event.defaultPrevented
       ) {
         event.preventDefault();
         searchRef.current?.focus({ cursor: "all" });
