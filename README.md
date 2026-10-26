@@ -39,6 +39,7 @@ Load the `build/` folder as an unpacked extension (see [Install](#install)), and
 npm test        # unit tests (Vitest)
 npm run lint
 npm run build   # typecheck and production build into build/
+npm run icons   # regenerate public/icons/*.png from assets/icon.svg (needs rsvg-convert: brew install librsvg)
 ```
 
 Project layout:
@@ -46,7 +47,7 @@ Project layout:
 - `src/`: the Panel (React), RPC capture, Decoding and Contract storage
 - `manifest.ts`: source of the generated `manifest.json`; the version comes from `package.json`
 - `public/`: popup and icons, copied into the build as-is
-- `assets/icon.svg`: source of the PNG icons; after editing it, run `npm run icons` to regenerate `public/icons/icon-{16,48,128}.png` (needs `rsvg-convert` from librsvg, e.g. `brew install librsvg`)
+- `assets/icon.svg`: source of the PNG icons in `public/icons/`, regenerated with `npm run icons`
 - `GLOSSARY.md` and `docs/adr/`: domain language and architecture decisions
 
 ## Release
