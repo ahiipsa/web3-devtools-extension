@@ -24,6 +24,10 @@ const isRpcResponseBody = (value: unknown): value is RpcResponseBody =>
   value !== null &&
   (value as RpcResponseBody).jsonrpc === "2.0";
 
+export function hasRpcResponseBody(responseText: string): boolean {
+  return toArray(parseJson(responseText)).some(isRpcResponseBody);
+}
+
 export function parseRpcExchange(
   requestText: string,
   responseText: string,

@@ -6,7 +6,10 @@ const isHttpSuccess = (httpStatus: number) =>
 export function getRpcRequestStatus({
   response,
   httpStatus,
-}: Pick<RpcRequest, "response" | "httpStatus">): RpcRequestStatus | undefined {
+  hasRpcResponseBody,
+}: Pick<RpcRequest, "response" | "httpStatus" | "hasRpcResponseBody">):
+  | RpcRequestStatus
+  | undefined {
   if (response?.error) {
     const { code, message } = response.error;
     return { kind: "error", code, message };
@@ -16,7 +19,7 @@ export function getRpcRequestStatus({
     return { kind: "ok" };
   }
 
-  if (!response && !isHttpSuccess(httpStatus)) {
+  if (!response && !hasRpcResponseBody && !isHttpSuccess(httpStatus)) {
     return { kind: "http", code: httpStatus };
   }
 

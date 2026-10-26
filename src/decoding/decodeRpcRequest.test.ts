@@ -34,6 +34,7 @@ const rpcRequest = (
   startedDateTime: "2026-01-01T00:00:00.000Z",
   time: 10,
   httpStatus: 200,
+  hasRpcResponseBody: result !== undefined,
   requestBody: { jsonrpc: "2.0", id: 1, method, params },
   response:
     result === undefined ? undefined : { jsonrpc: "2.0", id: 1, result },

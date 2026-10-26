@@ -42,6 +42,9 @@ export interface RpcRequest {
   methodCategory: MethodCategory;
   // Taken from the network entry; shared by all RPC Requests of one batch.
   startedDateTime: string;
+  // Duration in milliseconds.
   time: number;
   httpStatus: number;
+  // Whether the HTTP response body held any RPC Response at all.
+  hasRpcResponseBody: boolean;
 }

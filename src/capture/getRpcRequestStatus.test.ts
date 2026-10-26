@@ -6,6 +6,7 @@ describe("getRpcRequestStatus", () => {
     expect(
       getRpcRequestStatus({
         httpStatus: 200,
+        hasRpcResponseBody: true,
         response: { jsonrpc: "2.0", id: 1, result: "0x1" },
       }),
     ).toEqual({ kind: "ok" });
@@ -15,6 +16,7 @@ describe("getRpcRequestStatus", () => {
     expect(
       getRpcRequestStatus({
         httpStatus: 200,
+        hasRpcResponseBody: true,
         response: { jsonrpc: "2.0", id: 1, result: null },
       }),
     ).toEqual({ kind: "ok" });
@@ -24,6 +26,7 @@ describe("getRpcRequestStatus", () => {
     expect(
       getRpcRequestStatus({
         httpStatus: 200,
+        hasRpcResponseBody: true,
         response: {
           jsonrpc: "2.0",
           id: 1,
@@ -37,6 +40,7 @@ describe("getRpcRequestStatus", () => {
     expect(
       getRpcRequestStatus({
         httpStatus: 429,
+        hasRpcResponseBody: true,
         response: {
           jsonrpc: "2.0",
           id: 1,
@@ -47,9 +51,11 @@ describe("getRpcRequestStatus", () => {
   });
 
   it.each([400, 429, 500, 502])(
-    "is HTTP %i when the HTTP request failed and no RPC Response was paired",
+    "is HTTP %i when the HTTP request failed and the body is not JSON-RPC",
     (httpStatus) => {
-      expect(getRpcRequestStatus({ httpStatus })).toEqual({
+      expect(
+        getRpcRequestStatus({ httpStatus, hasRpcResponseBody: false }),
+      ).toEqual({
         kind: "http",
         code: httpStatus,
       });
@@ -57,20 +63,31 @@ describe("getRpcRequestStatus", () => {
   );
 
   it("is HTTP 0 when the request never got an HTTP response", () => {
-    expect(getRpcRequestStatus({ httpStatus: 0 })).toEqual({
+    expect(
+      getRpcRequestStatus({ httpStatus: 0, hasRpcResponseBody: false }),
+    ).toEqual({
       kind: "http",
       code: 0,
     });
   });
 
-  it("is none when no RPC Response was paired and HTTP succeeded", () => {
-    expect(getRpcRequestStatus({ httpStatus: 200 })).toBeUndefined();
+  it("is none when HTTP succeeded but no RPC Response was paired", () => {
+    expect(
+      getRpcRequestStatus({ httpStatus: 200, hasRpcResponseBody: false }),
+    ).toBeUndefined();
+  });
+
+  it("is none when a failed batch response is JSON-RPC but omits the RPC Request", () => {
+    expect(
+      getRpcRequestStatus({ httpStatus: 500, hasRpcResponseBody: true }),
+    ).toBeUndefined();
   });
 
   it("is none when the RPC Response has neither a result nor an error", () => {
     expect(
       getRpcRequestStatus({
         httpStatus: 200,
+        hasRpcResponseBody: true,
         response: { jsonrpc: "2.0", id: 1 },
       }),
     ).toBeUndefined();

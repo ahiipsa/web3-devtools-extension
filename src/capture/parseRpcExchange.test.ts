@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseRpcExchange } from "./parseRpcExchange.ts";
+import { hasRpcResponseBody, parseRpcExchange } from "./parseRpcExchange.ts";
 
 describe("parseRpcExchange", () => {
   it("pairs a single RPC Request with its RPC Response", () => {
@@ -90,4 +90,26 @@ describe("parseRpcExchange", () => {
       ]);
     },
   );
+});
+
+describe("hasRpcResponseBody", () => {
+  it.each([
+    ["a single RPC Response", '{"jsonrpc":"2.0","id":1,"result":"0x1"}'],
+    ["a batch of RPC Responses", '[{"jsonrpc":"2.0","id":2,"result":"0x1"}]'],
+    [
+      "an RPC Response with an error",
+      '{"jsonrpc":"2.0","id":1,"error":{"code":-32000,"message":"x"}}',
+    ],
+  ])("is true for %s", (_label, responseText) => {
+    expect(hasRpcResponseBody(responseText)).toBe(true);
+  });
+
+  it.each([
+    ["an empty body", ""],
+    ["an HTML error page", "<html>502 Bad Gateway</html>"],
+    ["a JSON body that is not JSON-RPC", '{"message":"Too Many Requests"}'],
+    ["an empty batch", "[]"],
+  ])("is false for %s", (_label, responseText) => {
+    expect(hasRpcResponseBody(responseText)).toBe(false);
+  });
 });

@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { RpcRequest } from "../types/main.ts";
-import { parseRpcExchange } from "../capture/parseRpcExchange.ts";
+import {
+  hasRpcResponseBody,
+  parseRpcExchange,
+} from "../capture/parseRpcExchange.ts";
 import { getMethodCategory } from "../capture/getMethodCategory.ts";
 
 let nextRpcRequestId = 0;
@@ -37,6 +40,7 @@ export const useRpcRequestList = () => {
       entry.getContent((content, encoding) => {
         const responseText =
           encoding === "base64" ? decodeBase64Utf8(content) : (content ?? "");
+        const responseIsRpc = hasRpcResponseBody(responseText);
         const captured = parseRpcExchange(requestText, responseText).map(
           (exchange) => ({
             ...exchange,
@@ -46,6 +50,7 @@ export const useRpcRequestList = () => {
             startedDateTime: entry.startedDateTime,
             time: entry.time,
             httpStatus: entry.response.status,
+            hasRpcResponseBody: responseIsRpc,
           }),
         );
         setRpcRequestList((prev) => [...prev, ...captured]);
