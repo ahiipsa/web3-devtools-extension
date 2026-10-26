@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { Abi } from "viem";
 import { buildRpcRequestRow } from "./rpcRequestRow.ts";
 import {
+  emptyRpcRequestFilter,
   matchesRpcRequestFilter,
   RpcRequestFilter,
   selectMethodCategory,
@@ -57,11 +58,7 @@ const blockNumberRow = buildRpcRequestRow(
   () => undefined,
 );
 
-const noFilter: RpcRequestFilter = {
-  categories: [],
-  errorsOnly: false,
-  search: "",
-};
+const noFilter = emptyRpcRequestFilter();
 
 const search = (text: string) => ({ ...noFilter, search: text });
 
@@ -90,10 +87,10 @@ describe("matchesRpcRequestFilter", () => {
 
 describe("matchesRpcRequestFilter by Method Category and errors", () => {
   it("shows only the selected Method Categories", () => {
-    const calls = { ...noFilter, categories: ["Calls" as const] };
+    const calls = { ...noFilter, methodCategories: ["Calls" as const] };
     const callsAndChain = {
       ...noFilter,
-      categories: ["Calls" as const, "Chain" as const],
+      methodCategories: ["Calls" as const, "Chain" as const],
     };
 
     expect(matchesRpcRequestFilter(balanceOfRow, calls)).toBe(true);
@@ -129,7 +126,7 @@ describe("matchesRpcRequestFilter by Method Category and errors", () => {
 
   it("combines every filter", () => {
     const filter: RpcRequestFilter = {
-      categories: ["Chain"],
+      methodCategories: ["Chain"],
       errorsOnly: false,
       search: "usdc",
     };
@@ -165,4 +162,15 @@ describe("selectMethodCategory", () => {
     expect(selectMethodCategory(["Calls", "Logs"], "All", false)).toEqual([]);
     expect(selectMethodCategory(["Calls"], "All", true)).toEqual([]);
   });
+});
+
+it("hides an RPC Request nothing answered when Errors is on", () => {
+  const unanswered = buildRpcRequestRow(
+    rpcRequest("eth_call", { response: undefined }),
+    () => undefined,
+  );
+
+  expect(
+    matchesRpcRequestFilter(unanswered, { ...noFilter, errorsOnly: true }),
+  ).toBe(false);
 });

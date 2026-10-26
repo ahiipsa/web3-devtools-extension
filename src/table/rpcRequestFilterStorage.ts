@@ -1,8 +1,5 @@
-import {
-  ALL_METHOD_CATEGORIES,
-  EMPTY_RPC_REQUEST_FILTER,
-  RpcRequestFilter,
-} from "./rpcRequestFilter.ts";
+import { METHOD_CATEGORIES } from "../types/main.ts";
+import { emptyRpcRequestFilter, RpcRequestFilter } from "./rpcRequestFilter.ts";
 
 // Kept in the Panel's localStorage, so filters survive closing DevTools
 const FILTER_KEY = "rpcRequestTable.filter";
@@ -14,17 +11,20 @@ export function loadRpcRequestFilter(storage: FilterStorage): RpcRequestFilter {
   try {
     saved = JSON.parse(storage.getItem(FILTER_KEY) ?? "{}");
   } catch {
-    return EMPTY_RPC_REQUEST_FILTER;
+    return emptyRpcRequestFilter();
   }
   if (typeof saved !== "object" || saved === null) {
-    return EMPTY_RPC_REQUEST_FILTER;
+    return emptyRpcRequestFilter();
   }
 
-  const { categories, errorsOnly, search } = saved as Record<string, unknown>;
+  const { methodCategories, errorsOnly, search } = saved as Record<
+    string,
+    unknown
+  >;
   return {
-    categories: Array.isArray(categories)
-      ? ALL_METHOD_CATEGORIES.filter((category) =>
-          categories.includes(category),
+    methodCategories: Array.isArray(methodCategories)
+      ? METHOD_CATEGORIES.filter((category) =>
+          methodCategories.includes(category),
         )
       : [],
     errorsOnly: errorsOnly === true,

@@ -22,12 +22,15 @@ export interface ContractCall {
   to: `0x${string}`;
 }
 
-export type MethodCategory =
-  | "Calls"
-  | "Transactions"
-  | "Logs"
-  | "Chain"
-  | "Other";
+export const METHOD_CATEGORIES = [
+  "Calls",
+  "Transactions",
+  "Logs",
+  "Chain",
+  "Other",
+] as const;
+
+export type MethodCategory = (typeof METHOD_CATEGORIES)[number];
 
 export type RpcRequestStatus =
   | { kind: "ok" }

@@ -16,7 +16,7 @@ describe("RPC Request filter storage", () => {
   it("restores the filter it saved", () => {
     const storage = memoryStorage();
     const filter = {
-      categories: ["Calls" as const, "Logs" as const],
+      methodCategories: ["Calls" as const, "Logs" as const],
       errorsOnly: true,
       search: "usdc",
     };
@@ -28,7 +28,7 @@ describe("RPC Request filter storage", () => {
 
   it("starts unfiltered when nothing was saved", () => {
     expect(loadRpcRequestFilter(memoryStorage())).toEqual({
-      categories: [],
+      methodCategories: [],
       errorsOnly: false,
       search: "",
     });
@@ -38,7 +38,7 @@ describe("RPC Request filter storage", () => {
     const storage = memoryStorage();
     storage.setItem("rpcRequestTable.filter", "{not json");
     expect(loadRpcRequestFilter(storage)).toEqual({
-      categories: [],
+      methodCategories: [],
       errorsOnly: false,
       search: "",
     });
@@ -46,13 +46,13 @@ describe("RPC Request filter storage", () => {
     storage.setItem(
       "rpcRequestTable.filter",
       JSON.stringify({
-        categories: ["Calls", "Blocks", 7],
+        methodCategories: ["Calls", "Blocks", 7],
         errorsOnly: "yes",
         search: "balanceOf",
       }),
     );
     expect(loadRpcRequestFilter(storage)).toEqual({
-      categories: ["Calls"],
+      methodCategories: ["Calls"],
       errorsOnly: false,
       search: "balanceOf",
     });

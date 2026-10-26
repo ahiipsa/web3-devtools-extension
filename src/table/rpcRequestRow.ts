@@ -11,7 +11,7 @@ export interface RpcRequestRow {
   method: string;
   // The Contract's name, else its short address; none when no Contract is called
   contractLabel?: string;
-  // The full address and the label, for search; none when no Contract is called
+  // For search: the full address, and the user's name for the Contract if any
   contractAddress?: string;
   contractName?: string;
   functionName?: string;

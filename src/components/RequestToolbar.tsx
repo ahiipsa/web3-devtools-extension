@@ -1,14 +1,14 @@
 import cx from "classnames";
 import { Button, Checkbox, Input } from "antd";
 import { ClearOutlined } from "@ant-design/icons";
+import { METHOD_CATEGORIES } from "../types/main.ts";
 import {
-  ALL_METHOD_CATEGORIES,
   MethodCategoryChip,
   RpcRequestFilter,
   selectMethodCategory,
 } from "../table/rpcRequestFilter.ts";
 
-const CHIPS: readonly MethodCategoryChip[] = ["All", ...ALL_METHOD_CATEGORIES];
+const CHIPS: readonly MethodCategoryChip[] = ["All", ...METHOD_CATEGORIES];
 
 interface RequestToolbarProps {
   filter: RpcRequestFilter;
@@ -24,8 +24,8 @@ export const RequestToolbar = ({
 }: RequestToolbarProps) => {
   const isPressed = (chip: MethodCategoryChip) =>
     chip === "All"
-      ? filter.categories.length === 0
-      : filter.categories.includes(chip);
+      ? filter.methodCategories.length === 0
+      : filter.methodCategories.includes(chip);
 
   return (
     <div className="rpc-table-toolbar">
@@ -64,8 +64,8 @@ export const RequestToolbar = ({
             onClick={(event) =>
               onFilterChange({
                 ...filter,
-                categories: selectMethodCategory(
-                  filter.categories,
+                methodCategories: selectMethodCategory(
+                  filter.methodCategories,
                   chip,
                   event.ctrlKey || event.metaKey,
                 ),
