@@ -281,6 +281,9 @@ const startNode = () =>
     server.listen(0, "127.0.0.1", () => ready(server));
   });
 
+// Longer than any single command takes; a missing answer means a dead target
+const CDP_TIMEOUT = 30_000;
+
 // Minimal CDP client over a target's own websocket
 const connectTarget = async (cdpPort, match) => {
   for (let i = 0; i < 50; i++) {
@@ -290,7 +293,11 @@ const connectTarget = async (cdpPort, match) => {
     const target = targets.find((t) => match(t.url));
     if (target) {
       const ws = new WebSocket(target.webSocketDebuggerUrl);
-      await new Promise((ok, fail) => ((ws.onopen = ok), (ws.onerror = fail)));
+      await new Promise((ok, fail) => {
+        ws.onopen = ok;
+        ws.onerror = ws.onclose = () =>
+          fail(new Error("CDP socket failed to open: " + target.url));
+      });
       let id = 0;
       const pending = new Map();
       const events = [];
@@ -298,17 +305,33 @@ const connectTarget = async (cdpPort, match) => {
       ws.onmessage = (m) => {
         const d = JSON.parse(m.data);
         if (d.id && pending.has(d.id)) {
-          pending.get(d.id)(d);
+          pending.get(d.id).ok(d);
           pending.delete(d.id);
         } else if (d.method) {
           events.push(d);
           handlers.get(d.method)?.(d.params);
         }
       };
+      // A target that goes away (the browser crashed, the Panel reloaded)
+      // fails what is still waiting instead of hanging the run
+      ws.onclose = () => {
+        for (const { fail } of pending.values())
+          fail(new Error("CDP target closed: " + target.url));
+        pending.clear();
+      };
       const send = (method, params = {}) =>
-        new Promise((ok) => {
+        new Promise((ok, fail) => {
+          if (ws.readyState !== WebSocket.OPEN)
+            return fail(new Error("CDP target closed: " + target.url));
           const i = ++id;
-          pending.set(i, ok);
+          const timer = setTimeout(() => {
+            pending.delete(i);
+            fail(new Error(`CDP ${method} got no answer in ${CDP_TIMEOUT} ms`));
+          }, CDP_TIMEOUT);
+          pending.set(i, {
+            ok: (d) => (clearTimeout(timer), ok(d)),
+            fail: (e) => (clearTimeout(timer), fail(e)),
+          });
           ws.send(JSON.stringify({ id: i, method, params }));
         });
       const evaluate = async (expression) => {
@@ -477,6 +500,39 @@ export async function launch() {
     panel,
     ev,
     sleep,
+    // Polls `read` until `ok` holds for what it returns, or `timeout` ms
+    // pass, and returns the last value either way, so a check can still
+    // print it. The Panel captures, decodes and fetches asynchronously: wait
+    // for the state a check needs rather than for a fixed time
+    until: async (read, ok = Boolean, timeout = 5000) => {
+      const end = Date.now() + timeout;
+      for (;;) {
+        const value = await read();
+        if (ok(value) || Date.now() > end) return value;
+        await sleep(100);
+      }
+    },
+    // The `n`-th RPC Request row whose Method, Contract and Function equal
+    // what `match` gives, as a selector for `click`, or null. With the details
+    // open the Contract and Function come from the row's tooltip
+    rowSelector: (match, n = 0) =>
+      ev(`(() => {
+        const match = ${JSON.stringify(match)};
+        const rows = [...document.querySelectorAll(".rpc-table-body [role=row][aria-level='1']")]
+          .filter((row) => {
+            const [method, contract, fn] = [...row.querySelectorAll("[role=gridcell]")]
+              .map((cell) => cell.innerText.trim());
+            const hidden = Object.fromEntries(row.title.split("\\n").map((line) =>
+              [line.slice(0, line.indexOf(": ")), line.slice(line.indexOf(": ") + 2)]));
+            const cells = {
+              method: method?.replace(/^[▸▾]\\s*/, "").split(" ")[0],
+              contract: contract ?? hidden.Contract,
+              fn: fn ?? hidden.Function,
+            };
+            return Object.entries(match).every(([key, value]) => cells[key] === value);
+          });
+        return rows[${n}] ? "#" + CSS.escape(rows[${n}].id) : null;
+      })()`),
     // Requests the Panel sent to the fake ABI Sources, and that the node got
     sourcifyUrls,
     etherscanUrls,
@@ -519,6 +575,12 @@ export async function launch() {
       for (const type of ["mouseMoved", "mousePressed", "mouseReleased"])
         await devtools.send("Input.dispatchMouseEvent", { type, ...p });
       await sleep(250);
+    },
+    // Waits for the row `rowSelector` finds and clicks it
+    clickRow: async (match, n = 0) => {
+      const selector = await api.until(() => api.rowSelector(match, n));
+      if (!selector) throw new Error(`no row ${JSON.stringify(match)} #${n}`);
+      await api.click(selector);
     },
     // Real key press, delivered to whatever has focus, DevTools' own listeners included.
     // `mods`: any of "meta", "ctrl", "alt", "shift"
@@ -638,7 +700,7 @@ async function smoke() {
     );
     console.log(results.at(-1));
   };
-  const { click, key, type, shot, ev } = app;
+  const { click, clickRow, key, type, shot, ev, until } = app;
   // In the Contract and Function columns, or with the details open in a
   // row's tooltip
   const callsContract = async (contract, fn) =>
@@ -648,11 +710,15 @@ async function smoke() {
     (await app.rowTitles()).some((title) =>
       title.startsWith(`Contract: ${contract}\nFunction: ${fn}\n`),
     );
+  // Wait for the decoded row or the Panel text a check needs
+  const callsContractSoon = (contract, fn) =>
+    until(() => callsContract(contract, fn));
+  const textSoon = (test) => until(app.text, test);
   const json = (value) => JSON.stringify(value);
   try {
     await shot("01-empty");
     await app.traffic();
-    const rows = await app.rows();
+    const rows = await until(app.rows, (rows) => rows.length === 5);
     check(
       "captures real traffic: batch split, non-RPC POST skipped",
       rows.length === 5,
@@ -661,14 +727,16 @@ async function smoke() {
     await shot("02-table");
     const closedWidths = await app.headerWidths();
 
-    await click(".rpc-table-body [role=row]:nth-child(4)");
+    await clickRow({ method: "eth_call" });
     check(
       "click opens the details",
       (await app.detailsOpen()) && (await app.selected()) === "eth_call",
     );
     await click(".rpc-details-tab", "Contract");
-    await app.sleep(300);
-    const contractTab = await app.text();
+    const contractTab = await textSoon(
+      (text) =>
+        /No verified ABI on Sourcify/.test(text) && /Fetch ABI/.test(text),
+    );
     check(
       "a 404 from Sourcify shows no verified ABI and Fetch ABI",
       /No verified ABI on Sourcify/.test(contractTab) &&
@@ -685,9 +753,17 @@ async function smoke() {
     await click(".rpc-details textarea");
     await type(JSON.stringify(BALANCE_OF_ABI));
     await click("button", "Save");
-    await app.sleep(400);
+    await until(() =>
+      ev(
+        `chrome.storage.local.get("contracts").then((s) => !!s.contracts?.["${TOKEN}"])`,
+      ),
+    );
     await click(".rpc-details-tab", "Params");
-    const params = await app.text();
+    const params = await textSoon(
+      (text) =>
+        /balanceOf\(address account\)/.test(text) &&
+        /account\s+address\s+0x28C6/i.test(text),
+    );
     check(
       "Contract saved, input decoded with named arguments",
       /balanceOf\(address account\)/.test(params) &&
@@ -697,11 +773,13 @@ async function smoke() {
     await click(".rpc-details-tab", "Response");
     check(
       "return value decoded by name",
-      /balance\s+uint256\s+1000000/.test(await app.text()),
+      /balance\s+uint256\s+1000000/.test(
+        await textSoon((text) => /balance\s+uint256\s+1000000/.test(text)),
+      ),
     );
     check(
       "table row names Contract and function in their columns",
-      await callsContract("USDC", "balanceOf"),
+      await callsContractSoon("USDC", "balanceOf"),
       json(await app.rowCells()),
     );
     // The details hide every column but Method, not the rows' one line
@@ -802,8 +880,8 @@ async function smoke() {
       "ArrowUp selects the previous",
       (await app.selected()) === "eth_call",
     );
-    await click(".rpc-table-body [role=row]:nth-child(4)");
-    await click(".rpc-table-body [role=row]:nth-child(4)");
+    await clickRow({ method: "eth_call" });
+    await clickRow({ method: "eth_call" });
     check(
       "clicking the selected row keeps the details open",
       (await app.detailsOpen()) && (await app.selected()) === "eth_call",
@@ -828,14 +906,18 @@ async function smoke() {
     await type("estimate");
     check(
       "search filters the table",
-      (await app.rows()).join() === "eth_estimateGas",
+      (
+        await until(app.rows, (rows) => rows.join() === "eth_estimateGas")
+      ).join() === "eth_estimateGas",
     );
     await key("Escape");
-    check("Esc in the search box clears it", (await app.rows()).length === 5);
+    check(
+      "Esc in the search box clears it",
+      (await until(app.rows, (rows) => rows.length === 5)).length === 5,
+    );
 
     // Narrow Panel: the default side-docked DevTools is about 550 px wide
-    if (!(await app.detailsOpen()))
-      await click(".rpc-table-body [role=row]:nth-child(4)");
+    if (!(await app.detailsOpen())) await clickRow({ method: "eth_call" });
     check(
       "every chip and Errors visible with the details open",
       await ev(`[...document.querySelectorAll(".rpc-table-chip, .rpc-table-errors")].every((e) => {
@@ -844,19 +926,19 @@ async function smoke() {
       `Panel ${await ev("innerWidth")} px`,
     );
     // Filtering eth_call out above closed its details
-    if (!(await app.detailsOpen()))
-      await click(".rpc-table-body [role=row]:nth-child(4)");
+    if (!(await app.detailsOpen())) await clickRow({ method: "eth_call" });
     await click(".rpc-details-tab", "Contract");
     await click("button", "Delete");
     await click("button", "Yes, delete");
-    await app.sleep(400);
-    check("Contract deleted", !/USDC/.test(await app.text()));
+    check(
+      "Contract deleted",
+      !/USDC/.test(await textSoon((text) => !/USDC/.test(text))),
+    );
 
     await app.page.reload();
-    await app.sleep(800);
     check(
       "reloading the inspected page clears the list",
-      (await app.rows()).length === 0,
+      (await until(app.rows, (rows) => rows.length === 0)).length === 0,
     );
 
     // A Contract stored before the ABI moved into it (pre-7b26560)
@@ -866,7 +948,7 @@ async function smoke() {
     await app.traffic();
     check(
       "a legacy Contract in storage does not crash the Panel",
-      (await app.rows()).length === 5,
+      (await until(app.rows, (rows) => rows.length === 5)).length === 5,
     );
 
     // Fetched from the fake Sourcify, without touching the Contract tab
@@ -877,16 +959,17 @@ async function smoke() {
       params: [{ to, data: "0x70a08231" + pad(HOLDER) }, "latest"],
     });
     await app.rpc(callTo(6, WETH));
-    await app.sleep(600);
     check(
       "an eth_call to a verified address decodes as <name> / <function>",
-      await callsContract("WETH9", "balanceOf"),
+      await callsContractSoon("WETH9", "balanceOf"),
     );
-    await click(".rpc-table-body [role=row]:nth-child(6)");
+    await clickRow({ contract: "WETH9" });
     await click(".rpc-details-tab", "Contract");
     check(
       "the Contract tab says From Sourcify",
-      /From Sourcify/.test(await app.text()),
+      /From Sourcify/.test(
+        await textSoon((text) => /From Sourcify/.test(text)),
+      ),
     );
     await shot("05-from-sourcify");
     check(
@@ -899,16 +982,19 @@ async function smoke() {
     const DAI = "0x6b175474e89094c44da98b954eedeac495271d0f";
     await app.rpc(callTo(7, DAI), "/rpc2");
     // The Panel first waits 1 s for the page's own eth_chainId
-    await app.sleep(1600);
-    check(
-      "the Panel asks an Endpoint for its chain id once",
+    const ownChainIds = () =>
       app.nodeLog.filter(
         (r) =>
           r.origin.startsWith("chrome-extension://") &&
           r.path === "/rpc2" &&
           r.method === "eth_chainId",
-      ).length === 1 &&
-        app.sourcifyUrls.some((url) => url.toLowerCase().includes(DAI)),
+      ).length;
+    const daiFetched = () =>
+      app.sourcifyUrls.some((url) => url.toLowerCase().includes(DAI));
+    await until(() => ownChainIds() > 0 && daiFetched());
+    check(
+      "the Panel asks an Endpoint for its chain id once",
+      ownChainIds() === 1 && daiFetched(),
       JSON.stringify(app.nodeLog.filter((r) => r.path === "/rpc2")),
     );
 
@@ -923,19 +1009,18 @@ async function smoke() {
     await click(".rpc-table-settings-button");
     await click(".rpc-table-settings-field input");
     await type(KEY);
-    await app.sleep(300);
-    await shot("06-settings");
-    const withKey = await ev(
-      `chrome.storage.local.get("settings").then((s) => s.settings)`,
+    const withKey = await until(
+      () => ev(`chrome.storage.local.get("settings").then((s) => s.settings)`),
+      (settings) => settings?.etherscanApiKey === KEY,
     );
+    await shot("06-settings");
     check("the Etherscan API key is stored", withKey?.etherscanApiKey === KEY);
     // Closes the popover
     await click(".rpc-table-settings-button");
     await app.rpc(callTo(10, LINK));
-    await app.sleep(800);
     check(
       "an eth_call to an address verified on Etherscan only decodes",
-      await callsContract("LinkToken", "balanceOf"),
+      await callsContractSoon("LinkToken", "balanceOf"),
     );
     check(
       "Etherscan asked once, after Sourcify, with the Chain, address and key",
@@ -945,20 +1030,22 @@ async function smoke() {
         app.sourcifyUrls.some((url) => url.toLowerCase().includes(LINK)),
       app.etherscanUrls.join(", ").replaceAll(KEY, "<key>"),
     );
-    await click(".rpc-table-body [role=row]:nth-child(8)");
+    await clickRow({ contract: "LinkToken" });
     await click(".rpc-details-tab", "Contract");
     check(
       "the Contract tab says From Etherscan",
-      /From Etherscan/.test(await app.text()),
+      /From Etherscan/.test(
+        await textSoon((text) => /From Etherscan/.test(text)),
+      ),
     );
     await shot("07-from-etherscan");
     await app.rpc(callTo(11, UNVERIFIED));
-    await app.sleep(800);
-    await click(".rpc-table-body [role=row]:nth-child(9)");
+    await clickRow({ contract: "0x2222...2222" });
     await click(".rpc-details-tab", "Contract");
+    const missOnBoth = /No verified ABI on Sourcify or Etherscan/;
     check(
       "a miss on both says so in the Contract tab",
-      /No verified ABI on Sourcify or Etherscan/.test(await app.text()),
+      missOnBoth.test(await textSoon((text) => missOnBoth.test(text))),
     );
     // React mirrors a controlled input's value into its attribute, so the
     // settings field itself is left out
@@ -976,23 +1063,22 @@ async function smoke() {
 
     // A proxy decodes with its implementation's ABI, saved at its own address
     await app.rpc(callTo(12, PROXY));
-    await app.sleep(800);
     check(
       "an eth_call to a proxy Sourcify resolves decodes as <impl name> / <function>",
-      await callsContract("FiatTokenV2_2", "balanceOf"),
+      await callsContractSoon("FiatTokenV2_2", "balanceOf"),
     );
-    await click(".rpc-table-body [role=row]:nth-child(10)");
+    await clickRow({ contract: "FiatTokenV2_2" });
     await click(".rpc-details-tab", "Contract");
+    const viaProxy = /From Sourcify, via proxy/;
     check(
       "the Contract tab says From Sourcify, via proxy",
-      /From Sourcify, via proxy/.test(await app.text()),
+      viaProxy.test(await textSoon((text) => viaProxy.test(text))),
     );
     await shot("08-via-proxy");
     await app.rpc(callTo(13, SLOT_PROXY));
-    await app.sleep(800);
     check(
       "an eth_call to an EIP-1967 proxy decodes as <impl name> / <function>",
-      await callsContract("SlotToken", "balanceOf"),
+      await callsContractSoon("SlotToken", "balanceOf"),
     );
     check(
       "the Panel reads the EIP-1967 slot on the Endpoint",
@@ -1002,41 +1088,49 @@ async function smoke() {
           r.method === "eth_getStorageAt",
       ),
     );
-    const proxyContracts = await ev(
-      `chrome.storage.local.get("contracts").then((s) => s.contracts)`,
+    const proxiesSaved = (contracts) =>
+      contracts?.[PROXY]?.proxy?.implementation === IMPLEMENTATION &&
+      contracts?.[SLOT_PROXY]?.proxy?.implementation === SLOT_IMPLEMENTATION &&
+      !contracts?.[IMPLEMENTATION] &&
+      !contracts?.[SLOT_IMPLEMENTATION];
+    const proxyContracts = await until(
+      () =>
+        ev(`chrome.storage.local.get("contracts").then((s) => s.contracts)`),
+      proxiesSaved,
     );
     check(
       "proxy Contracts are saved at the proxy addresses only",
-      proxyContracts?.[PROXY]?.proxy?.implementation === IMPLEMENTATION &&
-        proxyContracts?.[SLOT_PROXY]?.proxy?.implementation ===
-          SLOT_IMPLEMENTATION &&
-        !proxyContracts?.[IMPLEMENTATION] &&
-        !proxyContracts?.[SLOT_IMPLEMENTATION],
+      proxiesSaved(proxyContracts),
       JSON.stringify(Object.keys(proxyContracts ?? {})),
     );
 
     // A Multicall: named by the built-in aggregator ABI, its Inner Calls
     // listed in Params, decoded where the target has a Contract (WETH9)
     await app.rpc(MULTICALL_CALL);
-    await app.sleep(800);
     check(
       "a Multicall to an address without a Contract reads Multicall3 / aggregate3",
-      await callsContract("Multicall3", "aggregate3"),
+      await callsContractSoon("Multicall3", "aggregate3"),
     );
-    await click(".rpc-table-body [role=row]:nth-child(12)");
+    // The Params' Inner Calls, as text
+    const detailsInnerCalls = () =>
+      ev(
+        `[...document.querySelectorAll(".rpc-details-inner-call")].map((e) => e.innerText)`,
+      );
+    // MULTICALL_CALL is the first Multicall row, MULTICALL_FETCH_CALL the second
+    await clickRow({ contract: "Multicall3" }, 0);
     await click(".rpc-details-tab", "Params");
-    const innerCalls = await ev(
-      `[...document.querySelectorAll(".rpc-details-inner-call")].map((e) => e.innerText)`,
-    );
+    const innerCallsListed = (innerCalls) =>
+      innerCalls?.length === 2 &&
+      /^#1 WETH9 0xC02a\.\.\.6Cc2\s+balanceOf\(account: 0x28C6c06298d514Db089934071355E5743bf21d60\)\s+→ 1000000$/.test(
+        innerCalls[0],
+      ) &&
+      /^#2 0x2222\.\.\.2222 ✗ Not allowed\s+0x12345678\s+No verified ABI[^\n]*\s+Add ABI$/.test(
+        innerCalls[1],
+      );
+    const innerCalls = await until(detailsInnerCalls, innerCallsListed);
     check(
       "Params lists the Inner Calls, decoded with a result, the failed one ✗ with its revert message",
-      innerCalls?.length === 2 &&
-        /^#1 WETH9 0xC02a\.\.\.6Cc2\s+balanceOf\(account: 0x28C6c06298d514Db089934071355E5743bf21d60\)\s+→ 1000000$/.test(
-          innerCalls[0],
-        ) &&
-        /^#2 0x2222\.\.\.2222 ✗ Not allowed\s+0x12345678\s+No verified ABI[^\n]*\s+Add ABI$/.test(
-          innerCalls[1],
-        ),
+      innerCallsListed(innerCalls),
       JSON.stringify(innerCalls),
     );
     check(
@@ -1050,49 +1144,51 @@ async function smoke() {
     // Inner Call targets the Panel has not seen are fetched for the Multicall
     const beforeInner = app.sourcifyUrls.length;
     await app.rpc(MULTICALL_FETCH_CALL);
-    await app.sleep(800);
-    const innerUrls = app.sourcifyUrls
-      .slice(beforeInner)
-      .map((url) => url.toLowerCase());
+    const innerUrls = () =>
+      app.sourcifyUrls.slice(beforeInner).map((url) => url.toLowerCase());
+    const innerTargetsRequested = (urls) =>
+      urls.some((url) => url.includes(`/1/${INNER_TOKEN}`)) &&
+      urls.some((url) => url.includes(`/1/${INNER_UNVERIFIED}`));
     check(
       "a Multicall's Inner Call targets are requested from Sourcify",
-      innerUrls.some((url) => url.includes(`/1/${INNER_TOKEN}`)) &&
-        innerUrls.some((url) => url.includes(`/1/${INNER_UNVERIFIED}`)),
-      innerUrls.join(", "),
+      innerTargetsRequested(await until(innerUrls, innerTargetsRequested)),
+      innerUrls().join(", "),
     );
-    await click(".rpc-table-body [role=row]:nth-child(13)");
+    await clickRow({ contract: "Multicall3" }, 1);
     await click(".rpc-details-tab", "Params");
-    const fetchedInner = await ev(
-      `[...document.querySelectorAll(".rpc-details-inner-call")].map((e) => e.innerText)`,
-    );
+    const fetchedInnerListed = (innerCalls) =>
+      innerCalls?.length === 2 &&
+      /^#1 InnerToken 0x7777\.\.\.7777\s+balanceOf\(account: 0x28C6c06298d514Db089934071355E5743bf21d60\)\s+→ 1000000$/.test(
+        innerCalls[0],
+      ) &&
+      new RegExp(
+        `^#2 0x8888\\.\\.\\.8888\\s+0x12345678\\s+→ ${INNER_RAW_RESULT}\\s+No verified ABI on Sourcify[^\\n]*\\s+Add ABI$`,
+      ).test(innerCalls[1]);
+    const fetchedInner = await until(detailsInnerCalls, fetchedInnerListed);
     check(
       "a fetched Inner Call target decodes in Params; an unverified one shows its raw result, its state and Add ABI",
-      fetchedInner?.length === 2 &&
-        /^#1 InnerToken 0x7777\.\.\.7777\s+balanceOf\(account: 0x28C6c06298d514Db089934071355E5743bf21d60\)\s+→ 1000000$/.test(
-          fetchedInner[0],
-        ) &&
-        new RegExp(
-          `^#2 0x8888\\.\\.\\.8888\\s+0x12345678\\s+→ ${INNER_RAW_RESULT}\\s+No verified ABI on Sourcify[^\\n]*\\s+Add ABI$`,
-        ).test(fetchedInner[1]),
+      fetchedInnerListed(fetchedInner),
       JSON.stringify(fetchedInner),
     );
     await click(".rpc-details-inner-call button", "Add ABI");
-    await app.sleep(300);
-    const innerContractTab = await app.text();
+    const innerContractTabShown = (text) =>
+      text.includes(`Inner Call target ${INNER_UNVERIFIED}`) &&
+      /No verified ABI on Sourcify/.test(text) &&
+      /Fetch ABI/.test(text);
+    const innerContractTab = await textSoon(innerContractTabShown);
     check(
       "Add ABI opens the Contract tab for the Inner Call target",
       (await ev(
         `document.querySelector(".rpc-details-tab-selected")?.innerText`,
-      )) === "Contract" &&
-        innerContractTab.includes(`Inner Call target ${INNER_UNVERIFIED}`) &&
-        /No verified ABI on Sourcify/.test(innerContractTab) &&
-        /Fetch ABI/.test(innerContractTab),
+      )) === "Contract" && innerContractTabShown(innerContractTab),
     );
     await shot("10-inner-call-contract");
-    await click(".rpc-table-body [role=row]:nth-child(12)");
+    await clickRow({ contract: "Multicall3" }, 0);
     check(
       "selecting another RPC Request resets the Contract tab to its `to`",
-      !/Inner Call target/.test(await app.text()),
+      !/Inner Call target/.test(
+        await textSoon((text) => !/Inner Call target/.test(text)),
+      ),
     );
 
     // Expanding a Multicall into its Inner Call rows. MULTICALL_CALL is the
@@ -1210,20 +1306,21 @@ async function smoke() {
 
     // With a key, Etherscan is asked when Sourcify fails too
     await app.rpc(callTo(14, SOURCIFY_DOWN));
-    await app.sleep(800);
     check(
       "an eth_call to an address Sourcify fails for decodes from Etherscan",
-      (await callsContract("DownToken", "balanceOf")) &&
+      (await callsContractSoon("DownToken", "balanceOf")) &&
         app.sourcifyUrls.some((url) =>
           url.toLowerCase().includes(SOURCIFY_DOWN),
         ) &&
         app.etherscanUrls.some((url) => url.includes(SOURCIFY_DOWN)),
     );
-    await click(".rpc-table-body [role=row]:last-child");
+    await clickRow({ contract: "DownToken" });
     await click(".rpc-details-tab", "Contract");
     check(
       "the Contract tab says From Etherscan after a Sourcify failure",
-      /From Etherscan/.test(await app.text()),
+      /From Etherscan/.test(
+        await textSoon((text) => /From Etherscan/.test(text)),
+      ),
     );
     await shot("14-sourcify-down");
     await key("Escape");
@@ -1231,8 +1328,9 @@ async function smoke() {
     // Settings: off means no Sourcify request and no eth_chainId of its own
     await click(".rpc-table-settings-button");
     await click(".rpc-table-settings .ant-checkbox-wrapper");
-    const stored = await ev(
-      `chrome.storage.local.get("settings").then((s) => s.settings)`,
+    const stored = await until(
+      () => ev(`chrome.storage.local.get("settings").then((s) => s.settings)`),
+      (settings) => settings?.fetchAbisAutomatically === false,
     );
     check(
       "the setting is stored off",
@@ -1243,6 +1341,7 @@ async function smoke() {
     const before = app.sourcifyUrls.length;
     await app.rpc(callTo(8, USDT), "/rpc3");
     await app.rpc(callTo(9, "0x1111111111111111111111111111111111111111"));
+    // Nothing to wait for: give the Panel the time it would take to ask
     await app.sleep(1600);
     check(
       "with the setting off no Sourcify request is made",

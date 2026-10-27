@@ -76,7 +76,8 @@ npm test && npm run lint
 - **Synthetic `dispatchEvent` keys are not enough** for keyboard checks: they skip the DevTools forwarding path. Use `key`, which goes through `Input.dispatchKeyEvent`.
 - **When the DevTools drawer opens, it takes focus**, and every later key misses the Panel. If a key check fails, check `drawer` first.
 - **A search that hides the selected RPC Request closes the details.** Reopen with a click or Enter before checking details. Only Esc and ✕ close them otherwise; a click always opens them.
-- **The Panel receives entries asynchronously**: `rpc` and `traffic` wait a little before returning.
+- **The Panel receives entries asynchronously**, and decodes, reads storage and fetches ABIs asynchronously too: `rpc` and `traffic` wait only a little before returning. In a script, wait for the state a check needs with `app.until(read, ok)` rather than a fixed `sleep`, and pick rows by content with `app.clickRow({ method, contract, fn }, n)` rather than `:nth-child`, which breaks as soon as a row is added or arrives late.
+- **A dead browser fails the run instead of hanging it**: a CDP command whose target closed, or that gets no answer in 30 s, rejects.
 
 ## Troubleshooting
 
