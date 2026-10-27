@@ -1394,8 +1394,9 @@ async function smoke() {
     );
     const rowsBefore = await app.rows();
     await key("ArrowRight");
+    await key("ArrowLeft");
     check(
-      "→ on the selected Multicall adds no Inner Call rows",
+      "→ and ← on the selected Multicall add no Inner Call rows",
       json(await app.rows()) === json(rowsBefore) &&
         (await app.selected()) === multicallRow &&
         (await noInnerCallRows()),
@@ -1430,7 +1431,7 @@ async function smoke() {
     check(
       "Params still lists both Inner Calls, the failed one ✗ with its revert message",
       innerCallsListed(searchedInnerCalls),
-      JSON.stringify(searchedInnerCalls),
+      json(searchedInnerCalls),
     );
     await key("Escape");
 

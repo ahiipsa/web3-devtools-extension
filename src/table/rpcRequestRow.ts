@@ -27,7 +27,7 @@ export interface InnerCallRow {
   failed: boolean;
 }
 
-// What one line of the RPC Request table shows, derived once per RPC Request
+// What one row of the RPC Request table shows, derived once per RPC Request
 export interface RpcRequestRow {
   request: RpcRequest;
   method: string;
