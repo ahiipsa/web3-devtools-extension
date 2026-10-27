@@ -173,7 +173,8 @@
   color: var(--rpc-table-muted);
 }
 
-/* A muted part of a failed row stays failed, toned down to set it apart */
+/* A muted part of a failed row stays failed, toned down to set it apart;
+   the collapsed second line, already faded, keeps it at 1 (see below) */
 .rpc-table-row-failed .rpc-table-muted {
   color: inherit;
   opacity: 0.7;
