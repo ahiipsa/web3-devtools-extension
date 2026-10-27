@@ -5,8 +5,8 @@ import { getContractCallParams } from "../utils/requestUtils.ts";
 
 // One decoded argument or return value, labelled by its ABI name or, when
 // the ABI leaves it unnamed, by its position (`[0]`, `[1]`, …). A lone
-// unnamed return value has no position worth showing: its name is empty
-// and its type alone labels it
+// unnamed argument or return value has no position worth showing: its name
+// is empty and its type alone labels it
 export interface DecodedValue {
   name: string;
   type: string;
@@ -27,13 +27,11 @@ export type Decoding =
 const decodeValues = (
   params: readonly AbiParameter[],
   data: Hex,
-  { positionLone }: { positionLone: boolean },
 ): DecodedValue[] | undefined => {
   try {
     const values = decodeAbiParameters(params, data);
     return params.map((param, index) => ({
-      name:
-        param.name || (positionLone || params.length > 1 ? `[${index}]` : ""),
+      name: param.name || (params.length > 1 ? `[${index}]` : ""),
       type: param.type,
       value: values[index],
     }));
@@ -65,11 +63,7 @@ export function decodeRpcRequest(
   }
 
   const fn = findAbiFunction(abi, callParams.data);
-  const args =
-    fn &&
-    decodeValues(fn.inputs, `0x${callParams.data.slice(10)}`, {
-      positionLone: true,
-    });
+  const args = fn && decodeValues(fn.inputs, `0x${callParams.data.slice(10)}`);
   if (!fn || !args) {
     return { status: "mismatch" };
   }
@@ -87,9 +81,7 @@ export function decodeRpcRequest(
     request.requestBody.method === "eth_call" &&
     typeof returnData === "string"
   ) {
-    const returnValues = decodeValues(fn.outputs ?? [], returnData as Hex, {
-      positionLone: false,
-    });
+    const returnValues = decodeValues(fn.outputs ?? [], returnData as Hex);
     if (returnValues) {
       decoding.returnValues = returnValues;
     } else {

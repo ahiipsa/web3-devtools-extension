@@ -179,6 +179,13 @@ describe("decodeRpcRequest", () => {
       },
       {
         type: "function",
+        name: "foo",
+        stateMutability: "nonpayable",
+        inputs: [{ name: "", type: "uint256" }],
+        outputs: [],
+      },
+      {
+        type: "function",
         name: "totalSupply",
         stateMutability: "view",
         inputs: [],
@@ -262,6 +269,19 @@ describe("decodeRpcRequest", () => {
           { name: "[1]", type: "uint256", value: 5n },
         ],
         returnValues: [{ name: "", type: "bool", value: true }],
+      });
+    });
+
+    it("labels a lone unnamed input by its type only", () => {
+      const request = ethCall(
+        encodeFunctionData({ abi, functionName: "foo", args: [5n] }),
+      );
+
+      expect(decodeRpcRequest(request, abi)).toEqual({
+        status: "decoded",
+        functionName: "foo",
+        signature: "foo(uint256)",
+        args: [{ name: "", type: "uint256", value: 5n }],
       });
     });
 
