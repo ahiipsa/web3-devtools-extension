@@ -22,7 +22,7 @@ export interface RpcRequestRow {
   // Decoded with the Contract's ABI
   functionName?: string;
   // The first 4 bytes of the calldata, lowercase; set whenever there are any
-  functionSelector?: string;
+  functionSelector?: `0x${string}`;
   status?: string;
   // Any status other than ok
   failed: boolean;
@@ -49,7 +49,7 @@ const getFunctionName = (abi: Abi, data: `0x${string}`) => {
 
 const getFunctionSelector = (data: string | undefined) =>
   data && /^0x[0-9a-f]{8}/i.test(data)
-    ? data.slice(0, 10).toLowerCase()
+    ? (data.slice(0, 10).toLowerCase() as `0x${string}`)
     : undefined;
 
 const getHost = (url: string) => {
