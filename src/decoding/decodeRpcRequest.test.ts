@@ -179,7 +179,7 @@ describe("decodeRpcRequest", () => {
       },
       {
         type: "function",
-        name: "foo",
+        name: "burn",
         stateMutability: "nonpayable",
         inputs: [{ name: "", type: "uint256" }],
         outputs: [],
@@ -272,15 +272,15 @@ describe("decodeRpcRequest", () => {
       });
     });
 
-    it("labels a lone unnamed input by its type only", () => {
+    it("labels a lone unnamed argument by its type only", () => {
       const request = ethCall(
-        encodeFunctionData({ abi, functionName: "foo", args: [5n] }),
+        encodeFunctionData({ abi, functionName: "burn", args: [5n] }),
       );
 
       expect(decodeRpcRequest(request, abi)).toEqual({
         status: "decoded",
-        functionName: "foo",
-        signature: "foo(uint256)",
+        functionName: "burn",
+        signature: "burn(uint256)",
         args: [{ name: "", type: "uint256", value: 5n }],
       });
     });
