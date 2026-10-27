@@ -3,6 +3,7 @@ import {
   getCoreRowModel,
   getSortedRowModel,
   TableOptions,
+  VisibilityState,
 } from "@tanstack/react-table";
 import {
   formatDuration,
@@ -56,3 +57,23 @@ export const rpcRequestTableOptions = {
   columnResizeMode: "onChange",
   defaultColumn: { minSize: 40 },
 } satisfies Omit<TableOptions<RpcRequestRow>, "data">;
+
+// With the details open the table keeps Method, Contract and Function, the
+// same single-line rows; a row's tooltip tells what is hidden
+const HIDDEN_WITH_DETAILS: VisibilityState = {
+  status: false,
+  endpoint: false,
+  time: false,
+};
+
+export const getColumnVisibility = (detailsOpen: boolean): VisibilityState =>
+  detailsOpen ? HIDDEN_WITH_DETAILS : {};
+
+export const formatHiddenWithDetails = (
+  row: Pick<RpcRequestRow, "status" | "endpoint" | "time">,
+) =>
+  [
+    `Status: ${row.status}`,
+    `Endpoint: ${row.endpoint}`,
+    `Time: ${formatDuration(row.time)}`,
+  ].join("\n");

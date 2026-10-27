@@ -9,10 +9,9 @@ import {
 } from "viem";
 import {
   buildRpcRequestRow,
-  formatCollapsedSubtitle,
-  formatContractCall,
   formatDuration,
   getFunctionLabel,
+  getInnerCallCells,
 } from "./rpcRequestRow.ts";
 import { RpcRequest } from "../types/main.ts";
 import { Contract } from "../dal/contract.ts";
@@ -201,12 +200,17 @@ describe("buildRpcRequestRow", () => {
     });
 
     const row = buildRpcRequestRow(request, noContracts);
-    expect(formatContractCall(row)).toBe("Multicall3 / aggregate3");
+    expect([row.contractLabel, getFunctionLabel(row)?.text]).toEqual([
+      "Multicall3",
+      "aggregate3",
+    ]);
 
     // A user Contract's ABI still wins for its address
-    expect(formatContractCall(buildRpcRequestRow(request, () => token))).toBe(
-      "USDC / 0x82ad56cb",
-    );
+    const withToken = buildRpcRequestRow(request, () => token);
+    expect([
+      withToken.contractLabel,
+      getFunctionLabel(withToken)?.text,
+    ]).toEqual(["USDC", "0x82ad56cb"]);
   });
 
   it("lists a Multicall's Inner Calls by Contract and function, else short target and Selector, flagging failed ones", () => {
@@ -274,9 +278,17 @@ describe("buildRpcRequestRow", () => {
         failed: true,
       },
     ]);
-    expect(row.innerCalls!.map(formatContractCall)).toEqual([
-      "USDC / balanceOf",
-      "0x2222...2222 / 0x12345678",
+    expect(row.innerCalls!.map(getInnerCallCells)).toEqual([
+      {
+        method: "#1",
+        contract: "USDC",
+        function: { text: "balanceOf", decoded: true },
+      },
+      {
+        method: "#2",
+        contract: "0x2222...2222",
+        function: { text: "0x12345678", decoded: false },
+      },
     ]);
     // A Multicall with failed Inner Calls is still ok
     expect(row.failed).toBe(false);
@@ -349,59 +361,48 @@ describe("formatDuration", () => {
   });
 });
 
-describe("formatContractCall", () => {
-  it("joins the Contract and the decoded function", () => {
-    const row = buildRpcRequestRow(rpcRequest(), () => token);
+describe("getInnerCallCells", () => {
+  const innerCall = {
+    index: 0,
+    contractLabel: "USDC",
+    contractAddress: TOKEN,
+    contractName: "USDC",
+    functionName: "balanceOf",
+    functionSelector: "0x70a08231",
+    failed: false,
+  } as const;
 
-    expect(formatContractCall(row)).toBe("USDC / balanceOf");
+  it("numbers the Inner Call from 1 and fills the Contract and Function columns", () => {
+    expect(getInnerCallCells({ ...innerCall, index: 2 })).toEqual({
+      method: "#3",
+      contract: "USDC",
+      function: { text: "balanceOf", decoded: true },
+    });
   });
 
-  it("joins the Contract and the selector when the function is not decoded", () => {
-    const row = buildRpcRequestRow(rpcRequest(), noContracts);
-
-    expect(formatContractCall(row)).toBe("0x0000...00aa / 0x70a08231");
-  });
-
-  it("shows only the Contract without calldata", () => {
-    const row = buildRpcRequestRow(ethCall(undefined), noContracts);
-
-    expect(formatContractCall(row)).toBe("0x0000...00aa");
-  });
-
-  it("is empty for an RPC Request that calls no Contract", () => {
-    const row = buildRpcRequestRow(
-      rpcRequest({
-        requestBody: { jsonrpc: "2.0", id: 1, method: "eth_blockNumber" },
+  it("shows the short target address and the Selector when nothing decodes", () => {
+    expect(
+      getInnerCallCells({
+        ...innerCall,
+        contractLabel: "0x2222...2222",
+        contractName: undefined,
+        functionName: undefined,
+        functionSelector: "0x12345678",
       }),
-      noContracts,
-    );
-
-    expect(formatContractCall(row)).toBe("");
-  });
-});
-
-describe("formatCollapsedSubtitle", () => {
-  it("shows the Contract call for an RPC Request that calls a Contract", () => {
-    const row = buildRpcRequestRow(rpcRequest(), () => token);
-
-    expect(formatCollapsedSubtitle(row)).toBe("USDC / balanceOf");
+    ).toEqual({
+      method: "#1",
+      contract: "0x2222...2222",
+      function: { text: "0x12345678", decoded: false },
+    });
   });
 
-  it("keeps the selector rule for an undecoded Contract call", () => {
-    const row = buildRpcRequestRow(rpcRequest(), noContracts);
-
-    expect(formatCollapsedSubtitle(row)).toBe("0x0000...00aa / 0x70a08231");
-  });
-
-  it("shows the Endpoint's host for an RPC Request that calls no Contract", () => {
-    const row = buildRpcRequestRow(
-      rpcRequest({
-        url: "https://eth.llamarpc.com/",
-        requestBody: { jsonrpc: "2.0", id: 1, method: "eth_chainId" },
-      }),
-      noContracts,
-    );
-
-    expect(formatCollapsedSubtitle(row)).toBe("eth.llamarpc.com");
+  it("leaves the Function column empty without calldata", () => {
+    expect(
+      getInnerCallCells({
+        ...innerCall,
+        functionName: undefined,
+        functionSelector: undefined,
+      }).function,
+    ).toBeUndefined();
   });
 });

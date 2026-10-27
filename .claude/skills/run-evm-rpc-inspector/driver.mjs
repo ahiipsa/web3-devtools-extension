@@ -541,6 +541,25 @@ export async function launch() {
       ev(
         `document.querySelector("[role=row][aria-selected=true]")?.innerText.split("\\n")[0] ?? null`,
       ),
+    // Each row's cells, as text, in column order
+    rowCells: () =>
+      ev(
+        `[...document.querySelectorAll(".rpc-table-body [role=row]")].map((r) => [...r.querySelectorAll("[role=gridcell]")].map((c) => c.innerText.trim()))`,
+      ),
+    selectedCells: () =>
+      ev(
+        `[...(document.querySelector("[role=row][aria-selected=true]")?.querySelectorAll("[role=gridcell]") ?? [])].map((c) => c.innerText.trim())`,
+      ),
+    headers: () =>
+      ev(
+        `[...document.querySelectorAll(".rpc-table-header [role=columnheader]")].map((h) => h.innerText.trim())`,
+      ),
+    // The selected row's height and top, which opening the details must not move
+    selectedBox: () =>
+      ev(`(() => {
+        const r = document.querySelector("[role=row][aria-selected=true]")?.getBoundingClientRect();
+        return r ? [r.height, r.top] : null;
+      })()`),
     detailsOpen: () =>
       ev(`document.querySelectorAll(".rpc-details-tab").length > 0`),
     text: () => ev("document.body.innerText"),
@@ -579,6 +598,11 @@ async function smoke() {
     console.log(results.at(-1));
   };
   const { click, key, type, shot, ev } = app;
+  const callsContract = async (contract, fn) =>
+    (await app.rowCells()).some(
+      (cells) => cells[1] === contract && cells[2] === fn,
+    );
+  const json = (value) => JSON.stringify(value);
   try {
     await shot("01-empty");
     await app.traffic();
@@ -629,8 +653,52 @@ async function smoke() {
       /balance\s+uint256\s+1000000/.test(await app.text()),
     );
     check(
-      "table row names Contract and function",
-      /USDC \/ balanceOf|USDC\s+balanceOf/.test(await app.text()),
+      "table row names Contract and function in their columns",
+      await callsContract("USDC", "balanceOf"),
+      json(await app.rowCells()),
+    );
+    // The details hide Status, Endpoint and Time, not the rows' one line
+    const host = new URL(app.page.url()).host;
+    check(
+      "with the details open the header shows Method, Contract and Function only",
+      json(await app.headers()) === json(["Method", "Contract", "Function"]),
+      json(await app.headers()),
+    );
+    check(
+      "with the details open no row shows the Endpoint host",
+      !(await app.rowCells()).some((cells) =>
+        cells.some((text) => text.includes(host)),
+      ),
+    );
+    check(
+      "with the details open a row's tooltip tells its Status, Endpoint and Time",
+      new RegExp(`^Status: ok\\nEndpoint: ${host}\\nTime: \\d+ ms$`).test(
+        await ev(
+          `document.querySelector("[role=row][aria-selected=true]")?.title`,
+        ),
+      ),
+      await ev(
+        `document.querySelector("[role=row][aria-selected=true]")?.title`,
+      ),
+    );
+    check(
+      "with the details open the columns fit the table's side, giving way from the last",
+      await ev(`(() => {
+        const scroll = document.querySelector(".rpc-table-scroll");
+        const widths = [...document.querySelectorAll(".rpc-table-header [role=columnheader]")]
+          .map((h) => Math.round(h.getBoundingClientRect().width));
+        // Default widths 160 + 140 + 140; Method keeps its own while Function
+        // gives way to fit, down to its padding, before Contract does
+        const fits = scroll.scrollWidth <= scroll.clientWidth;
+        const room = scroll.clientWidth;
+        return fits && (room >= 440
+          ? widths.join() === "160,140,140"
+          : widths[0] === Math.min(160, room) &&
+            (room >= 300 ? widths[1] === 140 : widths[2] <= 9));
+      })()`),
+      await ev(
+        `[...document.querySelectorAll(".rpc-table-header [role=columnheader]")].map((h) => Math.round(h.getBoundingClientRect().width)).join() + " in " + document.querySelector(".rpc-table-scroll").clientWidth`,
+      ),
     );
 
     // Keyboard, through real key events that DevTools' own listeners also see
@@ -651,8 +719,26 @@ async function smoke() {
       "Esc keeps the RPC Request selected",
       (await app.selected()) === "eth_call",
     );
+    check(
+      "with the details closed the header shows every column",
+      json(await app.headers()) ===
+        json(["Method", "Contract", "Function", "Status", "Endpoint", "Time"]),
+      json(await app.headers()),
+    );
+    const closedBox = await app.selectedBox();
     await key("Enter");
     check("Enter reopens the details", await app.detailsOpen());
+    const openBox = await app.selectedBox();
+    await key("Escape");
+    const closedAgainBox = await app.selectedBox();
+    await key("Enter");
+    check(
+      "opening and closing the details keeps the selected row's height and top",
+      closedBox?.[0] === 21 &&
+        json(openBox) === json(closedBox) &&
+        json(closedAgainBox) === json(closedBox),
+      `${json(closedBox)} → ${json(openBox)} → ${json(closedAgainBox)}`,
+    );
     await key("ArrowDown");
     check(
       "ArrowDown selects the next RPC Request",
@@ -745,7 +831,7 @@ async function smoke() {
     await app.sleep(600);
     check(
       "an eth_call to a verified address decodes as <name> / <function>",
-      /WETH9 \/ balanceOf|WETH9\s+balanceOf/.test(await app.text()),
+      await callsContract("WETH9", "balanceOf"),
     );
     await click(".rpc-table-body [role=row]:nth-child(6)");
     await click(".rpc-details-tab", "Contract");
@@ -800,7 +886,7 @@ async function smoke() {
     await app.sleep(800);
     check(
       "an eth_call to an address verified on Etherscan only decodes",
-      /LinkToken \/ balanceOf|LinkToken\s+balanceOf/.test(await app.text()),
+      await callsContract("LinkToken", "balanceOf"),
     );
     check(
       "Etherscan asked once, after Sourcify, with the Chain, address and key",
@@ -844,9 +930,7 @@ async function smoke() {
     await app.sleep(800);
     check(
       "an eth_call to a proxy Sourcify resolves decodes as <impl name> / <function>",
-      /FiatTokenV2_2 \/ balanceOf|FiatTokenV2_2\s+balanceOf/.test(
-        await app.text(),
-      ),
+      await callsContract("FiatTokenV2_2", "balanceOf"),
     );
     await click(".rpc-table-body [role=row]:nth-child(10)");
     await click(".rpc-details-tab", "Contract");
@@ -859,7 +943,7 @@ async function smoke() {
     await app.sleep(800);
     check(
       "an eth_call to an EIP-1967 proxy decodes as <impl name> / <function>",
-      /SlotToken \/ balanceOf|SlotToken\s+balanceOf/.test(await app.text()),
+      await callsContract("SlotToken", "balanceOf"),
     );
     check(
       "the Panel reads the EIP-1967 slot on the Endpoint",
@@ -888,7 +972,7 @@ async function smoke() {
     await app.sleep(800);
     check(
       "a Multicall to an address without a Contract reads Multicall3 / aggregate3",
-      /Multicall3 \/ aggregate3|Multicall3\s+aggregate3/.test(await app.text()),
+      await callsContract("Multicall3", "aggregate3"),
     );
     await click(".rpc-table-body [role=row]:nth-child(12)");
     await click(".rpc-details-tab", "Params");
@@ -969,7 +1053,7 @@ async function smoke() {
       ev(`${MULTICALL_ROW}?.getAttribute("aria-expanded") === "true"`);
     const innerCallRows = () =>
       ev(
-        `[...document.querySelectorAll(".rpc-table-body [role=row][aria-level='2']")].map((r) => r.innerText.trim())`,
+        `[...document.querySelectorAll(".rpc-table-body [role=row][aria-level='2']")].map((r) => [...r.querySelectorAll("[role=gridcell]")].map((c) => c.innerText.trim()))`,
       );
     await key("Escape");
     check(
@@ -984,11 +1068,13 @@ async function smoke() {
     await click(".rpc-table-chevron");
     const expandedInner = await innerCallRows();
     check(
-      "a click on the chevron lists the Inner Calls below it, the failed one ✗",
+      "a click on the chevron lists the Inner Calls below it, #n and ✗ in Method, Contract and function in theirs",
       (await multicallExpanded()) &&
-        expandedInner.length === 2 &&
-        expandedInner[0] === "WETH9 / balanceOf" &&
-        expandedInner[1] === "0x2222...2222 / 0x12345678 ✗" &&
+        json(expandedInner) ===
+          json([
+            ["#1", "WETH9", "balanceOf", "", "", ""],
+            ["#2 ✗", "0x2222...2222", "0x12345678", "", "", ""],
+          ]) &&
         !(await app.detailsOpen()),
       JSON.stringify(expandedInner),
     );
@@ -1008,12 +1094,12 @@ async function smoke() {
     );
     await key("ArrowRight");
     await key("ArrowDown");
-    const intoInner = await app.selected();
+    const intoInner = json(await app.selectedCells());
     await key("ArrowLeft");
     const backToMulticall = await app.selected();
     check(
       "↓ walks into the Inner Calls and ← goes back to the Multicall",
-      intoInner === "WETH9 / balanceOf" &&
+      intoInner === json(["#1", "WETH9", "balanceOf", "", "", ""]) &&
         /^▸?▾?\s*eth_call · 2 · 1 ✗/.test(backToMulticall ?? "") &&
         (await multicallExpanded()),
       `${intoInner} | ${backToMulticall}`,
@@ -1032,7 +1118,18 @@ async function smoke() {
             `document.querySelector(".rpc-details-inner-call-highlighted")?.innerText`,
           )) ?? "",
         ) &&
-        (await app.selected()) === "0x2222...2222 / 0x12345678 ✗",
+        json(await app.selectedCells()) ===
+          json(["#2 ✗", "0x2222...2222", "0x12345678"]),
+    );
+    const openInner = await innerCallRows();
+    check(
+      "with the details open Inner Call rows keep #n and ✗ in Method, Contract and function in theirs",
+      json(openInner) ===
+        json([
+          ["#1", "WETH9", "balanceOf"],
+          ["#2 ✗", "0x2222...2222", "0x12345678"],
+        ]),
+      json(openInner),
     );
     await shot("12-inner-call-params");
     await key("ArrowLeft");
@@ -1045,8 +1142,8 @@ async function smoke() {
       "a search for an Inner Call's function shows the Multicall expanded with only it",
       collapsedAgain &&
         (await multicallExpanded()) &&
-        searchedInner.includes("WETH9 / balanceOf") &&
-        !searchedInner.some((text) => text.includes("0x2222")),
+        searchedInner.some((cells) => cells[1] === "WETH9") &&
+        !searchedInner.some((cells) => cells[1].includes("0x2222")),
       JSON.stringify(searchedInner),
     );
     await shot("13-inner-call-search");

@@ -4,7 +4,11 @@ import {
   functionalUpdate,
   TableState,
 } from "@tanstack/react-table";
-import { rpcRequestTableOptions } from "./rpcRequestTable.ts";
+import {
+  formatHiddenWithDetails,
+  getColumnVisibility,
+  rpcRequestTableOptions,
+} from "./rpcRequestTable.ts";
 import { RpcRequestRow } from "./rpcRequestRow.ts";
 import { RpcRequest } from "../types/main.ts";
 
@@ -42,6 +46,9 @@ const buildTable = (data: RpcRequestRow[]) => {
 
 const order = (table: ReturnType<typeof buildTable>) =>
   table.getRowModel().rows.map((tableRow) => tableRow.original.request.id);
+
+const visibleColumns = (table: ReturnType<typeof buildTable>) =>
+  table.getVisibleLeafColumns().map((column) => column.id);
 
 const clickHeader = (table: ReturnType<typeof buildTable>, columnId: string) =>
   table.getColumn(columnId)!.getToggleSortingHandler()!({});
@@ -127,5 +134,40 @@ describe("RPC Request table", () => {
     table.getColumn("time")!.getToggleSortingHandler()!({ shiftKey: true });
 
     expect(table.getState().sorting).toEqual([{ id: "time", desc: false }]);
+  });
+
+  it("shows every column with the details closed", () => {
+    const table = buildTable([]);
+    table.setColumnVisibility(getColumnVisibility(false));
+
+    expect(visibleColumns(table)).toEqual([
+      "method",
+      "contract",
+      "function",
+      "status",
+      "endpoint",
+      "time",
+    ]);
+  });
+
+  it("keeps Method, Contract and Function with the details open", () => {
+    const table = buildTable([]);
+    table.setColumnVisibility(getColumnVisibility(true));
+
+    expect(visibleColumns(table)).toEqual(["method", "contract", "function"]);
+  });
+});
+
+describe("formatHiddenWithDetails", () => {
+  it("lists the Status, Endpoint and Time the open details hide", () => {
+    expect(
+      formatHiddenWithDetails(
+        row("1", {
+          status: "RPC error 3",
+          endpoint: "eth.llamarpc.com",
+          time: 1534,
+        }),
+      ),
+    ).toBe("Status: RPC error 3\nEndpoint: eth.llamarpc.com\nTime: 1.53 s");
   });
 });

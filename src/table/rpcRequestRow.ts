@@ -146,19 +146,13 @@ export function getFunctionLabel({
   return undefined;
 }
 
-// The Contract and its function, joined
-export function formatContractCall(
-  row: Pick<RpcRequestRow, "contractLabel"> & FunctionFields,
-) {
-  return [row.contractLabel, getFunctionLabel(row)?.text]
-    .filter(Boolean)
-    .join(" / ");
-}
-
-// The second line under the method on a collapsed row (details open): the
-// Contract and its function, else the Endpoint's host
-export function formatCollapsedSubtitle(
-  row: Pick<RpcRequestRow, "contractLabel" | "endpoint"> & FunctionFields,
-) {
-  return row.contractLabel ? formatContractCall(row) : row.endpoint;
+// What an Inner Call row shows in the Method, Contract and Function columns;
+// it has no Status, Endpoint or Time of its own
+export function getInnerCallCells(innerCall: InnerCallRow) {
+  return {
+    // Numbered from 1, as in Params
+    method: `#${innerCall.index + 1}`,
+    contract: innerCall.contractLabel,
+    function: getFunctionLabel(innerCall),
+  };
 }

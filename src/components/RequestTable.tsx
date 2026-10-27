@@ -5,7 +5,6 @@ import {
   flexRender,
   SortingState,
   useReactTable,
-  VisibilityState,
 } from "@tanstack/react-table";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
@@ -18,7 +17,11 @@ import {
 } from "react";
 import { AppContext } from "./AppContext.tsx";
 import { useRpcRequestRows } from "../hooks/useRpcRequestRows.ts";
-import { rpcRequestTableOptions } from "../table/rpcRequestTable.ts";
+import {
+  formatHiddenWithDetails,
+  getColumnVisibility,
+  rpcRequestTableOptions,
+} from "../table/rpcRequestTable.ts";
 import {
   loadColumnSizing,
   saveColumnSizing,
@@ -39,24 +42,35 @@ import {
   RpcRequestFilter,
 } from "../table/rpcRequestFilter.ts";
 import {
-  formatCollapsedSubtitle,
-  formatContractCall,
   getFunctionLabel,
+  getInnerCallCells,
   InnerCallRow,
   RpcRequestRow,
 } from "../table/rpcRequestRow.ts";
 
-// Match --rpc-table-row-height and .rpc-table-collapsed in RequestTable.css
+// Matches --rpc-table-row-height in RequestTable.css, with or without the details
 const ROW_HEIGHT = 21;
-const COLLAPSED_ROW_HEIGHT = 34;
 
-const COLLAPSED_COLUMNS: VisibilityState = {
-  contract: false,
-  function: false,
-  status: false,
-  endpoint: false,
-  time: false,
+// With the details open, columns that do not fit the table's side of the split
+// give way from the last: Function first, then Contract, then Method. Flex
+// shrinks by factor × width, so factors this far apart act as an order.
+const SHRINK_WITH_DETAILS: Record<string, number> = {
+  method: 1,
+  contract: 1e3,
+  function: 1e6,
 };
+
+const getCellStyle = (
+  column: { id: string; getSize: () => number },
+  detailsOpen: boolean,
+): React.CSSProperties =>
+  detailsOpen
+    ? {
+        width: column.getSize(),
+        flexShrink: SHRINK_WITH_DETAILS[column.id] ?? 0,
+        minWidth: 0,
+      }
+    : { width: column.getSize() };
 
 const SORT_ARROWS = { asc: "▲", desc: "▼" } as const;
 const ARIA_SORT = { asc: "ascending", desc: "descending" } as const;
@@ -69,35 +83,6 @@ const LINE_KEYS = new Set<string>([
   "ArrowLeft",
   "ArrowRight",
 ] satisfies LineKey[]);
-
-// Contract / function, as formatContractCall, with an undecoded selector muted
-const ContractCall = ({
-  call,
-}: {
-  call: Parameters<typeof formatContractCall>[0];
-}) => {
-  const functionLabel = getFunctionLabel(call);
-  return (
-    <>
-      {call.contractLabel}
-      {functionLabel && " / "}
-      {functionLabel && (
-        <span className={cx({ "rpc-table-muted": !functionLabel.decoded })}>
-          {functionLabel.text}
-        </span>
-      )}
-    </>
-  );
-};
-
-// The second line of a collapsed row, as formatCollapsedSubtitle: the Endpoint's
-// host muted, else Contract / function
-const CollapsedSubtitle = ({ row }: { row: RpcRequestRow }) =>
-  row.contractLabel ? (
-    <ContractCall call={row} />
-  ) : (
-    <span className="rpc-table-muted">{row.endpoint}</span>
-  );
 
 // A Multicall's Inner Call count, and its failed ones' if any: ` · 12 · 2 ✗`
 const countInnerCalls = (innerCalls: InnerCallRow[]) => {
@@ -147,30 +132,45 @@ const MethodLabel = (props: {
   );
 };
 
-// An Inner Call line's label: Contract / function, ✗ when it failed
-const InnerCallLabel = ({ innerCall }: { innerCall: InnerCallRow }) => (
-  <>
-    <ContractCall call={innerCall} />
-    {innerCall.failed && <span className="rpc-table-failed-mark"> ✗</span>}
-  </>
-);
+// What an Inner Call line shows in a column: an indented `#n`, ✗ when it
+// failed, in Method; its Contract and function in theirs; nothing elsewhere
+const InnerCallCellText = (props: {
+  innerCall: InnerCallRow;
+  columnId: string;
+}) => {
+  const { innerCall, columnId } = props;
+  const cells = getInnerCallCells(innerCall);
+  if (columnId === "method") {
+    return (
+      <>
+        {cells.method}
+        {innerCall.failed && <span className="rpc-table-failed-mark"> ✗</span>}
+      </>
+    );
+  }
+  if (columnId === "contract") {
+    return <>{cells.contract}</>;
+  }
+  if (columnId === "function" && cells.function) {
+    return (
+      <span className={cx({ "rpc-table-muted": !cells.function.decoded })}>
+        {cells.function.text}
+      </span>
+    );
+  }
+  return null;
+};
 
-const formatInnerCallLabel = (innerCall: InnerCallRow) =>
-  formatContractCall(innerCall) + (innerCall.failed ? " ✗" : "");
-
-// The indented cell an Inner Call line shows, in the first column
-const InnerCallCell = (props: { innerCall: InnerCallRow; width?: number }) => (
-  <div
-    role="gridcell"
-    className="rpc-table-cell rpc-table-inner-call-cell"
-    style={props.width === undefined ? undefined : { width: props.width }}
-    title={formatInnerCallLabel(props.innerCall)}
-  >
-    <span className="rpc-table-cell-text">
-      <InnerCallLabel innerCall={props.innerCall} />
-    </span>
-  </div>
-);
+const getInnerCallCellTitle = (innerCall: InnerCallRow, columnId: string) => {
+  const cells = getInnerCallCells(innerCall);
+  if (columnId === "contract") {
+    return cells.contract;
+  }
+  if (columnId === "function") {
+    return cells.function?.text;
+  }
+  return undefined;
+};
 
 interface RequestTableProps {
   filter: RpcRequestFilter;
@@ -249,9 +249,9 @@ export const RequestTable = ({ filter, scrollRef }: RequestTableProps) => {
     }
   }, [filteredData, selection, setRequestId]);
 
-  // With the details open only the Method column is left, Network-style
-  const collapsed = requestId !== null;
-  const rowHeight = collapsed ? COLLAPSED_ROW_HEIGHT : ROW_HEIGHT;
+  // Rows keep their single line and height with the details open, so the
+  // Selected RPC Request stays where it was; only some columns hide
+  const detailsOpen = requestId !== null;
 
   const [sorting, setSorting] = useState<SortingState>([]);
   const [columnSizing, setColumnSizing] = useState<ColumnSizingState>(() =>
@@ -264,7 +264,7 @@ export const RequestTable = ({ filter, scrollRef }: RequestTableProps) => {
     state: {
       sorting,
       columnSizing,
-      columnVisibility: collapsed ? COLLAPSED_COLUMNS : {},
+      columnVisibility: getColumnVisibility(detailsOpen),
     },
     onSortingChange: setSorting,
     onColumnSizingChange: setColumnSizing,
@@ -319,7 +319,7 @@ export const RequestTable = ({ filter, scrollRef }: RequestTableProps) => {
   const virtualizer = useVirtualizer({
     count: lines.length,
     getScrollElement: () => scrollRef.current,
-    estimateSize: () => rowHeight,
+    estimateSize: () => ROW_HEIGHT,
     // The sticky header sits above the first row inside the scroll element
     scrollMargin: ROW_HEIGHT,
     // Keep rows scrolled into view from under the sticky header
@@ -337,18 +337,6 @@ export const RequestTable = ({ filter, scrollRef }: RequestTableProps) => {
       scrollElement.scrollTop = scrollElement.scrollHeight;
     }
   }, [rows.length, sorted, scrollRef]);
-
-  // Rows change height as the details open and close; keep the selected one
-  // in view through the change
-  const selectedIndex = lines.findIndex((line) => line.id === selectedLineId);
-  const selectedIndexRef = useRef(selectedIndex);
-  selectedIndexRef.current = selectedIndex;
-  useLayoutEffect(() => {
-    virtualizer.measure();
-    if (selectedIndexRef.current >= 0) {
-      virtualizer.scrollToIndex(selectedIndexRef.current, { align: "auto" });
-    }
-  }, [virtualizer, rowHeight]);
 
   const onGridKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
     if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) {
@@ -381,10 +369,12 @@ export const RequestTable = ({ filter, scrollRef }: RequestTableProps) => {
 
   const pressedResizer = useRef(false);
 
-  const totalWidth = collapsed ? 0 : table.getTotalSize();
+  // With the details open the columns give way rather than the table
+  // scrolling sideways
+  const totalWidth = detailsOpen ? 0 : table.getTotalSize();
 
   return (
-    <div className={cx("rpc-table", { "rpc-table-collapsed": collapsed })}>
+    <div className="rpc-table">
       <div
         ref={scrollRef}
         className="rpc-table-scroll"
@@ -412,7 +402,7 @@ export const RequestTable = ({ filter, scrollRef }: RequestTableProps) => {
                     role="columnheader"
                     aria-sort={sorted ? ARIA_SORT[sorted] : "none"}
                     className="rpc-table-cell rpc-table-header-cell"
-                    style={{ width: collapsed ? undefined : header.getSize() }}
+                    style={getCellStyle(header.column, detailsOpen)}
                     onMouseDown={(event) => {
                       pressedResizer.current =
                         event.target instanceof Element &&
@@ -436,17 +426,15 @@ export const RequestTable = ({ filter, scrollRef }: RequestTableProps) => {
                         {SORT_ARROWS[sorted]}
                       </span>
                     )}
-                    {!collapsed && (
-                      <div
-                        className={cx("rpc-table-resizer", {
-                          "rpc-table-resizer-active":
-                            header.column.getIsResizing(),
-                        })}
-                        onMouseDown={header.getResizeHandler()}
-                        onTouchStart={header.getResizeHandler()}
-                        onDoubleClick={() => header.column.resetSize()}
-                      />
-                    )}
+                    <div
+                      className={cx("rpc-table-resizer", {
+                        "rpc-table-resizer-active":
+                          header.column.getIsResizing(),
+                      })}
+                      onMouseDown={header.getResizeHandler()}
+                      onTouchStart={header.getResizeHandler()}
+                      onDoubleClick={() => header.column.resetSize()}
+                    />
                   </div>
                 );
               })}
@@ -488,95 +476,91 @@ export const RequestTable = ({ filter, scrollRef }: RequestTableProps) => {
                   style={{
                     transform: `translateY(${virtualRow.start - virtualizer.options.scrollMargin}px)`,
                   }}
+                  // Also past the last cell, where no cell's own title shows
+                  title={
+                    detailsOpen && line.kind === "rpcRequest"
+                      ? formatHiddenWithDetails(line.row)
+                      : undefined
+                  }
                   // A click always opens the details; only Esc and ✕ close them
                   onClick={() => openLine(line)}
                 >
-                  {collapsed && line.kind === "innerCall" && (
-                    <InnerCallCell innerCall={line.innerCall} />
-                  )}
-                  {collapsed && line.kind === "rpcRequest" && (
-                    <div
-                      role="gridcell"
-                      className="rpc-table-cell"
-                      title={[
-                        row.original.method,
-                        formatCollapsedSubtitle(row.original),
-                      ]
-                        .filter(Boolean)
-                        .join("\n")}
-                    >
-                      <span className="rpc-table-cell-text">
-                        <MethodLabel
-                          line={line}
-                          onToggle={() =>
-                            setRowExpanded(line.row, !line.expanded)
-                          }
-                        />
-                      </span>
-                      <span className="rpc-table-cell-text rpc-table-cell-subtitle">
-                        <CollapsedSubtitle row={row.original} />
-                      </span>
-                    </div>
-                  )}
-                  {!collapsed &&
-                    row.getVisibleCells().map((cell) => {
-                      const width = cell.column.getSize();
-                      // An Inner Call fills the first column only
-                      if (line.kind === "innerCall") {
-                        return cell.column.id === "method" ? (
-                          <InnerCallCell
-                            key={cell.id}
-                            innerCall={line.innerCall}
-                            width={width}
-                          />
-                        ) : (
-                          <div
-                            key={cell.id}
-                            role="gridcell"
-                            className="rpc-table-cell"
-                            style={{ width }}
-                          />
-                        );
-                      }
-                      const value =
-                        cell.column.id === "method" && line.row.innerCalls
-                          ? line.row.method +
-                            formatInnerCallCount(line.row.innerCalls)
-                          : cell.getValue();
-                      const muted =
-                        cell.column.id === "function" &&
-                        getFunctionLabel(row.original)?.decoded === false;
+                  {row.getVisibleCells().map((cell) => {
+                    const columnId = cell.column.id;
+                    const cellClassName = cx("rpc-table-cell", {
+                      "rpc-table-inner-call-cell":
+                        line.kind === "innerCall" && columnId === "method",
+                    });
+                    const style = getCellStyle(cell.column, detailsOpen);
+                    if (line.kind === "innerCall") {
                       return (
                         <div
                           key={cell.id}
                           role="gridcell"
-                          className="rpc-table-cell"
-                          style={{ width }}
-                          // Full text of a cell the column width truncates
-                          title={typeof value === "string" ? value : undefined}
+                          className={cellClassName}
+                          style={style}
+                          title={getInnerCallCellTitle(
+                            line.innerCall,
+                            columnId,
+                          )}
                         >
-                          <span
-                            className={cx("rpc-table-cell-text", {
-                              "rpc-table-muted": muted,
-                            })}
-                          >
-                            {cell.column.id === "method" ? (
-                              <MethodLabel
-                                line={line}
-                                onToggle={() =>
-                                  setRowExpanded(line.row, !line.expanded)
-                                }
-                              />
-                            ) : (
-                              flexRender(
-                                cell.column.columnDef.cell,
-                                cell.getContext(),
-                              )
-                            )}
+                          <span className="rpc-table-cell-text">
+                            <InnerCallCellText
+                              innerCall={line.innerCall}
+                              columnId={columnId}
+                            />
                           </span>
                         </div>
                       );
-                    })}
+                    }
+                    const value =
+                      columnId === "method" && line.row.innerCalls
+                        ? line.row.method +
+                          formatInnerCallCount(line.row.innerCalls)
+                        : cell.getValue();
+                    const muted =
+                      columnId === "function" &&
+                      getFunctionLabel(row.original)?.decoded === false;
+                    // Full text of a cell the column width truncates, and
+                    // with the details open what they hide
+                    const title = [
+                      typeof value === "string" ? value : undefined,
+                      detailsOpen
+                        ? formatHiddenWithDetails(row.original)
+                        : undefined,
+                    ]
+                      .filter(Boolean)
+                      .join("\n");
+                    return (
+                      <div
+                        key={cell.id}
+                        role="gridcell"
+                        className={cellClassName}
+                        style={style}
+                        title={title || undefined}
+                      >
+                        <span
+                          className={cx("rpc-table-cell-text", {
+                            "rpc-table-muted": muted,
+                          })}
+                        >
+                          {columnId === "method" ? (
+                            <MethodLabel
+                              line={line}
+                              onToggle={() =>
+                                setRowExpanded(line.row, !line.expanded)
+                              }
+                            />
+                          ) : (
+                            flexRender(
+                              cell.column.columnDef.cell,
+                              cell.getContext(),
+                            )
+                          )}
+                        </span>
+                      </div>
+                    );
+                  })}
                   <div className="rpc-table-filler" />
                 </div>
               );
