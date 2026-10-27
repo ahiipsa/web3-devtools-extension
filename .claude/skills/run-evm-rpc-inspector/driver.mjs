@@ -528,7 +528,7 @@ export async function launch() {
         const match = ${JSON.stringify(match)};
         const rows = [...document.querySelectorAll(".rpc-table-body [role=row]")]
           .filter((row) => {
-            const [method, contract, fn] = [...row.querySelectorAll("[role=gridcell]")]
+            const [method, , contract, fn] = [...row.querySelectorAll("[role=gridcell]")]
               .map((cell) => cell.innerText.trim());
             const hidden = Object.fromEntries(row.title.split("\\n").map((line) =>
               [line.slice(0, line.indexOf(": ")), line.slice(line.indexOf(": ") + 2)]));
@@ -650,6 +650,11 @@ export async function launch() {
     selectedCells: () =>
       ev(
         `[...(document.querySelector("[role=row][aria-selected=true]")?.querySelectorAll("[role=gridcell]") ?? [])].map((c) => c.innerText.trim())`,
+      ),
+    // Each row's Chain cell, as text and tooltip
+    rowChains: () =>
+      ev(
+        `[...document.querySelectorAll(".rpc-table-body [role=row]")].map((r) => { const cell = r.querySelectorAll("[role=gridcell]")[1]; return cell && [cell.innerText.trim(), cell.title]; })`,
       ),
     // Each row's tooltip, which with the details open tells the hidden columns
     rowTitles: () =>
@@ -834,10 +839,10 @@ async function smoke() {
   // row's tooltip
   const callsContract = async (contract, fn) =>
     (await app.rowCells()).some(
-      (cells) => cells[1] === contract && cells[2] === fn,
+      (cells) => cells[2] === contract && cells[3] === fn,
     ) ||
     (await app.rowTitles()).some((title) =>
-      title.startsWith(`Contract: ${contract}\nFunction: ${fn}\n`),
+      title.includes(`Contract: ${contract}\nFunction: ${fn}\n`),
     );
   // Wait for the decoded row or the Panel text a check needs
   const callsContractSoon = (contract, fn) =>
@@ -857,6 +862,32 @@ async function smoke() {
       rows.join(", "),
     );
     await shot("02-table");
+    check(
+      "the header reads Method, Chain, Contract, …",
+      json(await app.headers()) ===
+        json([
+          "Method",
+          "Chain",
+          "Contract",
+          "Function",
+          "Status",
+          "Endpoint",
+          "Time",
+        ]),
+      json(await app.headers()),
+    );
+    // The mock node serves chain id 1, captured from the page's eth_chainId
+    const chains = await until(app.rowChains, (chains) =>
+      chains.every((chain) => chain?.[0] === "Ethereum"),
+    );
+    check(
+      "every row of the standard traffic shows the node's Chain by name, its id in the tooltip",
+      chains.length === 5 &&
+        chains.every(
+          (chain) => chain[0] === "Ethereum" && chain[1] === "Chain 1",
+        ),
+      json(chains),
+    );
 
     // The toolbar looks like the Network tab's filter bar, measured in both
     // Network's internals may move in another Chrome: fail these checks only
@@ -963,9 +994,9 @@ async function smoke() {
       json(await app.rowCells()),
     );
     check(
-      "with the details open a row's tooltip tells its Contract, Function, Status, Endpoint and Time",
+      "with the details open a row's tooltip tells its Chain, Contract, Function, Status, Endpoint and Time",
       new RegExp(
-        `^Contract: USDC\\nFunction: balanceOf\\nStatus: ok\\nEndpoint: ${host}\\nTime: \\d+ ms$`,
+        `^Chain: Ethereum\\nContract: USDC\\nFunction: balanceOf\\nStatus: ok\\nEndpoint: ${host}\\nTime: \\d+ ms$`,
       ).test(
         await ev(
           `document.querySelector("[role=row][aria-selected=true]")?.title`,
@@ -1009,7 +1040,15 @@ async function smoke() {
     check(
       "with the details closed the header shows every column",
       json(await app.headers()) ===
-        json(["Method", "Contract", "Function", "Status", "Endpoint", "Time"]),
+        json([
+          "Method",
+          "Chain",
+          "Contract",
+          "Function",
+          "Status",
+          "Endpoint",
+          "Time",
+        ]),
       json(await app.headers()),
     );
     check(
@@ -1092,6 +1131,19 @@ async function smoke() {
       "Esc in the search box clears it",
       (await until(app.rows, (rows) => rows.length === 5)).length === 5,
     );
+    for (const chainSearch of ["ethereum", "1"]) {
+      await key("f", "meta");
+      await type(chainSearch);
+      // Give the search time to drop rows it does not match
+      await app.sleep(300);
+      check(
+        `a search for the Chain's ${chainSearch === "1" ? "id" : "name"} keeps the rows`,
+        (await app.rows()).length === 5,
+        json(await app.rows()),
+      );
+      await key("Escape");
+      await until(app.rows, (rows) => rows.length === 5);
+    }
 
     // Narrow Panel: the default side-docked DevTools is about 550 px wide
     if (!(await app.detailsOpen())) await clickRow({ method: "eth_call" });
@@ -1456,7 +1508,8 @@ async function smoke() {
     await shot("14-sourcify-down");
     await key("Escape");
 
-    // Settings: off means no Sourcify request and no eth_chainId of its own
+    // Settings: off means no Sourcify request, but the Panel still asks an
+    // Endpoint without a captured eth_chainId for its Chain
     await click(".rpc-table-settings-button");
     await click(".rpc-table-settings .ant-checkbox-wrapper");
     const stored = await until(
@@ -1472,17 +1525,41 @@ async function smoke() {
     const before = app.sourcifyUrls.length;
     await app.rpc(callTo(8, USDT), "/rpc3");
     await app.rpc(callTo(9, "0x1111111111111111111111111111111111111111"));
-    // Nothing to wait for: the Panel first waits 1 s for the page's own
-    // eth_chainId, then would ask
-    await app.sleep(1600);
+    const ownChainIdsOn3 = () =>
+      app.nodeLog.filter(
+        (r) =>
+          r.origin.startsWith("chrome-extension://") &&
+          r.path === "/rpc3" &&
+          r.method === "eth_chainId",
+      ).length;
+    // The Panel first waits 1 s for the page's own eth_chainId, then asks
+    await until(ownChainIdsOn3, (count) => count > 0);
+    await app.sleep(DUPLICATE_WINDOW);
     check(
       "with the setting off no Sourcify request is made",
-      app.sourcifyUrls.length === before &&
-        !app.nodeLog.some(
-          (r) =>
-            r.origin.startsWith("chrome-extension://") && r.path === "/rpc3",
-        ),
+      app.sourcifyUrls.length === before,
       app.sourcifyUrls.slice(before).join(", "),
+    );
+    check(
+      "with the setting off the Panel still asks an Endpoint for its chain id, once",
+      ownChainIdsOn3() === 1,
+      JSON.stringify(app.nodeLog.filter((r) => r.path === "/rpc3")),
+    );
+    // A search for the Endpoint's path leaves the /rpc3 call alone
+    if (await app.detailsOpen()) await key("Escape");
+    await key("f", "meta");
+    await type("/rpc3");
+    const rpc3Chain = (
+      await until(
+        app.rowChains,
+        (chains) => chains.length === 1 && chains[0]?.[0] === "Ethereum",
+      )
+    )[0];
+    await key("Escape");
+    check(
+      "an RPC Request to an Endpoint without a captured eth_chainId gets its Chain from the Panel's own",
+      json(rpc3Chain) === json(["Ethereum", "Chain 1"]),
+      json(rpc3Chain),
     );
     await shot("15-end");
     // Both bars, for a human to compare by eye

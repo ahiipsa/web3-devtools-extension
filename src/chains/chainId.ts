@@ -1,5 +1,5 @@
 import { RpcRequest } from "../types/main.ts";
-import { sendRpcRequest } from "./endpointRpc.ts";
+import { sendRpcRequest } from "../abiSources/endpointRpc.ts";
 
 const parseChainId = (value: unknown) =>
   typeof value === "string" && /^0x[0-9a-f]+$/i.test(value)

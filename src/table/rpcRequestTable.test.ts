@@ -59,7 +59,15 @@ describe("RPC Request table", () => {
 
     expect(
       table.getAllLeafColumns().map((column) => column.columnDef.header),
-    ).toEqual(["Method", "Contract", "Function", "Status", "Endpoint", "Time"]);
+    ).toEqual([
+      "Method",
+      "Chain",
+      "Contract",
+      "Function",
+      "Status",
+      "Endpoint",
+      "Time",
+    ]);
   });
 
   it("keeps arrival order until a header is clicked", () => {
@@ -124,6 +132,20 @@ describe("RPC Request table", () => {
     expect(order(table)).toEqual(["4", "1", "2", "3"]);
   });
 
+  it("sorts Chains as text, names before bare chain ids, unknown last", () => {
+    const table = buildTable([
+      row("1", { chainLabel: "Ethereum" }),
+      row("2", {}),
+      row("3", { chainLabel: "12345" }),
+      row("4", { chainLabel: "Base" }),
+    ]);
+
+    clickHeader(table, "chain");
+    expect(order(table)).toEqual(["4", "1", "3", "2"]);
+    clickHeader(table, "chain");
+    expect(order(table)).toEqual(["3", "1", "4", "2"]);
+  });
+
   it("sorts by one column at a time", () => {
     const table = buildTable([
       row("1", { method: "b", time: 1 }),
@@ -142,6 +164,7 @@ describe("RPC Request table", () => {
 
     expect(visibleColumns(table)).toEqual([
       "method",
+      "chain",
       "contract",
       "function",
       "status",
@@ -173,6 +196,16 @@ describe("formatHiddenWithDetails", () => {
       ),
     ).toBe(
       "Contract: USDC\nFunction: balanceOf\nStatus: error 3\nEndpoint: eth.llamarpc.com\nTime: 1.53 s",
+    );
+  });
+
+  it("starts with the Chain once it is known", () => {
+    expect(
+      formatHiddenWithDetails(
+        row("1", { chainLabel: "Base", contractLabel: "USDC" }),
+      ),
+    ).toBe(
+      "Chain: Base\nContract: USDC\nStatus: ok\nEndpoint: rpc.example\nTime: 10 ms",
     );
   });
 

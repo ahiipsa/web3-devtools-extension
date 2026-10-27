@@ -333,10 +333,15 @@ export const RequestTable = ({ filter, scrollRef }: RequestTableProps) => {
                     const muted =
                       columnId === "function" &&
                       getFunctionLabel(row.original)?.decoded === false;
-                    // Full text of a cell the column width truncates, and
-                    // with the details open what they hide
+                    // Full text of a cell the column width truncates, the
+                    // Chain's id or why it is unknown, and with the details
+                    // open what they hide
                     const title = [
-                      typeof value === "string" ? value : undefined,
+                      columnId === "chain"
+                        ? row.original.chainTitle
+                        : typeof value === "string"
+                          ? value
+                          : undefined,
                       hidden,
                     ]
                       .filter(Boolean)

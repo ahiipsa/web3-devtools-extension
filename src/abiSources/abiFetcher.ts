@@ -3,7 +3,7 @@ import { Contract, normalizeAddress } from "../dal/contract.ts";
 import { getContractCallParams } from "../utils/requestUtils.ts";
 import { trimContractAddress } from "../utils/text.ts";
 import { getInnerCallTargets } from "../decoding/multicall.ts";
-import { getCapturedChainId } from "./chainId.ts";
+import { EndpointChains } from "../chains/endpointChains.ts";
 import { AbiSourceName, ContractAbi } from "./abiSources.ts";
 
 // What the Contract tab shows for an address without a Contract
@@ -25,10 +25,8 @@ export interface AbiFetcherDeps {
     address: `0x${string}`,
     endpoint: string,
   ) => Promise<ContractAbi>;
-  requestChainId: (endpoint: string) => Promise<number>;
-  // How long to wait for the page's own eth_chainId, which often finishes
-  // after its first calls, before asking the Endpoint; 1 s by default
-  chainLookupDelay?: number;
+  // Observed by the Panel apart, as the table shows them too
+  chains: EndpointChains;
 }
 
 export type AbiFetcher = ReturnType<typeof createAbiFetcher>;
@@ -69,20 +67,15 @@ const errorMessage = (error: unknown) =>
   error instanceof Error ? error.message : String(error);
 
 // Fetches the ABIs of called addresses without a Contract and saves them as
-// Contracts. All state lives in memory for one Panel session: the Chain of
-// each Endpoint, and one automatic attempt per (Chain, address).
+// Contracts. All state lives in memory for one Panel session: one automatic
+// attempt per (Chain, address).
 export function createAbiFetcher(deps: AbiFetcherDeps) {
-  const chainIds = new Map<string, number>();
-  // An Endpoint is asked for its chain id once automatically
-  const chainLookups = new Map<string, Promise<number | undefined>>();
-  const chainErrors = new Map<string, string>();
+  const { chains } = deps;
   // Addresses called on an Endpoint whose Chain is not known yet
   const waiting = new Map<string, Set<`0x${string}`>>();
   // By `${chainId}:${address}`; present once an attempt was made
   const attempts = new Map<string, AbiFetchState>();
-  const seenForChain = new WeakSet<RpcRequest>();
-  const seenForFetch = new WeakSet<RpcRequest>();
-  const chainLookupDelay = deps.chainLookupDelay ?? 1000;
+  const seen = new WeakSet<RpcRequest>();
   // Shared by automatic and manual fetches, so across the whole Panel
   const limitFetches = createConcurrencyLimit(MAX_FETCHES_AT_ONCE);
   let automatic = false;
@@ -151,52 +144,21 @@ export function createAbiFetcher(deps: AbiFetcherDeps) {
     }
   };
 
-  // A captured eth_chainId always wins: the Endpoint may now serve another
-  // Chain, e.g. a restarted local fork
-  const setChainId = (endpoint: string, chainId: number, captured: boolean) => {
-    if (
-      chainIds.get(endpoint) === chainId ||
-      (!captured && chainIds.has(endpoint))
-    ) {
-      return;
-    }
-    chainIds.set(endpoint, chainId);
-    chainErrors.delete(endpoint);
-    const addresses = waiting.get(endpoint);
-    waiting.delete(endpoint);
-    if (automatic) {
-      addresses?.forEach((address) =>
-        fetchAutomatically(chainId, address, endpoint),
-      );
-    }
-    notify();
-  };
-
-  const lookUpChainId = (endpoint: string, delay: number) => {
-    const lookup = new Promise((resolve) => setTimeout(resolve, delay)).then(
-      () => {
-        const captured = chainIds.get(endpoint);
-        if (captured !== undefined) {
-          return captured;
-        }
-        return deps.requestChainId(endpoint).then(
-          (chainId) => {
-            setChainId(endpoint, chainId, false);
-            return chainIds.get(endpoint);
-          },
-          (error) => {
-            chainErrors.set(endpoint, errorMessage(error));
-            notify();
-            return undefined;
-          },
+  // Each Chain an Endpoint gets, the first or a captured switch, fetches
+  // what was called there while it was not known
+  chains.subscribe((endpoint) => {
+    const chainId = chains.getChainId(endpoint);
+    if (chainId !== undefined) {
+      const addresses = waiting.get(endpoint);
+      waiting.delete(endpoint);
+      if (automatic) {
+        addresses?.forEach((address) =>
+          fetchAutomatically(chainId, address, endpoint),
         );
-      },
-    );
-    chainLookups.set(endpoint, lookup);
-    chainErrors.delete(endpoint);
+      }
+    }
     notify();
-    return lookup;
-  };
+  });
 
   const addWaiting = (endpoint: string, address: `0x${string}`) => {
     const addresses = waiting.get(endpoint) ?? new Set();
@@ -208,25 +170,15 @@ export function createAbiFetcher(deps: AbiFetcherDeps) {
   // of every called address without a Contract, Inner Call targets included
   const observe = (requests: RpcRequest[], automaticFetch: boolean) => {
     automatic = automaticFetch;
-    for (const request of requests) {
-      if (seenForChain.has(request)) {
-        continue;
-      }
-      seenForChain.add(request);
-      const chainId = getCapturedChainId(request);
-      if (chainId !== undefined) {
-        setChainId(request.url, chainId, true);
-      }
-    }
     if (!automatic) {
       return;
     }
 
     for (const request of requests) {
-      if (seenForFetch.has(request)) {
+      if (seen.has(request)) {
         continue;
       }
-      seenForFetch.add(request);
+      seen.add(request);
       const to = getContractCallParams(request)?.to;
       if (!to) {
         continue;
@@ -235,7 +187,7 @@ export function createAbiFetcher(deps: AbiFetcherDeps) {
       const addresses = new Set(
         [to, ...(getInnerCallTargets(request) ?? [])].map(normalizeAddress),
       );
-      const chainId = chainIds.get(request.url);
+      const chainId = chains.getChainId(request.url);
       if (chainId !== undefined) {
         addresses.forEach((address) =>
           fetchAutomatically(chainId, address, request.url),
@@ -243,9 +195,6 @@ export function createAbiFetcher(deps: AbiFetcherDeps) {
         continue;
       }
       addresses.forEach((address) => addWaiting(request.url, address));
-      if (!chainLookups.has(request.url)) {
-        void lookUpChainId(request.url, chainLookupDelay);
-      }
     }
   };
 
@@ -253,12 +202,10 @@ export function createAbiFetcher(deps: AbiFetcherDeps) {
   // Endpoint for its chain id again if that failed
   const fetchManually = async (endpoint: string, to: `0x${string}`) => {
     const address = normalizeAddress(to);
-    let chainId = chainIds.get(endpoint);
+    let chainId = chains.getChainId(endpoint);
     if (chainId === undefined) {
       addWaiting(endpoint, address);
-      chainId = await (chainErrors.has(endpoint) || !chainLookups.has(endpoint)
-        ? lookUpChainId(endpoint, 0)
-        : chainLookups.get(endpoint));
+      chainId = await chains.lookUp(endpoint);
       if (chainId === undefined) {
         return;
       }
@@ -270,21 +217,18 @@ export function createAbiFetcher(deps: AbiFetcherDeps) {
 
   const getState = (endpoint: string, to: `0x${string}`): AbiFetchState => {
     const address = normalizeAddress(to);
-    const chainId = chainIds.get(endpoint);
+    const chainId = chains.getChainId(endpoint);
     if (chainId !== undefined) {
       return attempts.get(attemptKey(chainId, address)) ?? IDLE;
     }
     if (!waiting.get(endpoint)?.has(address)) {
       return IDLE;
     }
-    const chainError = chainErrors.get(endpoint);
-    if (chainError !== undefined) {
-      return {
-        kind: "failed",
-        reason: `no chain id from the Endpoint: ${chainError}`,
-      };
+    const failure = chains.getFailure(endpoint);
+    if (failure !== undefined) {
+      return { kind: "failed", reason: failure };
     }
-    return chainLookups.has(endpoint) ? { kind: "fetching" } : IDLE;
+    return chains.isLookingUp(endpoint) ? { kind: "fetching" } : IDLE;
   };
 
   return {

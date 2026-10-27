@@ -4,6 +4,7 @@ import { RpcRequest } from "../types/main.ts";
 import { Contract } from "../dal/contract.ts";
 import { ContractAbi } from "./abiSources.ts";
 import { createAbiFetcher } from "./abiFetcher.ts";
+import { createEndpointChains } from "../chains/endpointChains.ts";
 
 const ENDPOINT = "https://rpc.example/mainnet";
 const OTHER_ENDPOINT = "https://rpc.example/polygon";
@@ -112,9 +113,21 @@ const setup = (
         })),
     ),
     requestChainId: vi.fn(options.requestChainId ?? (async () => 137)),
-    chainLookupDelay: options.chainLookupDelay ?? 0,
   };
-  return { fetcher: createAbiFetcher(deps), deps, contracts };
+  const chains = createEndpointChains({
+    requestChainId: deps.requestChainId,
+    lookupDelay: options.chainLookupDelay ?? 0,
+  });
+  const abiFetcher = createAbiFetcher({ ...deps, chains });
+  // The Panel observes the Chains first, as the table shows them too
+  const fetcher = {
+    ...abiFetcher,
+    observe: (requests: RpcRequest[], automaticFetch: boolean) => {
+      chains.observe(requests);
+      abiFetcher.observe(requests, automaticFetch);
+    },
+  };
+  return { fetcher, deps, contracts };
 };
 
 describe("Chain of an Endpoint", () => {
@@ -383,7 +396,7 @@ describe("Fetching a Contract's ABI", () => {
 });
 
 describe("Automatic fetching turned off", () => {
-  it("fetches nothing and asks no Endpoint for its chain id", async () => {
+  it("fetches nothing", async () => {
     const { fetcher, deps } = setup();
 
     fetcher.observe(
@@ -397,8 +410,8 @@ describe("Automatic fetching turned off", () => {
     await flush();
 
     expect(deps.fetchAbi).not.toHaveBeenCalled();
-    expect(deps.requestChainId).not.toHaveBeenCalled();
     expect(fetcher.getState(ENDPOINT, WETH)).toEqual({ kind: "idle" });
+    expect(fetcher.getState(OTHER_ENDPOINT, DAI)).toEqual({ kind: "idle" });
   });
 
   it("still fetches on demand, asking the Endpoint for its chain id", async () => {

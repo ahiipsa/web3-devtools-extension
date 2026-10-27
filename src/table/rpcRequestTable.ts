@@ -21,6 +21,13 @@ const textColumn = {
 
 export const rpcRequestColumns = [
   column.accessor("method", { ...textColumn, header: "Method", size: 160 }),
+  // Chain names and bare chain ids sort together as text
+  column.accessor("chainLabel", {
+    id: "chain",
+    ...textColumn,
+    header: "Chain",
+    size: 90,
+  }),
   column.accessor("contractLabel", {
     id: "contract",
     ...textColumn,
@@ -62,6 +69,7 @@ export const rpcRequestTableOptions = {
 // side of the split, in the same single-line rows; a row's tooltip tells what
 // is hidden
 const HIDDEN_WITH_DETAILS: VisibilityState = {
+  chain: false,
   contract: false,
   function: false,
   status: false,
@@ -74,10 +82,11 @@ const ALL_VISIBLE: VisibilityState = {};
 export const getColumnVisibility = (detailsOpen: boolean): VisibilityState =>
   detailsOpen ? HIDDEN_WITH_DETAILS : ALL_VISIBLE;
 
-// Leaves out the Contract and Function a row has none of
+// Leaves out the Chain, Contract and Function a row has none of
 export const formatHiddenWithDetails = (
   row: Pick<
     RpcRequestRow,
+    | "chainLabel"
     | "contractLabel"
     | "functionName"
     | "functionSelector"
@@ -88,6 +97,7 @@ export const formatHiddenWithDetails = (
 ) => {
   const functionLabel = getFunctionLabel(row);
   return [
+    row.chainLabel && `Chain: ${row.chainLabel}`,
     row.contractLabel && `Contract: ${row.contractLabel}`,
     functionLabel && `Function: ${functionLabel.text}`,
     `Status: ${row.status}`,

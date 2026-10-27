@@ -43,6 +43,8 @@ const matchesSearch = (row: RpcRequestRow, search: string) => {
     includesNeedle(
       [
         row.method,
+        row.chainName,
+        row.chainId?.toString(),
         row.request.url,
         row.contractAddress,
         row.contractName,

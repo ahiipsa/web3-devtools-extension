@@ -14,6 +14,8 @@ import {
   getInnerCalls,
   InnerCall,
 } from "../decoding/multicall.ts";
+import { RpcRequestChain } from "../chains/endpointChains.ts";
+import { getChainName } from "../chains/chainNames.ts";
 
 // What the table knows of one Inner Call of a Multicall: what a search
 // matches, and whether it failed for the Method column's count
@@ -31,6 +33,14 @@ export interface InnerCallRow {
 export interface RpcRequestRow {
   request: RpcRequest;
   method: string;
+  // The Chain its Endpoint served when it was sent: the Chain's name, else its
+  // chain id; "—" when it could not be learnt; none while it is looked up
+  chainLabel?: string;
+  // The Chain cell's tooltip: `Chain <id>`, or why it could not be learnt
+  chainTitle?: string;
+  // For search
+  chainId?: number;
+  chainName?: string;
   // The Contract's name, else its short address; none when no Contract is called
   contractLabel?: string;
   // For search: the full address, and the Contract's name if any
@@ -92,9 +102,35 @@ const buildInnerCallRow = ({
   failed: success === false,
 });
 
+type ChainFields = Pick<
+  RpcRequestRow,
+  "chainLabel" | "chainTitle" | "chainId" | "chainName"
+>;
+
+const getChainFields = (chain: RpcRequestChain): ChainFields => {
+  switch (chain.kind) {
+    case "known": {
+      const chainName = getChainName(chain.chainId);
+      return {
+        chainLabel: chainName ?? String(chain.chainId),
+        chainTitle: `Chain ${chain.chainId}`,
+        chainId: chain.chainId,
+        chainName,
+      };
+    }
+    case "failed":
+      return { chainLabel: "—", chainTitle: chain.reason };
+    case "looking-up":
+      return {};
+  }
+};
+
+const LOOKING_UP: RpcRequestChain = { kind: "looking-up" };
+
 export function buildRpcRequestRow(
   request: RpcRequest,
   findContract: FindContract,
+  chain: RpcRequestChain = LOOKING_UP,
 ): RpcRequestRow {
   const callParams = getContractCallParams(request);
   const contract =
@@ -105,6 +141,7 @@ export function buildRpcRequestRow(
   return {
     request,
     method: request.requestBody.method,
+    ...getChainFields(chain),
     contractLabel:
       callParams && (contract?.name || trimContractAddress(callParams.to)),
     contractAddress: callParams?.to,

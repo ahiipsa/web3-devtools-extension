@@ -232,3 +232,31 @@ it("keeps an RPC Request nothing answered when Errors is on", () => {
     matchesRpcRequestFilter(unanswered, { ...noFilter, errorsOnly: true }),
   ).toBe(true);
 });
+
+describe("matchesRpcRequestFilter by Chain", () => {
+  const onBase = buildRpcRequestRow(
+    rpcRequest("eth_blockNumber"),
+    () => undefined,
+    {
+      kind: "known",
+      chainId: 8453,
+    },
+  );
+
+  it("matches the Chain's name and its chain id", () => {
+    expect(matchesRpcRequestFilter(onBase, search("base"))).toBe(true);
+    expect(matchesRpcRequestFilter(onBase, search("8453"))).toBe(true);
+    expect(matchesRpcRequestFilter(onBase, search("polygon"))).toBe(false);
+    expect(matchesRpcRequestFilter(blockNumberRow, search("base"))).toBe(false);
+  });
+
+  it("matches the chain id of a Chain without a name", () => {
+    const unnamed = buildRpcRequestRow(
+      rpcRequest("eth_blockNumber"),
+      () => undefined,
+      { kind: "known", chainId: 987654 },
+    );
+
+    expect(matchesRpcRequestFilter(unnamed, search("987654"))).toBe(true);
+  });
+});

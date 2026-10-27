@@ -11,15 +11,25 @@ import {
 } from "../abiSources/etherscan.ts";
 import { fetchContractAbi } from "../abiSources/abiSources.ts";
 import { readEip1967Implementation } from "../abiSources/eip1967.ts";
-import { requestChainId } from "../abiSources/chainId.ts";
+import { requestChainId } from "../chains/chainId.ts";
+import {
+  createEndpointChains,
+  EndpointChains,
+} from "../chains/endpointChains.ts";
 import { getContract, saveFetchedContract } from "../dal/contract.ts";
 import { useSettings } from "../hooks/useSettings.ts";
 import { DEFAULT_SETTINGS, getSettings, Settings } from "../dal/settings.ts";
 
 const etherscanQueue = createSerialQueue(ETHERSCAN_REQUEST_INTERVAL);
 
+// One per Panel session, like the ABI fetcher that shares it
+const endpointChains = createEndpointChains({
+  requestChainId: (endpoint) => requestChainId(endpoint),
+});
+
 // One per Panel session, so attempts survive Clear and navigation
 const abiFetcher = createAbiFetcher({
+  chains: endpointChains,
   getContract,
   saveFetchedContract,
   fetchAbi: (chainId, address, endpoint) =>
@@ -39,7 +49,6 @@ const abiFetcher = createAbiFetcher({
       chainId,
       address,
     ),
-  requestChainId: (endpoint) => requestChainId(endpoint),
 });
 
 export interface ContractTabTarget {
@@ -63,6 +72,7 @@ interface AppContext {
   settings: Settings;
   updateSettings: (changes: Partial<Settings>) => void;
   abiFetcher: AbiFetcher;
+  endpointChains: EndpointChains;
 }
 
 export const AppContext = React.createContext<AppContext>({
@@ -81,6 +91,7 @@ export const AppContext = React.createContext<AppContext>({
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   updateSettings: (_changes: Partial<Settings>) => {},
   abiFetcher,
+  endpointChains,
 });
 
 export const AppContextProvider = ({
@@ -112,7 +123,9 @@ export const AppContextProvider = ({
   const { rpcRequestList, clearRpcRequestList } = useRpcRequestList();
   const { settings, loaded, updateSettings } = useSettings();
 
+  // Chains first: the ABI fetcher reads the Chains they give
   useEffect(() => {
+    endpointChains.observe(rpcRequestList);
     abiFetcher.observe(
       rpcRequestList,
       loaded && settings.fetchAbisAutomatically,
@@ -141,6 +154,7 @@ export const AppContextProvider = ({
         settings,
         updateSettings,
         abiFetcher,
+        endpointChains,
       }}
     >
       {children}

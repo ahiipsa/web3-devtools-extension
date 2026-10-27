@@ -72,6 +72,46 @@ describe("buildRpcRequestRow", () => {
     expect(row.time).toBe(42.4);
   });
 
+  it("names a built-in Chain, with its chain id in the tooltip", () => {
+    const row = buildRpcRequestRow(rpcRequest(), noContracts, {
+      kind: "known",
+      chainId: 8453,
+    });
+
+    expect(row.chainLabel).toBe("Base");
+    expect(row.chainTitle).toBe("Chain 8453");
+  });
+
+  it("gives any other Chain as its chain id", () => {
+    const row = buildRpcRequestRow(rpcRequest(), noContracts, {
+      kind: "known",
+      chainId: 123456,
+    });
+
+    expect(row.chainLabel).toBe("123456");
+    expect(row.chainTitle).toBe("Chain 123456");
+    expect(row.chainName).toBeUndefined();
+  });
+
+  it("leaves the Chain empty while it is looked up", () => {
+    const row = buildRpcRequestRow(rpcRequest(), noContracts, {
+      kind: "looking-up",
+    });
+
+    expect(row.chainLabel).toBeUndefined();
+    expect(row.chainTitle).toBeUndefined();
+  });
+
+  it("shows — for a Chain that could not be learnt, with why", () => {
+    const row = buildRpcRequestRow(rpcRequest(), noContracts, {
+      kind: "failed",
+      reason: "no chain id from the Endpoint: HTTP 401",
+    });
+
+    expect(row.chainLabel).toBe("—");
+    expect(row.chainTitle).toBe("no chain id from the Endpoint: HTTP 401");
+  });
+
   it("names the Contract when it is labelled", () => {
     const row = buildRpcRequestRow(rpcRequest(), () => token);
 
