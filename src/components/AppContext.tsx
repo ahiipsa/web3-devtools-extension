@@ -123,6 +123,7 @@ export const AppContextProvider = ({
   useEffect(() => {
     if (rpcRequestList.length === 0) {
       setRequestId(null);
+      setContractTabTarget(null);
     }
   }, [rpcRequestList.length, setRequestId]);
 

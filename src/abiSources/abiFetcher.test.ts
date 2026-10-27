@@ -569,6 +569,55 @@ describe("ABI Source fetches at once", () => {
     });
   });
 
+  it("start a Fetch ABI press before the queued automatic fetches", async () => {
+    const pending: (() => void)[] = [];
+    const { fetcher, deps } = setup({
+      fetchAbi: () =>
+        new Promise((resolve) =>
+          pending.push(() =>
+            resolve({ kind: "not-found", sources: ["sourcify"] }),
+          ),
+        ),
+    });
+    fetcher.observe(
+      [chainIdOn(ENDPOINT, "0x1"), multicallOn(ENDPOINT, TARGETS)],
+      true,
+    );
+    await flush();
+
+    void fetcher.fetchManually(ENDPOINT, WETH);
+    await flush();
+    pending.shift()?.();
+    await flush();
+
+    expect(deps.fetchAbi.mock.calls.at(-1)).toEqual([1, WETH, ENDPOINT]);
+  });
+
+  it("skip a queued address whose Contract was saved while it waited", async () => {
+    const pending: (() => void)[] = [];
+    const { fetcher, deps, contracts } = setup({
+      fetchAbi: () =>
+        new Promise((resolve) =>
+          pending.push(() =>
+            resolve({ kind: "not-found", sources: ["sourcify"] }),
+          ),
+        ),
+    });
+    fetcher.observe(
+      [chainIdOn(ENDPOINT, "0x1"), multicallOn(ENDPOINT, TARGETS)],
+      true,
+    );
+    await flush();
+
+    contracts[TARGETS[3]] = { address: TARGETS[3], name: "Mine", abi: ABI };
+    contracts[TARGETS[4]] = { address: TARGETS[4], name: "Mine", abi: ABI };
+    pending.shift()?.();
+    await flush();
+
+    expect(deps.fetchAbi.mock.calls.at(-1)).toEqual([1, TARGETS[5], ENDPOINT]);
+    expect(fetcher.getState(ENDPOINT, TARGETS[4])).toEqual({ kind: "idle" });
+  });
+
   it("keep queueing after a fetch fails", async () => {
     let calls = 0;
     const { fetcher, deps } = setup({

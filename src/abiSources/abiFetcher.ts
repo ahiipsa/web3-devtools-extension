@@ -36,16 +36,19 @@ export type AbiFetcher = ReturnType<typeof createAbiFetcher>;
 // One Multicall can name 10–20 targets; Etherscan keeps its own serialisation
 const MAX_FETCHES_AT_ONCE = 4;
 
-// Runs at most `limit` tasks at once; the rest start in order as others settle
+// Runs at most `limit` tasks at once; the rest start in order as others
+// settle, a task queued `first` ahead of the others
 const createConcurrencyLimit = (limit: number) => {
   let running = 0;
   const queued: (() => void)[] = [];
-  return async <T>(task: () => Promise<T>): Promise<T> => {
+  return async <T>(task: () => Promise<T>, first = false): Promise<T> => {
     if (running < limit) {
       running++;
     } else {
       // A settling task hands its slot over, so no new task can take it first
-      await new Promise<void>((start) => queued.push(start));
+      await new Promise<void>((start) =>
+        first ? queued.unshift(start) : queued.push(start),
+      );
     }
     try {
       return await task();
@@ -99,22 +102,28 @@ export function createAbiFetcher(deps: AbiFetcherDeps) {
     notify();
   };
 
+  // `manual`: the user is waiting, so it goes ahead of queued fetches
   const fetchAbi = async (
     chainId: number,
     address: `0x${string}`,
     endpoint: string,
+    manual = false,
   ) => {
     const key = attemptKey(chainId, address);
     setAttempt(key, { kind: "fetching" });
     try {
-      if (await deps.getContract(address)) {
+      // Queued fetches stay "fetching"; a Contract saved meanwhile ends one
+      const result = await limitFetches(
+        async () =>
+          (await deps.getContract(address))
+            ? undefined
+            : deps.fetchAbi(chainId, address, endpoint),
+        manual,
+      );
+      if (!result) {
         setAttempt(key, IDLE);
         return;
       }
-      // Queued fetches stay "fetching"
-      const result = await limitFetches(() =>
-        deps.fetchAbi(chainId, address, endpoint),
-      );
       if (result.kind === "not-found") {
         setAttempt(key, result);
         return;
@@ -255,7 +264,7 @@ export function createAbiFetcher(deps: AbiFetcherDeps) {
       }
     }
     if (attempts.get(attemptKey(chainId, address))?.kind !== "fetching") {
-      await fetchAbi(chainId, address, endpoint);
+      await fetchAbi(chainId, address, endpoint, true);
     }
   };
 
