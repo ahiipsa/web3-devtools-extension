@@ -15,7 +15,7 @@ From the moment its "EVM RPC" Panel is first opened in DevTools until DevTools i
 
 ## What the extension sends
 
-By default, when the inspected page calls a contract (`eth_call`, `eth_estimateGas` or `eth_sendTransaction`) at an address that has no saved Contract, the extension sends:
+By default, when the inspected page calls a contract (`eth_call`, `eth_estimateGas` or `eth_sendTransaction`) at an address that has no saved Contract, the extension sends the following. When that call is a Multicall (a call to a Multicall3 or Multicall2 aggregator bundling several contract calls), the same goes for the target address of each bundled call that has no saved Contract. At most 4 ABI lookups run at once; the rest wait.
 
 - **To Sourcify** (`https://sourcify.dev`, a public registry of verified contracts): the contract address and the chain id, to fetch the contract's verified ABI and, for a proxy, its implementation's address. Once per address and chain while DevTools stays open, and again when you press "Fetch ABI".
 - **To Etherscan** (`https://api.etherscan.io`), only if you have entered an Etherscan API key and Sourcify has no verified ABI for the contract: the contract address, the chain id and your API key, to fetch the contract's verified ABI. As often as Sourcify, at most 4 requests a second.
@@ -24,7 +24,7 @@ By default, when the inspected page calls a contract (`eth_call`, `eth_estimateG
 
 Nothing else is sent: no calldata, no responses, no page URLs and no information about you. The contract addresses and chain ids are already public on chain. The privacy policies of Sourcify and Etherscan apply to the requests they receive.
 
-**To turn this off**, click the gear button at the right end of the Panel's filter toolbar and uncheck "Fetch ABIs automatically". Nothing is then sent unless you press "Fetch ABI" on a Contract tab. To stop only the requests to Etherscan, clear the "Etherscan API key" field there.
+**To turn this off**, click the gear button at the right end of the Panel's filter toolbar and uncheck "Fetch ABIs automatically". Nothing is then sent unless you press "Fetch ABI" on a Contract tab (also reached through "Add ABI" on a Multicall's bundled call). To stop only the requests to Etherscan, clear the "Etherscan API key" field there.
 
 The extension contains no analytics or tracking and shares no data with the developer.
 

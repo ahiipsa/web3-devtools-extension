@@ -132,6 +132,15 @@
   user-select: text;
 }
 
+/* Fetch state and Add ABI, for a target without a Contract */
+.rpc-details-inner-call-abi {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 2px;
+}
+
 .rpc-details-inner-call + .rpc-details-inner-call {
   border-top: 1px solid var(--rpc-details-separator);
 }

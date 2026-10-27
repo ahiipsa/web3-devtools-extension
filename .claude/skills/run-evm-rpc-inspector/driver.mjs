@@ -63,8 +63,13 @@ export const PROXY = "0x4444444444444444444444444444444444444444";
 export const IMPLEMENTATION = "0x43506849d7c04f9138d1a2050bbf3a0c054402dd";
 export const SLOT_PROXY = "0x5555555555555555555555555555555555555555";
 export const SLOT_IMPLEMENTATION = "0x6666666666666666666666666666666666666666";
+// Inner Call targets of MULTICALL_FETCH_CALL only: INNER_TOKEN is verified
+// on the fake Sourcify, INNER_UNVERIFIED is not
+export const INNER_TOKEN = "0x7777777777777777777777777777777777777777";
+export const INNER_UNVERIFIED = "0x8888888888888888888888888888888888888888";
 export const SOURCIFY = {
   [WETH]: { abi: BALANCE_OF_ABI, compilation: { name: "WETH9" } },
+  [INNER_TOKEN]: { abi: BALANCE_OF_ABI, compilation: { name: "InnerToken" } },
   [PROXY]: {
     abi: UPGRADE_TO_ABI,
     compilation: { name: "FiatTokenProxy" },
@@ -112,9 +117,11 @@ const ANSWERS = {
 // balanceOf (WETH9 once fetched) succeeds, an unknown call to UNVERIFIED fails
 export const MULTICALL = "0xca11bde05977b3631167028862be2a173976ca11";
 export const UNVERIFIED = "0x2222222222222222222222222222222222222222";
-export const MULTICALL_CALL = {
+// An aggregate3 eth_call to MULTICALL: a balanceOf to `token`, then an
+// unknown call to `unverified`
+const aggregate3Call = (id, token, unverified) => ({
   jsonrpc: "2.0",
-  id: 14,
+  id,
   method: "eth_call",
   params: [
     {
@@ -127,12 +134,12 @@ export const MULTICALL_CALL = {
         args: [
           [
             {
-              target: WETH,
+              target: token,
               allowFailure: true,
               callData: "0x70a08231" + pad(HOLDER),
             },
             {
-              target: UNVERIFIED,
+              target: unverified,
               allowFailure: true,
               callData: "0x12345678",
             },
@@ -142,7 +149,15 @@ export const MULTICALL_CALL = {
     },
     "latest",
   ],
-};
+});
+export const MULTICALL_CALL = aggregate3Call(14, WETH, UNVERIFIED);
+// The same, to targets the Panel has not seen: their ABIs are fetched
+// because of the Multicall alone
+export const MULTICALL_FETCH_CALL = aggregate3Call(
+  15,
+  INNER_TOKEN,
+  INNER_UNVERIFIED,
+);
 // What the mock node answers an eth_call to MULTICALL
 const MULTICALL_RESULT = encodeAbiParameters(
   parseAbiParameters("(bool success, bytes returnData)[]"),
@@ -886,7 +901,9 @@ async function smoke() {
         /^#1 WETH9 0xC02a\.\.\.6Cc2\s+balanceOf\(account: 0x28C6c06298d514Db089934071355E5743bf21d60\)\s+→ 1000000$/.test(
           innerCalls[0],
         ) &&
-        /^#2 0x2222\.\.\.2222 ✗\s+0x12345678$/.test(innerCalls[1]),
+        /^#2 0x2222\.\.\.2222 ✗\s+0x12345678\s+No verified ABI[^\n]*\s+Add ABI$/.test(
+          innerCalls[1],
+        ),
       JSON.stringify(innerCalls),
     );
     check(
@@ -896,6 +913,54 @@ async function smoke() {
       ),
     );
     await shot("09-multicall");
+
+    // Inner Call targets the Panel has not seen are fetched for the Multicall
+    const beforeInner = app.sourcifyUrls.length;
+    await app.rpc(MULTICALL_FETCH_CALL);
+    await app.sleep(800);
+    const innerUrls = app.sourcifyUrls
+      .slice(beforeInner)
+      .map((url) => url.toLowerCase());
+    check(
+      "a Multicall's Inner Call targets are requested from Sourcify",
+      innerUrls.some((url) => url.includes(`/1/${INNER_TOKEN}`)) &&
+        innerUrls.some((url) => url.includes(`/1/${INNER_UNVERIFIED}`)),
+      innerUrls.join(", "),
+    );
+    await click(".rpc-table-body [role=row]:nth-child(13)");
+    await click(".rpc-details-tab", "Params");
+    const fetchedInner = await ev(
+      `[...document.querySelectorAll(".rpc-details-inner-call")].map((e) => e.innerText)`,
+    );
+    check(
+      "a fetched Inner Call target decodes in Params; an unverified one shows its state and Add ABI",
+      fetchedInner?.length === 2 &&
+        /^#1 InnerToken 0x7777\.\.\.7777\s+balanceOf\(account: 0x28C6c06298d514Db089934071355E5743bf21d60\)\s+→ 1000000$/.test(
+          fetchedInner[0],
+        ) &&
+        /^#2 0x8888\.\.\.8888 ✗\s+0x12345678\s+No verified ABI on Sourcify[^\n]*\s+Add ABI$/.test(
+          fetchedInner[1],
+        ),
+      JSON.stringify(fetchedInner),
+    );
+    await click(".rpc-details-inner-call button", "Add ABI");
+    await app.sleep(300);
+    const innerContractTab = await app.text();
+    check(
+      "Add ABI opens the Contract tab for the Inner Call target",
+      (await ev(
+        `document.querySelector(".rpc-details-tab-selected")?.innerText`,
+      )) === "Contract" &&
+        innerContractTab.includes(`Inner Call target ${INNER_UNVERIFIED}`) &&
+        /No verified ABI on Sourcify/.test(innerContractTab) &&
+        /Fetch ABI/.test(innerContractTab),
+    );
+    await shot("10-inner-call-contract");
+    await click(".rpc-table-body [role=row]:nth-child(12)");
+    check(
+      "selecting another RPC Request resets the Contract tab to its `to`",
+      !/Inner Call target/.test(await app.text()),
+    );
 
     // Settings: off means no Sourcify request and no eth_chainId of its own
     await click(".rpc-table-settings-button");
@@ -922,7 +987,7 @@ async function smoke() {
         ),
       app.sourcifyUrls.slice(before).join(", "),
     );
-    await shot("10-end");
+    await shot("11-end");
   } catch (e) {
     check("scenario ran to the end", false, e.message.split("\n")[0]);
     await shot("99-crash").catch(() => {});

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { useRpcRequestList } from "../hooks/useRpcRequestList.ts";
 import { RpcRequest } from "../types/main.ts";
 import { DetailsTab } from "../details/detailsTabs.ts";
@@ -42,12 +42,22 @@ const abiFetcher = createAbiFetcher({
   requestChainId: (endpoint) => requestChainId(endpoint),
 });
 
+export interface ContractTabTarget {
+  requestId: string;
+  address: `0x${string}`;
+}
+
 interface AppContext {
   requestId: string | null;
   setRequestId: (requestId: string | null) => void;
   // Kept while another RPC Request is selected
   detailsTab: DetailsTab;
   setDetailsTab: (detailsTab: DetailsTab) => void;
+  // The address the Contract tab shows, chosen on one RPC Request; any other
+  // RPC Request's Contract tab shows its `to`
+  contractTabTarget: ContractTabTarget | null;
+  // Add ABI on an Inner Call: the Contract tab for its target
+  showContractTab: (target: ContractTabTarget) => void;
   rpcRequestList: RpcRequest[];
   clearRpcRequestList: () => void;
   settings: Settings;
@@ -62,6 +72,9 @@ export const AppContext = React.createContext<AppContext>({
   detailsTab: "Overview",
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   setDetailsTab: (_detailsTab: DetailsTab) => {},
+  contractTabTarget: null,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  showContractTab: (_target: ContractTabTarget) => {},
   rpcRequestList: [],
   clearRpcRequestList: () => {},
   settings: DEFAULT_SETTINGS,
@@ -75,8 +88,26 @@ export const AppContextProvider = ({
 }: {
   children: React.ReactNode;
 }) => {
-  const [requestId, setRequestId] = useState<string | null>(null);
+  const [requestId, setOpenRequestId] = useState<string | null>(null);
   const [detailsTab, setDetailsTab] = useState<DetailsTab>("Overview");
+  const [contractTabTarget, setContractTabTarget] =
+    useState<ContractTabTarget | null>(null);
+
+  // Selecting another RPC Request resets the Contract tab to its `to`;
+  // closing and reopening the same one keeps the chosen address
+  const setRequestId = useCallback((id: string | null) => {
+    setOpenRequestId(id);
+    if (id !== null) {
+      setContractTabTarget((target) =>
+        target?.requestId === id ? target : null,
+      );
+    }
+  }, []);
+
+  const showContractTab = useCallback((target: ContractTabTarget) => {
+    setContractTabTarget(target);
+    setDetailsTab("Contract");
+  }, []);
 
   const { rpcRequestList, clearRpcRequestList } = useRpcRequestList();
   const { settings, loaded, updateSettings } = useSettings();
@@ -93,7 +124,7 @@ export const AppContextProvider = ({
     if (rpcRequestList.length === 0) {
       setRequestId(null);
     }
-  }, [rpcRequestList.length]);
+  }, [rpcRequestList.length, setRequestId]);
 
   return (
     <AppContext.Provider
@@ -102,6 +133,8 @@ export const AppContextProvider = ({
         setRequestId,
         detailsTab,
         setDetailsTab,
+        contractTabTarget,
+        showContractTab,
         rpcRequestList,
         clearRpcRequestList,
         settings,

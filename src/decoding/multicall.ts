@@ -116,21 +116,39 @@ const getOutcomes = (
   }
 };
 
+// The aggregator function a Multicall calls; undefined for any other RPC
+// Request
+const getAggregatorInput = (
+  request: RpcRequest,
+): AggregatorInput | undefined => {
+  const data = getContractCallParams(request)?.data;
+  if (!data || !findBuiltInContract(data)) {
+    return undefined;
+  }
+  try {
+    return decodeFunctionData({ abi: MULTICALL3_ABI, data });
+  } catch {
+    return undefined;
+  }
+};
+
+// The target addresses of a Multicall's Inner Calls, in order and repeated
+// as bundled; undefined for any other RPC Request
+export const getInnerCallTargets = (
+  request: RpcRequest,
+): `0x${string}`[] | undefined => {
+  const input = getAggregatorInput(request);
+  return input && getAggregatorCalls(input).map(({ target }) => target);
+};
+
 // The Inner Calls of a Multicall, each decoded with its target's Contract
 // and paired with its result; undefined for any other RPC Request
 export function getInnerCalls(
   request: RpcRequest,
   findContract: FindContract,
 ): InnerCall[] | undefined {
-  const data = getContractCallParams(request)?.data;
-  if (!data || !findBuiltInContract(data)) {
-    return undefined;
-  }
-
-  let input: AggregatorInput;
-  try {
-    input = decodeFunctionData({ abi: MULTICALL3_ABI, data });
-  } catch {
+  const input = getAggregatorInput(request);
+  if (!input) {
     return undefined;
   }
 

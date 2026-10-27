@@ -8,33 +8,17 @@ import { useEffect, useState } from "react";
 import { useContractQuery } from "../hooks/useContractQuery.ts";
 import { Button, Form, FormProps, Input, message } from "antd";
 import { useAbiFetchState } from "../hooks/useAbiFetchState.ts";
-import { AbiFetchState } from "../abiSources/abiFetcher.ts";
-import { AbiSourceName } from "../abiSources/abiSources.ts";
+import {
+  ABI_SOURCE_NAMES,
+  formatAbiFetchState,
+} from "../abiSources/formatAbiFetchState.ts";
 
 interface ContractInfoProps {
   contractAddress: `0x${string}`;
-  // The Endpoint of the RPC Request, whose Chain the ABI is fetched for
+  // The Endpoint of the RPC Request, whose Chain the ABI is fetched for; the
+  // address is its `to` or one of its Inner Call targets
   endpoint: string;
 }
-
-const ABI_SOURCE_NAMES: Record<AbiSourceName, string> = {
-  sourcify: "Sourcify",
-  etherscan: "Etherscan",
-};
-
-const formatAbiFetchState = (state: AbiFetchState) => {
-  switch (state.kind) {
-    case "fetching":
-      return "Fetching ABI…";
-    case "not-found":
-      // The ABI Sources asked, not those that would be asked now
-      return `No verified ABI on ${state.sources.map((source) => ABI_SOURCE_NAMES[source]).join(" or ")}`;
-    case "failed":
-      return `Fetch failed: ${state.reason}`;
-    case "idle":
-      return undefined;
-  }
-};
 
 // Follows "From <ABI Source>"
 const formatContractProxy = (proxy: ContractProxy | undefined) => {

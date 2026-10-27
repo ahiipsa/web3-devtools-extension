@@ -8,7 +8,9 @@ import {
   useMemo,
   useRef,
 } from "react";
+import { Button } from "antd";
 import { ContractCall, RpcRequest, RpcRequestStatus } from "../types/main.ts";
+import { FindContract, normalizeAddress } from "../dal/contract.ts";
 import { AppContext } from "./AppContext.tsx";
 import { ContractForm } from "./ContractForm.tsx";
 import { useContractQuery } from "../hooks/useContractQuery.ts";
@@ -38,6 +40,9 @@ import {
   formatInnerCallResult,
   formatInnerCallTarget,
 } from "../decoding/formatInnerCall.ts";
+import { useAbiFetchState } from "../hooks/useAbiFetchState.ts";
+import { formatAbiFetchState } from "../abiSources/formatAbiFetchState.ts";
+import { trimContractAddress } from "../utils/text.ts";
 
 interface RequestDetailsProps {
   request: RpcRequest;
@@ -45,7 +50,8 @@ interface RequestDetailsProps {
 }
 
 export const RequestDetails = ({ request, onClose }: RequestDetailsProps) => {
-  const { detailsTab, setDetailsTab } = useContext(AppContext);
+  const { detailsTab, setDetailsTab, contractTabTarget, showContractTab } =
+    useContext(AppContext);
 
   const callParams = getContractCallParams(request);
   const callsContract = callParams !== undefined;
@@ -64,6 +70,14 @@ export const RequestDetails = ({ request, onClose }: RequestDetailsProps) => {
     () => getInnerCalls(request, findContract),
     [request, findContract],
   );
+
+  // By default the Contract tab is for `to`; Add ABI picks an Inner Call target
+  const contractTabAddress =
+    contractTabTarget?.requestId === request.id
+      ? contractTabTarget.address
+      : callParams?.to;
+  const showInnerCallContract = (address: `0x${string}`) =>
+    showContractTab({ requestId: request.id, address });
 
   const tabListRef = useRef<HTMLDivElement>(null);
   const shownTabRef = useRef<HTMLButtonElement>(null);
@@ -139,17 +153,36 @@ export const RequestDetails = ({ request, onClose }: RequestDetailsProps) => {
             hasContract={!!contract}
             decoding={decoding}
             innerCalls={innerCalls}
+            findContract={findContract}
+            onAddAbi={showInnerCallContract}
           />
         )}
         {shownTab === "Response" && (
           <Response request={request} decoding={decoding} />
         )}
-        {shownTab === "Contract" && callParams && (
-          <ContractForm
-            key={callParams.to.toLowerCase()}
-            contractAddress={callParams.to}
-            endpoint={request.url}
-          />
+        {shownTab === "Contract" && callParams && contractTabAddress && (
+          <>
+            {normalizeAddress(contractTabAddress) !==
+              normalizeAddress(callParams.to) && (
+              <div className="flex flex-row flex-wrap items-center gap-x-2 mb-2">
+                <span className="rpc-details-muted break-all">
+                  Inner Call target {contractTabAddress}
+                </span>
+                <Button
+                  size="small"
+                  type="link"
+                  onClick={() => showInnerCallContract(callParams.to)}
+                >
+                  Back to {trimContractAddress(callParams.to)}
+                </Button>
+              </div>
+            )}
+            <ContractForm
+              key={normalizeAddress(contractTabAddress)}
+              contractAddress={contractTabAddress}
+              endpoint={request.url}
+            />
+          </>
         )}
       </div>
     </div>
@@ -244,8 +277,41 @@ const Overview = (props: {
   return <Fields fields={fields} />;
 };
 
-const InnerCalls = ({ innerCalls }: { innerCalls: InnerCall[] }) =>
-  innerCalls.length === 0 ? (
+// For an Inner Call target without a Contract
+const InnerCallAbiFetch = (props: {
+  endpoint: string;
+  target: `0x${string}`;
+  onAddAbi: (address: `0x${string}`) => void;
+}) => {
+  const { endpoint, target, onAddAbi } = props;
+  const { state } = useAbiFetchState(endpoint, target);
+  const label = formatAbiFetchState(state);
+  return (
+    <div className="rpc-details-inner-call-abi">
+      {label && (
+        <span
+          className={
+            state.kind === "failed" ? "rpc-details-failed" : "rpc-details-muted"
+          }
+        >
+          {label}
+        </span>
+      )}
+      <Button size="small" onClick={() => onAddAbi(target)}>
+        Add ABI
+      </Button>
+    </div>
+  );
+};
+
+const InnerCalls = (props: {
+  innerCalls: InnerCall[];
+  endpoint: string;
+  findContract: FindContract;
+  onAddAbi: (address: `0x${string}`) => void;
+}) => {
+  const { innerCalls, endpoint, findContract, onAddAbi } = props;
+  return innerCalls.length === 0 ? (
     <div className="rpc-details-muted">No Inner Calls</div>
   ) : (
     <ol className="rpc-details-inner-calls">
@@ -275,11 +341,19 @@ const InnerCalls = ({ innerCalls }: { innerCalls: InnerCall[] }) =>
             {result !== undefined && (
               <div className="rpc-details-decoded-value">→ {result}</div>
             )}
+            {!findContract(innerCall.target) && (
+              <InnerCallAbiFetch
+                endpoint={endpoint}
+                target={innerCall.target}
+                onAddAbi={onAddAbi}
+              />
+            )}
           </li>
         );
       })}
     </ol>
   );
+};
 
 const Params = (props: {
   request: RpcRequest;
@@ -287,8 +361,18 @@ const Params = (props: {
   hasContract: boolean;
   decoding: Decoding | undefined;
   innerCalls: InnerCall[] | undefined;
+  findContract: FindContract;
+  onAddAbi: (address: `0x${string}`) => void;
 }) => {
-  const { request, callParams, hasContract, decoding, innerCalls } = props;
+  const {
+    request,
+    callParams,
+    hasContract,
+    decoding,
+    innerCalls,
+    findContract,
+    onAddAbi,
+  } = props;
 
   const decodedInput = callParams && (
     <>
@@ -323,7 +407,12 @@ const Params = (props: {
       {innerCalls ? (
         <>
           <Section title="Inner Calls">
-            <InnerCalls innerCalls={innerCalls} />
+            <InnerCalls
+              innerCalls={innerCalls}
+              endpoint={request.url}
+              findContract={findContract}
+              onAddAbi={onAddAbi}
+            />
           </Section>
           {/* A Multicall's raw decoded input is one long tuple: kept, folded */}
           <details className="rpc-details-section rpc-details-collapsible">

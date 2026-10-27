@@ -2,6 +2,7 @@ import { RpcRequest } from "../types/main.ts";
 import { Contract, normalizeAddress } from "../dal/contract.ts";
 import { getContractCallParams } from "../utils/requestUtils.ts";
 import { trimContractAddress } from "../utils/text.ts";
+import { getInnerCallTargets } from "../decoding/multicall.ts";
 import { getCapturedChainId } from "./chainId.ts";
 import { AbiSourceName, ContractAbi } from "./abiSources.ts";
 
@@ -32,6 +33,33 @@ export interface AbiFetcherDeps {
 
 export type AbiFetcher = ReturnType<typeof createAbiFetcher>;
 
+// One Multicall can name 10–20 targets; Etherscan keeps its own serialisation
+const MAX_FETCHES_AT_ONCE = 4;
+
+// Runs at most `limit` tasks at once; the rest start in order as others settle
+const createConcurrencyLimit = (limit: number) => {
+  let running = 0;
+  const queued: (() => void)[] = [];
+  return async <T>(task: () => Promise<T>): Promise<T> => {
+    if (running < limit) {
+      running++;
+    } else {
+      // A settling task hands its slot over, so no new task can take it first
+      await new Promise<void>((start) => queued.push(start));
+    }
+    try {
+      return await task();
+    } finally {
+      const next = queued.shift();
+      if (next) {
+        next();
+      } else {
+        running--;
+      }
+    }
+  };
+};
+
 const IDLE: AbiFetchState = { kind: "idle" };
 
 const errorMessage = (error: unknown) =>
@@ -52,6 +80,8 @@ export function createAbiFetcher(deps: AbiFetcherDeps) {
   const seenForChain = new WeakSet<RpcRequest>();
   const seenForFetch = new WeakSet<RpcRequest>();
   const chainLookupDelay = deps.chainLookupDelay ?? 1000;
+  // Shared by automatic and manual fetches, so across the whole Panel
+  const limitFetches = createConcurrencyLimit(MAX_FETCHES_AT_ONCE);
   let automatic = false;
 
   const listeners = new Set<() => void>();
@@ -81,7 +111,10 @@ export function createAbiFetcher(deps: AbiFetcherDeps) {
         setAttempt(key, IDLE);
         return;
       }
-      const result = await deps.fetchAbi(chainId, address, endpoint);
+      // Queued fetches stay "fetching"
+      const result = await limitFetches(() =>
+        deps.fetchAbi(chainId, address, endpoint),
+      );
       if (result.kind === "not-found") {
         setAttempt(key, result);
         return;
@@ -163,7 +196,7 @@ export function createAbiFetcher(deps: AbiFetcherDeps) {
   };
 
   // Takes in the captured RPC Requests; with `automaticFetch`, fetches the ABI
-  // of every called address without a Contract
+  // of every called address without a Contract, Inner Call targets included
   const observe = (requests: RpcRequest[], automaticFetch: boolean) => {
     automatic = automaticFetch;
     for (const request of requests) {
@@ -189,13 +222,18 @@ export function createAbiFetcher(deps: AbiFetcherDeps) {
       if (!to) {
         continue;
       }
-      const address = normalizeAddress(to);
+      // A Multicall's Inner Call targets are called contracts too (ADR 0002)
+      const addresses = new Set(
+        [to, ...(getInnerCallTargets(request) ?? [])].map(normalizeAddress),
+      );
       const chainId = chainIds.get(request.url);
       if (chainId !== undefined) {
-        fetchAutomatically(chainId, address, request.url);
+        addresses.forEach((address) =>
+          fetchAutomatically(chainId, address, request.url),
+        );
         continue;
       }
-      addWaiting(request.url, address);
+      addresses.forEach((address) => addWaiting(request.url, address));
       if (!chainLookups.has(request.url)) {
         void lookUpChainId(request.url, chainLookupDelay);
       }

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { Abi } from "viem";
+import { Abi, encodeFunctionData, getAddress, parseAbi } from "viem";
 import { RpcRequest } from "../types/main.ts";
 import { Contract } from "../dal/contract.ts";
 import { ContractAbi } from "./abiSources.ts";
@@ -43,6 +43,36 @@ const chainIdOn = (url: string, chainId: string) =>
 
 const callOn = (url: string, to: string) =>
   rpcRequest(url, "eth_call", [{ to, data: "0x18160ddd" }, "latest"], "0x");
+
+const MULTICALL = "0xca11bde05977b3631167028862be2a173976ca11";
+const AGGREGATE3_ABI = parseAbi([
+  "function aggregate3((address target, bool allowFailure, bytes callData)[] calls) payable returns ((bool success, bytes returnData)[] returnData)",
+]);
+
+// A Multicall3 aggregate3 bundling a totalSupply() call to each target
+const multicallOn = (url: string, targets: string[]) =>
+  rpcRequest(
+    url,
+    "eth_call",
+    [
+      {
+        to: MULTICALL,
+        data: encodeFunctionData({
+          abi: AGGREGATE3_ABI,
+          functionName: "aggregate3",
+          args: [
+            targets.map((target) => ({
+              target: target as `0x${string}`,
+              allowFailure: true,
+              callData: "0x18160ddd" as const,
+            })),
+          ],
+        }),
+      },
+      "latest",
+    ],
+    "0x",
+  );
 
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
 
@@ -413,5 +443,155 @@ describe("Fetching on demand", () => {
 
     expect(deps.requestChainId).toHaveBeenCalledTimes(2);
     expect(deps.fetchAbi).toHaveBeenCalledWith(1, WETH, ENDPOINT);
+  });
+});
+
+describe("Inner Call targets of a Multicall", () => {
+  it("are fetched on the Endpoint's Chain, like the Multicall's own address", async () => {
+    const { fetcher, deps } = setup();
+
+    fetcher.observe(
+      [chainIdOn(ENDPOINT, "0x1"), multicallOn(ENDPOINT, [WETH, DAI])],
+      true,
+    );
+    await flush();
+
+    expect(deps.fetchAbi.mock.calls).toEqual([
+      [1, MULTICALL, ENDPOINT],
+      [1, WETH, ENDPOINT],
+      [1, DAI, ENDPOINT],
+    ]);
+  });
+
+  it("are fetched once each, however often they are bundled", async () => {
+    const { fetcher, deps } = setup({
+      fetchAbi: async () => ({ kind: "not-found", sources: ["sourcify"] }),
+    });
+    const requests = [
+      chainIdOn(ENDPOINT, "0x1"),
+      multicallOn(ENDPOINT, [WETH, getAddress(WETH), DAI]),
+      multicallOn(ENDPOINT, [DAI]),
+      callOn(ENDPOINT, WETH),
+    ];
+
+    fetcher.observe(requests, true);
+    await flush();
+    fetcher.observe([...requests, multicallOn(ENDPOINT, [WETH])], true);
+    await flush();
+
+    expect(deps.fetchAbi.mock.calls).toEqual([
+      [1, MULTICALL, ENDPOINT],
+      [1, WETH, ENDPOINT],
+      [1, DAI, ENDPOINT],
+    ]);
+  });
+
+  it("wait with the Multicall's own address for the Endpoint's Chain", async () => {
+    const { fetcher, deps } = setup({
+      fetchAbi: () => new Promise(() => {}),
+    });
+
+    fetcher.observe([multicallOn(OTHER_ENDPOINT, [WETH])], true);
+
+    expect(fetcher.getState(OTHER_ENDPOINT, WETH)).toEqual({
+      kind: "fetching",
+    });
+    await flush();
+    expect(deps.requestChainId).toHaveBeenCalledTimes(1);
+    expect(deps.fetchAbi).toHaveBeenCalledWith(137, WETH, OTHER_ENDPOINT);
+  });
+
+  it("are not fetched while automatic fetching is off, but can be on demand", async () => {
+    const { fetcher, deps, contracts } = setup();
+
+    fetcher.observe(
+      [chainIdOn(ENDPOINT, "0x1"), multicallOn(ENDPOINT, [WETH, DAI])],
+      false,
+    );
+    await flush();
+
+    expect(deps.fetchAbi).not.toHaveBeenCalled();
+    expect(fetcher.getState(ENDPOINT, WETH)).toEqual({ kind: "idle" });
+
+    await fetcher.fetchManually(ENDPOINT, WETH);
+
+    expect(deps.fetchAbi.mock.calls).toEqual([[1, WETH, ENDPOINT]]);
+    expect(contracts[WETH]).toMatchObject({ source: "sourcify" });
+  });
+});
+
+describe("ABI Source fetches at once", () => {
+  const TARGETS = Array.from(
+    { length: 6 },
+    (_, index) => `0x${String(index + 1).repeat(40)}` as const,
+  );
+
+  it("are never more than 4; the rest queue and start as others finish", async () => {
+    const pending: (() => void)[] = [];
+    let inFlight = 0;
+    let maxInFlight = 0;
+    const { fetcher, deps } = setup({
+      fetchAbi: () => {
+        maxInFlight = Math.max(maxInFlight, ++inFlight);
+        return new Promise((resolve) =>
+          pending.push(() => {
+            inFlight--;
+            resolve({ kind: "not-found", sources: ["sourcify"] });
+          }),
+        );
+      },
+    });
+
+    fetcher.observe(
+      [chainIdOn(ENDPOINT, "0x1"), multicallOn(ENDPOINT, TARGETS)],
+      true,
+    );
+    await flush();
+
+    expect(deps.fetchAbi).toHaveBeenCalledTimes(4);
+    expect(fetcher.getState(ENDPOINT, TARGETS[5])).toEqual({
+      kind: "fetching",
+    });
+
+    pending.shift()?.();
+    await flush();
+    expect(deps.fetchAbi).toHaveBeenCalledTimes(5);
+
+    while (pending.length > 0) {
+      pending.shift()?.();
+      await flush();
+    }
+    expect(deps.fetchAbi).toHaveBeenCalledTimes(7);
+    expect(maxInFlight).toBe(4);
+    expect(fetcher.getState(ENDPOINT, TARGETS[5])).toEqual({
+      kind: "not-found",
+      sources: ["sourcify"],
+    });
+  });
+
+  it("keep queueing after a fetch fails", async () => {
+    let calls = 0;
+    const { fetcher, deps } = setup({
+      fetchAbi: async () => {
+        if (++calls <= 4) {
+          throw new Error("HTTP 500");
+        }
+        return { kind: "not-found", sources: ["sourcify"] };
+      },
+    });
+
+    fetcher.observe(
+      [chainIdOn(ENDPOINT, "0x1"), multicallOn(ENDPOINT, TARGETS)],
+      true,
+    );
+    await flush();
+
+    expect(deps.fetchAbi).toHaveBeenCalledTimes(7);
+    expect(fetcher.getState(ENDPOINT, TARGETS[0])).toMatchObject({
+      kind: "failed",
+    });
+    expect(fetcher.getState(ENDPOINT, TARGETS[5])).toMatchObject({
+      kind: "not-found",
+    });
   });
 });
