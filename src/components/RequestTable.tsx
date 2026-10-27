@@ -17,7 +17,6 @@ import {
   useState,
 } from "react";
 import { AppContext } from "./AppContext.tsx";
-import { RequestToolbar } from "./RequestToolbar.tsx";
 import { useRpcRequestRows } from "../hooks/useRpcRequestRows.ts";
 import { rpcRequestTableOptions } from "../table/rpcRequestTable.ts";
 import {
@@ -26,12 +25,11 @@ import {
 } from "../table/columnSizingStorage.ts";
 import { isScrolledToBottom } from "../table/isScrolledToBottom.ts";
 import { moveSelection, SelectionMove } from "../table/moveSelection.ts";
-import { matchesRpcRequestFilter } from "../table/rpcRequestFilter.ts";
-import { formatContractCall } from "../table/rpcRequestRow.ts";
 import {
-  loadRpcRequestFilter,
-  saveRpcRequestFilter,
-} from "../table/rpcRequestFilterStorage.ts";
+  matchesRpcRequestFilter,
+  RpcRequestFilter,
+} from "../table/rpcRequestFilter.ts";
+import { formatContractCall } from "../table/rpcRequestRow.ts";
 
 // Match --rpc-table-row-height and .rpc-table-collapsed in RequestTable.css
 const ROW_HEIGHT = 21;
@@ -55,16 +53,13 @@ const KEY_MOVES: Partial<Record<string, SelectionMove>> = {
   End: "last",
 };
 
-export const RequestTable = () => {
+interface RequestTableProps {
+  filter: RpcRequestFilter;
+}
+
+export const RequestTable = ({ filter }: RequestTableProps) => {
   const appContext = useContext(AppContext);
   const data = useRpcRequestRows(appContext.rpcRequestList);
-
-  const [filter, setFilter] = useState(() =>
-    loadRpcRequestFilter(localStorage),
-  );
-  useEffect(() => {
-    saveRpcRequestFilter(localStorage, filter);
-  }, [filter]);
 
   const filteredData = useMemo(
     () => data.filter((row) => matchesRpcRequestFilter(row, filter)),
@@ -187,12 +182,6 @@ export const RequestTable = () => {
 
   return (
     <div className={cx("rpc-table", { "rpc-table-collapsed": collapsed })}>
-      <RequestToolbar
-        filter={filter}
-        onFilterChange={setFilter}
-        onClear={appContext.clearRpcRequestList}
-      />
-
       <div
         ref={scrollRef}
         className="rpc-table-scroll"

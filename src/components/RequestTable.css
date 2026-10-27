@@ -1,5 +1,7 @@
-/* Modelled on the DevTools Network tab */
-.rpc-table {
+/* Modelled on the DevTools Network tab; the toolbar sits outside the table,
+   above the split with the details */
+.rpc-table,
+.rpc-table-toolbar {
   --rpc-table-row-height: 21px;
   --rpc-table-bg: #ffffff;
   --rpc-table-text: #1f1f1f;
@@ -11,11 +13,10 @@
   --rpc-table-failed: #d93025;
   --rpc-table-resizer: #1a73e8;
   --rpc-table-chip-pressed: #d3e3fd;
+}
 
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  min-width: 0;
+.rpc-table,
+.rpc-table-toolbar {
   background: var(--rpc-table-bg);
   color: var(--rpc-table-text);
   font-family: system-ui, sans-serif;
@@ -23,7 +24,15 @@
   line-height: var(--rpc-table-row-height);
 }
 
-.dark .rpc-table {
+.rpc-table {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-width: 0;
+}
+
+.dark .rpc-table,
+.dark .rpc-table-toolbar {
   --rpc-table-bg: #202124;
   --rpc-table-text: #e3e3e3;
   --rpc-table-header-bg: #292a2d;
@@ -56,10 +65,10 @@
   max-width: 200px;
 }
 
+/* The chips flow in the toolbar's own rows, so Errors follows Other when it
+   fits; the group stays in the accessibility tree */
 .rpc-table-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 2px;
+  display: contents;
 }
 
 .rpc-table-chip {

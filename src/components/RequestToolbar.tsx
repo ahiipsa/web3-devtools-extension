@@ -1,3 +1,4 @@
+import "./RequestTable.css";
 import cx from "classnames";
 import { useEffect, useRef } from "react";
 import { Button, Checkbox, Input, InputRef } from "antd";
