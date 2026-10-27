@@ -25,7 +25,7 @@ The highlighted RPC Request in the Panel, whether or not its details are open. A
 _Avoid_: Active request, current row
 
 **RPC Response**:
-The JSON-RPC result or error that answers one RPC Request.
+The JSON-RPC object paired by `id` with one RPC Request; a valid one carries a result or an error.
 _Avoid_: Reply, result
 
 **Status**:
