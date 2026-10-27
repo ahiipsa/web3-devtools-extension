@@ -133,6 +133,7 @@ describe("fetchFromEtherscan", () => {
   it.each([
     "Missing or unsupported chainid parameter (required for v2 api), please see https://api.etherscan.io/v2/chainlist for the list of supported chainids",
     "Free API access is not supported for this chain. Please upgrade your api plan for full chain coverage. https://etherscan.io/apis",
+    "Invalid chainid",
   ])("says the Chain is not supported on %j", async (result) => {
     const fetchFn = respond({ status: "0", message: "NOTOK", result });
 

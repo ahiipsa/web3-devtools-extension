@@ -67,6 +67,8 @@ export const SLOT_IMPLEMENTATION = "0x6666666666666666666666666666666666666666";
 // on the fake Sourcify, INNER_UNVERIFIED is not
 export const INNER_TOKEN = "0x7777777777777777777777777777777777777777";
 export const INNER_UNVERIFIED = "0x8888888888888888888888888888888888888888";
+// The fake Sourcify answers 500 for it; the fake Etherscan has it verified
+export const SOURCIFY_DOWN = "0x3333333333333333333333333333333333333333";
 export const SOURCIFY = {
   [WETH]: { abi: BALANCE_OF_ABI, compilation: { name: "WETH9" } },
   [INNER_TOKEN]: { abi: BALANCE_OF_ABI, compilation: { name: "InnerToken" } },
@@ -98,10 +100,8 @@ const STORAGE = {
     "0x" + pad(SLOT_IMPLEMENTATION),
 };
 
-// Verified on the fake Etherscan only; any other address is not verified.
-// The fake Sourcify answers 500 for SOURCIFY_DOWN
+// Verified on the fake Etherscan only; any other address is not verified
 export const LINK = "0x514910771af9ca656af840dff83e8264ecf986ca";
-export const SOURCIFY_DOWN = "0x3333333333333333333333333333333333333333";
 export const ETHERSCAN = {
   [LINK]: { ABI: JSON.stringify(BALANCE_OF_ABI), ContractName: "LinkToken" },
   [SOURCIFY_DOWN]: {

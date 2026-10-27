@@ -27,7 +27,8 @@ const getSourcifyImplementation = (proxyResolution: {
 
 const SOURCIFY_API = "https://sourcify.dev/server/v2/contract";
 
-// A stalled request fails, so Etherscan gets asked instead
+// A stalled request fails, so Etherscan gets asked instead when there is a
+// key
 export const SOURCIFY_TIMEOUT = 10_000;
 
 // Throws an Error whose message is fit to show the user

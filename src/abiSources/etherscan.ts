@@ -13,9 +13,10 @@ export const ETHERSCAN_TIMEOUT = 10_000;
 const NOT_VERIFIED = "Contract source code not verified";
 
 // Etherscan's explanations for a Chain it does not serve at all ("Missing or
-// unsupported chainid parameter …") or not on the key's plan ("Free API
-// access is not supported for this chain …")
-const UNSUPPORTED_CHAIN = /unsupported chainid|not supported for this chain/i;
+// unsupported chainid parameter …", "Invalid chainid") or not on the key's
+// plan ("Free API access is not supported for this chain …")
+const UNSUPPORTED_CHAIN =
+  /unsupported chainid|invalid chainid|not supported for this chain/i;
 
 // A Chain Etherscan does not serve says nothing about the address
 export type EtherscanResult = AbiSourceResult | { kind: "unsupported-chain" };

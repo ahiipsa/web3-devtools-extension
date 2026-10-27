@@ -286,6 +286,17 @@ describe("fetchContractAbi", () => {
     });
   });
 
+  it("fails with Sourcify's error when it is down and Etherscan has the proxy but not its implementation", async () => {
+    const { sources, fetch } = setupProxy({
+      sourcify: {},
+      etherscan: { [PROXY]: proxyFound("FiatTokenProxy", IMPLEMENTATION) },
+      apiKey: "KEY",
+    });
+    sources.sourcify.mockRejectedValue(new Error("HTTP 503"));
+
+    await expect(fetch()).rejects.toThrow(/^HTTP 503$/);
+  });
+
   it("reads the EIP-1967 slots when the ABI Source says nothing about a proxy", async () => {
     const { sources, fetch } = setupProxy({
       sourcify: {

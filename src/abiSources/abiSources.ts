@@ -63,29 +63,25 @@ export async function fetchFromAbiSources(
   if (sourcify.kind === "found") {
     return { ...sourcify, source: "sourcify" };
   }
+  const sourcifyError = sourcify.kind === "failed" ? sourcify : undefined;
 
   const apiKey = (await sources.getEtherscanApiKey()).trim();
   if (!apiKey) {
-    if (sourcify.kind === "failed") {
-      throw sourcify.error;
+    if (sourcifyError) {
+      throw sourcifyError.error;
     }
     return { kind: "not-found", sources: ["sourcify"] };
   }
-  if (sourcify.kind === "failed") {
-    const { error } = sourcify;
-    const etherscan = await sources
-      .etherscan(chainId, address, apiKey)
-      .catch(() => {
-        throw error;
-      });
-    if (etherscan.kind === "found") {
-      return { ...etherscan, source: "etherscan" };
-    }
-    throw error;
-  }
-  const etherscan = await sources.etherscan(chainId, address, apiKey);
+  const etherscan = await sources
+    .etherscan(chainId, address, apiKey)
+    .catch((error) => {
+      throw sourcifyError ? sourcifyError.error : error;
+    });
   if (etherscan.kind === "found") {
     return { ...etherscan, source: "etherscan" };
+  }
+  if (sourcifyError) {
+    throw sourcifyError.error;
   }
   return {
     kind: "not-found",
