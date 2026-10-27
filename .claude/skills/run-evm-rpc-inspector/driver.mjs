@@ -13,11 +13,22 @@
 //
 // Env: EXT (default build/), OUT (screenshots, default /tmp/evm-rpc-inspector-shots),
 //      HEADED=1 to put the window on screen, LIGHT=1 for the light DevTools theme.
+// On macOS, without HEADED, Chromium starts with `open -g` and stays hidden,
+// so it never takes the focus from the user's windows.
 import { chromium } from "playwright-core";
 import http from "node:http";
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { execFileSync, spawn } from "node:child_process";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import readline from "node:readline";
 import {
@@ -434,21 +445,159 @@ const interceptAbiSources = async (panel) => {
 
 const LEGACY = `(async () => (await import("./ui/legacy/legacy.js")).InspectorView.InspectorView.instance())()`;
 
-export async function launch() {
-  const node = await startNode();
-  const origin = `http://127.0.0.1:${node.address().port}`;
-  const profile = mkdtempSync(join(tmpdir(), "evm-rpc-profile-"));
+// The switches launchPersistentContext adds itself, for a Chromium started
+// without Playwright (--use-mock-keychain spares a keychain prompt)
+const require = createRequire(import.meta.url);
+const { chromiumSwitches } = require(
+  join(
+    dirname(require.resolve("playwright-core")),
+    "lib/server/chromium/chromiumSwitches.js",
+  ),
+);
+// The window launchPersistentContext opens for a 1200×800 viewport on macOS
+const WINDOW_SIZE = "--window-size=1202,870";
+
+const waitFor = async (read, what, timeout = 30_000) => {
+  for (const end = Date.now() + timeout; Date.now() < end; await sleep(100)) {
+    const value = read();
+    if (value) return value;
+  }
+  throw new Error(`no ${what} in ${timeout} ms`);
+};
+
+// Hides the app with this pid whenever it is not hidden, until it exits: a
+// hide right after launch is ignored, and a new window can unhide it. The
+// run loop keeps `hidden` up to date
+const KEEP_HIDDEN = `ObjC.import("AppKit");
+function run([pid]) {
+  for (;;) {
+    const app = $.NSRunningApplication.runningApplicationWithProcessIdentifier(Number(pid));
+    if (app.isNil() || app.terminated) return;
+    if (!app.hidden) app.hide;
+    $.NSRunLoop.currentRunLoop.runUntilDate($.NSDate.dateWithTimeIntervalSinceNow(0.1));
+  }
+}`;
+
+// Starts Playwright's Chromium with `open -g`, which never activates it,
+// keeps it hidden and attaches over CDP. `open` does not make Chromium a child of
+// this process, so it is stopped by pid, also when the run dies
+const openInBackground = async (profile, args) => {
+  const executable = chromium.executablePath();
+  execFileSync("open", [
+    "-g",
+    "-n",
+    "-a",
+    executable.replace(/\.app\/.*$/, ".app"),
+    "--args",
+    ...chromiumSwitches,
+    "--enable-use-zoom-for-dsf=false",
+    "--no-sandbox",
+    `--user-data-dir=${profile}`,
+    "--remote-debugging-port=0",
+    WINDOW_SIZE,
+    ...args,
+    "about:blank",
+  ]);
+  // The browser process, not its helpers: those carry a --type
+  const findPid = () =>
+    execFileSync("ps", ["-axo", "pid=,command="], { encoding: "utf8" })
+      .split("\n")
+      .map((line) => line.trim().match(/^(\d+) (.*)$/))
+      .find(
+        (m) =>
+          m &&
+          m[2].startsWith(executable + " ") &&
+          m[2].includes(`--user-data-dir=${profile}`) &&
+          !m[2].includes("--type="),
+      )?.[1];
+  let pid, keepHidden;
+  // Synchronous, as it also runs on "exit": the browser quits on SIGTERM, is
+  // killed if it has not after 5 s, and the profile goes once nothing of
+  // Chromium writes to it any more
+  const alive = (p) => {
+    try {
+      return process.kill(Number(p), 0);
+    } catch {
+      return false;
+    }
+  };
+  const waitSync = (ok, ms) => {
+    for (const end = Date.now() + ms; !ok() && Date.now() < end; )
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 50);
+    return ok();
+  };
+  const stop = () => {
+    process.off("exit", stop);
+    keepHidden?.kill();
+    pid ??= findPid();
+    if (pid && alive(pid)) {
+      process.kill(Number(pid), "SIGTERM");
+      if (!waitSync(() => !alive(pid), 5000)) {
+        process.kill(Number(pid), "SIGKILL");
+        waitSync(() => !alive(pid), 2000);
+      }
+    }
+    const helpers = () =>
+      execFileSync("ps", ["-axo", "command="], { encoding: "utf8" }).includes(
+        profile,
+      );
+    waitSync(() => !helpers(), 2000);
+    rmSync(profile, { recursive: true, force: true, maxRetries: 5 });
+  };
+  process.on("exit", stop);
+  // Ctrl+C would end the process without "exit"
+  for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"])
+    process.once(signal, () => process.exit(130));
+  pid = await waitFor(findPid, "Chromium process");
+  keepHidden = spawn(
+    "osascript",
+    ["-l", "JavaScript", "-e", KEEP_HIDDEN, pid],
+    {
+      stdio: "ignore",
+    },
+  );
+  keepHidden.unref();
+  const portFile = join(profile, "DevToolsActivePort");
+  const cdpPort = await waitFor(
+    () => existsSync(portFile) && readFileSync(portFile, "utf8").split("\n")[0],
+    "DevToolsActivePort",
+  );
+  const browser = await chromium.connectOverCDP(`http://127.0.0.1:${cdpPort}`);
+  const context = browser.contexts()[0];
+  const page = context.pages()[0] ?? (await context.newPage());
+  return {
+    cdpPort,
+    page,
+    // A new page made with Playwright would bring Chromium to the front
+    newPage: async () => {
+      const session = await browser.newBrowserCDPSession();
+      const opened = context.waitForEvent("page");
+      await session.send("Target.createTarget", {
+        url: "about:blank",
+        background: true,
+      });
+      await session.detach();
+      return opened;
+    },
+    close: async () => {
+      await browser.close().catch(() => {});
+      stop();
+    },
+  };
+};
+
+// Playwright's own launch, which activates Chromium: on screen with HEADED,
+// and off screen elsewhere than macOS, where --window-position does nothing
+const launchPlaywright = async (profile, args) => {
   const context = await chromium.launchPersistentContext(profile, {
-    // DevTools never open in headless mode, so the window is real, just off screen
+    // DevTools never open in headless mode, so the window is real
     headless: false,
     args: [
-      `--disable-extensions-except=${EXT}`,
-      `--load-extension=${EXT}`,
-      "--auto-open-devtools-for-tabs",
+      ...args,
       "--remote-debugging-port=0",
-      // DevTools follow the system scheme; this forces light (themeName "default")
-      ...(process.env.LIGHT ? ["--blink-settings=preferredColorScheme=1"] : []),
-      ...(process.env.HEADED ? [] : ["--window-position=-3000,-3000"]),
+      ...(process.env.HEADED || process.platform === "darwin"
+        ? []
+        : ["--window-position=-3000,-3000"]),
     ],
     viewport: { width: 1200, height: 800 },
   });
@@ -456,7 +605,33 @@ export async function launch() {
     join(profile, "DevToolsActivePort"),
     "utf8",
   ).split("\n")[0];
-  const page = context.pages()[0] ?? (await context.newPage());
+  return {
+    cdpPort,
+    page: context.pages()[0] ?? (await context.newPage()),
+    newPage: () => context.newPage(),
+    close: async () => {
+      await context.close();
+      rmSync(profile, { recursive: true, force: true, maxRetries: 5 });
+    },
+  };
+};
+
+export async function launch() {
+  const node = await startNode();
+  const origin = `http://127.0.0.1:${node.address().port}`;
+  const profile = mkdtempSync(join(tmpdir(), "evm-rpc-profile-"));
+  const browser = await (
+    process.platform === "darwin" && !process.env.HEADED
+      ? openInBackground
+      : launchPlaywright
+  )(profile, [
+    `--disable-extensions-except=${EXT}`,
+    `--load-extension=${EXT}`,
+    "--auto-open-devtools-for-tabs",
+    // DevTools follow the system scheme; this forces light (themeName "default")
+    ...(process.env.LIGHT ? ["--blink-settings=preferredColorScheme=1"] : []),
+  ]);
+  const { cdpPort, page } = browser;
   await page.goto(origin + "/");
 
   const devtools = await connectTarget(cdpPort, (u) =>
@@ -776,7 +951,7 @@ export async function launch() {
     // It renders them in a new tab, which unsettles DevTools: call it once
     // the checks are done
     stackShots: async (name, clips) => {
-      const sheet = await context.newPage();
+      const sheet = await browser.newPage();
       await sheet.setContent(
         `<body style="margin:0;padding:8px;background:#888;font:12px system-ui;display:inline-block">${clips
           .map(
@@ -818,7 +993,7 @@ export async function launch() {
             ).split("\n")[0],
         ),
     close: async () => {
-      await context.close();
+      await browser.close();
       node.close();
     },
   };
