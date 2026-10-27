@@ -253,3 +253,8 @@
   min-height: 15px;
   opacity: 0.7;
 }
+
+/* The second line already fades a failed row's muted part; don't fade it twice */
+.rpc-table-row-failed .rpc-table-cell-subtitle .rpc-table-muted {
+  opacity: 1;
+}
