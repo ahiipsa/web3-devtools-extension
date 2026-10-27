@@ -121,8 +121,8 @@ const MethodLabel = (props: {
 };
 
 // What an Inner Call line shows in a column, and its full text: an indented
-// `#n`, ✗ when it failed, in Method, and what the open details hide; its
-// Contract and function in theirs; nothing elsewhere
+// `#n`, ✗ when it failed, in Method, and what the open details hide; with the
+// details closed its Contract and function in theirs; nothing elsewhere
 const getInnerCallCell = (
   cells: ReturnType<typeof getInnerCallCells>,
   failed: boolean,
@@ -365,8 +365,8 @@ export const RequestTable = ({ filter, scrollRef }: RequestTableProps) => {
 
   const pressedResizer = useRef(false);
 
-  // With the details open Method fits the table's side rather than the table
-  // scrolling sideways
+  // With the details open Method fills the table's side, so the table does
+  // not scroll sideways
   const totalWidth = detailsOpen ? 0 : table.getTotalSize();
 
   return (

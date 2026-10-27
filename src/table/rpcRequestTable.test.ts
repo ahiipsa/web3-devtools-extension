@@ -6,8 +6,8 @@ import {
 } from "@tanstack/react-table";
 import {
   formatHiddenWithDetails,
-  getColumnVisibility,
   formatInnerCallHiddenWithDetails,
+  getColumnVisibility,
   rpcRequestTableOptions,
 } from "./rpcRequestTable.ts";
 import { InnerCallRow, RpcRequestRow } from "./rpcRequestRow.ts";

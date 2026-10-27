@@ -586,6 +586,11 @@ export async function launch() {
       ev(
         `[...document.querySelectorAll(".rpc-table-body [role=row]")].map((r) => r.title)`,
       ),
+    // The header cells' rendered widths, in column order
+    headerWidths: () =>
+      ev(
+        `[...document.querySelectorAll(".rpc-table-header [role=columnheader]")].map((h) => Math.round(h.getBoundingClientRect().width))`,
+      ),
     headers: () =>
       ev(
         `[...document.querySelectorAll(".rpc-table-header [role=columnheader]")].map((h) => h.innerText.trim())`,
@@ -654,6 +659,7 @@ async function smoke() {
       rows.join(", "),
     );
     await shot("02-table");
+    const closedWidths = await app.headerWidths();
 
     await click(".rpc-table-body [role=row]:nth-child(4)");
     check(
@@ -762,6 +768,11 @@ async function smoke() {
       json(await app.headers()) ===
         json(["Method", "Contract", "Function", "Status", "Endpoint", "Time"]),
       json(await app.headers()),
+    );
+    check(
+      "closing the details restores every column at its width",
+      json(await app.headerWidths()) === json(closedWidths),
+      `${json(closedWidths)} → ${json(await app.headerWidths())}`,
     );
     const closedBox = await app.selectedBox();
     await key("Enter");
