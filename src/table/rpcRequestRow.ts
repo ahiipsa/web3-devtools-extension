@@ -15,13 +15,10 @@ import {
   InnerCall,
 } from "../decoding/multicall.ts";
 
-// What one Inner Call row of an expanded Multicall shows
+// What the table knows of one Inner Call of a Multicall: what a search
+// matches, and whether it failed for the Method column's count
 export interface InnerCallRow {
-  // Its position in the Multicall, from 0
-  index: number;
-  // The Contract's name, else the short target address
-  contractLabel: string;
-  // For search: the full target address, and the Contract's name if any
+  // The full target address, and the Contract's name if any
   contractAddress: `0x${string}`;
   contractName?: string;
   functionName?: string;
@@ -80,12 +77,13 @@ const getHost = (url: string) => {
   }
 };
 
-const buildInnerCallRow = (
-  { target, callData, contractName, decoding, success }: InnerCall,
-  index: number,
-): InnerCallRow => ({
-  index,
-  contractLabel: contractName || trimContractAddress(target),
+const buildInnerCallRow = ({
+  target,
+  callData,
+  contractName,
+  decoding,
+  success,
+}: InnerCall): InnerCallRow => ({
   contractAddress: target,
   contractName,
   functionName:
@@ -144,15 +142,4 @@ export function getFunctionLabel({
     return { text: functionSelector, decoded: false };
   }
   return undefined;
-}
-
-// What an Inner Call row shows in the Method, Contract and Function columns;
-// it has no Status, Endpoint or Time of its own
-export function getInnerCallCells(innerCall: InnerCallRow) {
-  return {
-    // Numbered from 1, as in Params
-    method: `#${innerCall.index + 1}`,
-    contract: innerCall.contractLabel,
-    function: getFunctionLabel(innerCall),
-  };
 }

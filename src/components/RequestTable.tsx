@@ -19,7 +19,6 @@ import { AppContext } from "./AppContext.tsx";
 import { useRpcRequestRows } from "../hooks/useRpcRequestRows.ts";
 import {
   formatHiddenWithDetails,
-  formatInnerCallHiddenWithDetails,
   getColumnVisibility,
   rpcRequestTableOptions,
 } from "../table/rpcRequestTable.ts";
@@ -28,23 +27,13 @@ import {
   saveColumnSizing,
 } from "../table/columnSizingStorage.ts";
 import { isScrolledToBottom } from "../table/isScrolledToBottom.ts";
-import {
-  buildRpcRequestLines,
-  emptyExpansion,
-  getInnerCallLineId,
-  getLineKeyAction,
-  getSelectedLineId,
-  LineKey,
-  RpcRequestLine,
-  setExpanded,
-} from "../table/rpcRequestLines.ts";
+import { moveSelection, SelectionMove } from "../table/moveSelection.ts";
 import {
   matchesRpcRequestFilter,
   RpcRequestFilter,
 } from "../table/rpcRequestFilter.ts";
 import {
   getFunctionLabel,
-  getInnerCallCells,
   InnerCallRow,
   RpcRequestRow,
 } from "../table/rpcRequestRow.ts";
@@ -65,14 +54,12 @@ const getCellStyle = (
 const SORT_ARROWS = { asc: "▲", desc: "▼" } as const;
 const ARIA_SORT = { asc: "ascending", desc: "descending" } as const;
 
-const LINE_KEYS = new Set<string>([
-  "ArrowDown",
-  "ArrowUp",
-  "Home",
-  "End",
-  "ArrowLeft",
-  "ArrowRight",
-] satisfies LineKey[]);
+const KEY_MOVES: Partial<Record<string, SelectionMove>> = {
+  ArrowDown: "next",
+  ArrowUp: "previous",
+  Home: "first",
+  End: "last",
+};
 
 // A Multicall's Inner Call count, and its failed ones' if any: ` · 12 · 2 ✗`
 const countInnerCalls = (innerCalls: InnerCallRow[]) => {
@@ -88,30 +75,12 @@ const formatInnerCallCount = (innerCalls: InnerCallRow[]) => {
   return total + failed;
 };
 
-// The method, after a Multicall's chevron and before its Inner Call count
-const MethodLabel = (props: {
-  line: Extract<RpcRequestLine, { kind: "rpcRequest" }>;
-  onToggle: () => void;
-}) => {
-  const { line, onToggle } = props;
-  const { innerCalls } = line.row;
-  const count = innerCalls && countInnerCalls(innerCalls);
+// The method, and a Multicall's Inner Call count after it
+const MethodLabel = ({ row }: { row: RpcRequestRow }) => {
+  const count = row.innerCalls && countInnerCalls(row.innerCalls);
   return (
     <>
-      {line.expandable && (
-        <span
-          className="rpc-table-chevron"
-          aria-hidden
-          // Expands or collapses only; the row is not selected
-          onClick={(event) => {
-            event.stopPropagation();
-            onToggle();
-          }}
-        >
-          {line.expanded ? "▾" : "▸"}
-        </span>
-      )}
-      {line.row.method}
+      {row.method}
       {count && (
         <>
           <span className="rpc-table-muted">{count.total}</span>
@@ -120,43 +89,6 @@ const MethodLabel = (props: {
       )}
     </>
   );
-};
-
-// What an Inner Call line shows in a column, and its full text: an indented
-// `#n`, ✗ when it failed, in Method, and what the open details hide; with the
-// details closed its Contract and function in theirs; nothing elsewhere
-const getInnerCallCell = (
-  cells: ReturnType<typeof getInnerCallCells>,
-  failed: boolean,
-  columnId: string,
-  hidden: string | undefined,
-): { content: React.ReactNode; title?: string } => {
-  if (columnId === "method") {
-    const mark = failed ? " ✗" : "";
-    return {
-      content: (
-        <>
-          {cells.method}
-          {mark && <span className="rpc-table-failed-mark">{mark}</span>}
-        </>
-      ),
-      title: [cells.method + mark, hidden].filter(Boolean).join("\n"),
-    };
-  }
-  if (columnId === "contract") {
-    return { content: cells.contract, title: cells.contract };
-  }
-  if (columnId === "function" && cells.function) {
-    return {
-      content: (
-        <span className={cx({ "rpc-table-muted": !cells.function.decoded })}>
-          {cells.function.text}
-        </span>
-      ),
-      title: cells.function.text,
-    };
-  }
-  return { content: null };
 };
 
 interface RequestTableProps {
@@ -174,13 +106,7 @@ export const RequestTable = ({ filter, scrollRef }: RequestTableProps) => {
     [data, filter],
   );
 
-  const {
-    requestId,
-    setRequestId,
-    setDetailsTab,
-    selectedInnerCall,
-    setSelectedInnerCall,
-  } = appContext;
+  const { requestId, setRequestId } = appContext;
 
   // The selection outlives the details: Esc closes them and Enter reopens them
   const [selectedId, setSelectedId] = useState(requestId);
@@ -189,40 +115,6 @@ export const RequestTable = ({ filter, scrollRef }: RequestTableProps) => {
   const select = (id: string, openDetails: boolean) => {
     setSelectedId(id);
     setRequestId(openDetails ? id : null);
-  };
-
-  // An Inner Call line selects its Multicall, and highlights the Inner Call
-  // in the Params; a click or Enter opens them there
-  const selectLine = (line: RpcRequestLine, openDetails: boolean) => {
-    const id = line.row.request.id;
-    select(id, openDetails);
-    setSelectedInnerCall(
-      line.kind === "innerCall"
-        ? { requestId: id, index: line.innerCall.index }
-        : null,
-    );
-  };
-
-  const openLine = (line: RpcRequestLine) => {
-    selectLine(line, true);
-    if (line.kind === "innerCall") {
-      setDetailsTab("Params");
-    }
-  };
-
-  // Lasts until the list is cleared, by Clear or a reload
-  const [expansion, setExpansion] = useState(emptyExpansion);
-  const listCleared = appContext.rpcRequestList.length === 0;
-  useEffect(() => {
-    if (listCleared) {
-      setExpansion(emptyExpansion());
-    }
-  }, [listCleared]);
-
-  const setRowExpanded = (row: RpcRequestRow, expanded: boolean) => {
-    setExpansion((current) =>
-      setExpanded(current, row, filter.search, expanded),
-    );
   };
 
   // A filtered-out RPC Request can no longer be selected
@@ -266,45 +158,8 @@ export const RequestTable = ({ filter, scrollRef }: RequestTableProps) => {
   }, [columnSizing, isResizing]);
 
   const { rows } = table.getRowModel();
-  const tableRows = useMemo(
-    () => new Map(rows.map((row) => [row.id, row])),
-    [rows],
-  );
-  const lines = useMemo(
-    () =>
-      buildRpcRequestLines(
-        rows.map((row) => row.original),
-        expansion,
-        filter.search,
-      ),
-    [rows, expansion, filter.search],
-  );
-  const selectedLineId = getSelectedLineId(
-    lines,
-    selection,
-    selectedInnerCall?.requestId === selection ? selectedInnerCall.index : null,
-  );
-
-  // An Inner Call hidden by a collapse, a search or a filter is no longer
-  // highlighted, in the table or in the Params
-  useEffect(() => {
-    if (
-      selectedInnerCall &&
-      !lines.some(
-        (line) =>
-          line.id ===
-          getInnerCallLineId(
-            selectedInnerCall.requestId,
-            selectedInnerCall.index,
-          ),
-      )
-    ) {
-      setSelectedInnerCall(null);
-    }
-  }, [lines, selectedInnerCall, setSelectedInnerCall]);
-
   const virtualizer = useVirtualizer({
-    count: lines.length,
+    count: rows.length,
     getScrollElement: () => scrollRef.current,
     estimateSize: () => ROW_HEIGHT,
     // The sticky header sits above the first row inside the scroll element
@@ -314,8 +169,8 @@ export const RequestTable = ({ filter, scrollRef }: RequestTableProps) => {
     overscan: 20,
   });
 
-  // Follow new RPC Requests (not expanded Inner Calls) only while the user has not scrolled up. A sorted table
-  // never follows: new rows land anywhere in it, not at the bottom.
+  // Follow new RPC Requests only while the user has not scrolled up. A sorted
+  // table never follows: new rows land anywhere in it, not at the bottom.
   const stickToBottom = useRef(true);
   const sorted = sorting.length > 0;
   useLayoutEffect(() => {
@@ -325,9 +180,9 @@ export const RequestTable = ({ filter, scrollRef }: RequestTableProps) => {
     }
   }, [rows.length, sorted, scrollRef]);
 
-  // Opening the details on a selected line scrolled out of view (Enter after
-  // Esc) brings it back; a line in view stays where it is
-  const selectedIndex = lines.findIndex((line) => line.id === selectedLineId);
+  // Opening the details on a selected row scrolled out of view (Enter after
+  // Esc) brings it back; a row in view stays where it is
+  const selectedIndex = rows.findIndex((row) => row.id === selection);
   const selectedIndexRef = useRef(selectedIndex);
   selectedIndexRef.current = selectedIndex;
   useLayoutEffect(() => {
@@ -340,28 +195,23 @@ export const RequestTable = ({ filter, scrollRef }: RequestTableProps) => {
     if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) {
       return;
     }
-    if (LINE_KEYS.has(event.key)) {
+    const ids = rows.map((row) => row.id);
+    const move = KEY_MOVES[event.key];
+    if (move) {
       event.preventDefault();
-      const action = getLineKeyAction(
-        lines,
-        selectedLineId,
-        event.key as LineKey,
-      );
-      if (action?.kind === "select") {
+      const next = moveSelection(ids, selection, move);
+      if (next !== null) {
         // The details follow the selection while they are open
-        selectLine(action.line, requestId !== null);
-        virtualizer.scrollToIndex(lines.indexOf(action.line), {
-          align: "auto",
-        });
-      } else if (action) {
-        setRowExpanded(action.row, action.kind === "expand");
+        select(next, requestId !== null);
+        virtualizer.scrollToIndex(ids.indexOf(next), { align: "auto" });
       }
-    } else if (event.key === "Enter") {
-      const line = lines.find((candidate) => candidate.id === selectedLineId);
-      if (line) {
-        event.preventDefault();
-        openLine(line);
-      }
+    } else if (
+      event.key === "Enter" &&
+      selection !== null &&
+      ids.includes(selection)
+    ) {
+      event.preventDefault();
+      select(selection, true);
     }
   };
 
@@ -376,12 +226,10 @@ export const RequestTable = ({ filter, scrollRef }: RequestTableProps) => {
       <div
         ref={scrollRef}
         className="rpc-table-scroll"
-        role="treegrid"
-        aria-rowcount={lines.length + 1}
+        role="grid"
+        aria-rowcount={rows.length + 1}
         aria-activedescendant={
-          selectedLineId === null
-            ? undefined
-            : `rpc-table-row-${selectedLineId}`
+          selection === null ? undefined : `rpc-table-row-${selection}`
         }
         tabIndex={0}
         onKeyDown={onGridKeyDown}
@@ -449,41 +297,23 @@ export const RequestTable = ({ filter, scrollRef }: RequestTableProps) => {
             style={{ height: virtualizer.getTotalSize() }}
           >
             {virtualizer.getVirtualItems().map((virtualRow) => {
-              const line = lines[virtualRow.index];
-              const row = tableRows.get(line.row.request.id);
-              if (!row) {
-                return null;
-              }
-              const selected = selectedLineId === line.id;
+              const row = rows[virtualRow.index];
+              const selected = selection === row.id;
               // What the details hide, for the row's and its cells' tooltips
-              const hidden = !detailsOpen
-                ? undefined
-                : line.kind === "rpcRequest"
-                  ? formatHiddenWithDetails(line.row)
-                  : formatInnerCallHiddenWithDetails(line.innerCall);
-              const innerCallCells =
-                line.kind === "innerCall"
-                  ? getInnerCallCells(line.innerCall)
-                  : undefined;
+              const hidden = detailsOpen
+                ? formatHiddenWithDetails(row.original)
+                : undefined;
               return (
                 <div
-                  key={line.id}
-                  id={`rpc-table-row-${line.id}`}
+                  key={row.id}
+                  id={`rpc-table-row-${row.id}`}
                   role="row"
                   aria-rowindex={virtualRow.index + 2}
                   aria-selected={selected}
-                  aria-level={line.kind === "innerCall" ? 2 : 1}
-                  aria-expanded={
-                    line.kind === "rpcRequest" && line.expandable
-                      ? line.expanded
-                      : undefined
-                  }
                   className={cx("rpc-table-row", {
                     "rpc-table-row-striped": virtualRow.index % 2 === 1,
-                    "rpc-table-row-failed":
-                      line.kind === "rpcRequest" && line.row.failed,
+                    "rpc-table-row-failed": row.original.failed,
                     "rpc-table-row-selected": selected,
-                    "rpc-table-row-inner-call": line.kind === "innerCall",
                   })}
                   style={{
                     transform: `translateY(${virtualRow.start - virtualizer.options.scrollMargin}px)`,
@@ -491,38 +321,14 @@ export const RequestTable = ({ filter, scrollRef }: RequestTableProps) => {
                   // Also past the last cell, where no cell's own title shows
                   title={hidden}
                   // A click always opens the details; only Esc and ✕ close them
-                  onClick={() => openLine(line)}
+                  onClick={() => select(row.id, true)}
                 >
                   {row.getVisibleCells().map((cell) => {
                     const columnId = cell.column.id;
-                    const cellClassName = cx("rpc-table-cell", {
-                      "rpc-table-inner-call-cell":
-                        line.kind === "innerCall" && columnId === "method",
-                    });
-                    const style = getCellStyle(cell.column, detailsOpen);
-                    if (line.kind === "innerCall") {
-                      const { content, title } = getInnerCallCell(
-                        innerCallCells!,
-                        line.innerCall.failed,
-                        columnId,
-                        hidden,
-                      );
-                      return (
-                        <div
-                          key={cell.id}
-                          role="gridcell"
-                          className={cellClassName}
-                          style={style}
-                          title={title}
-                        >
-                          <span className="rpc-table-cell-text">{content}</span>
-                        </div>
-                      );
-                    }
+                    const { innerCalls } = row.original;
                     const value =
-                      columnId === "method" && line.row.innerCalls
-                        ? line.row.method +
-                          formatInnerCallCount(line.row.innerCalls)
+                      columnId === "method" && innerCalls
+                        ? row.original.method + formatInnerCallCount(innerCalls)
                         : cell.getValue();
                     const muted =
                       columnId === "function" &&
@@ -539,8 +345,8 @@ export const RequestTable = ({ filter, scrollRef }: RequestTableProps) => {
                       <div
                         key={cell.id}
                         role="gridcell"
-                        className={cellClassName}
-                        style={style}
+                        className="rpc-table-cell"
+                        style={getCellStyle(cell.column, detailsOpen)}
                         title={title || undefined}
                       >
                         <span
@@ -549,12 +355,7 @@ export const RequestTable = ({ filter, scrollRef }: RequestTableProps) => {
                           })}
                         >
                           {columnId === "method" ? (
-                            <MethodLabel
-                              line={line}
-                              onToggle={() =>
-                                setRowExpanded(line.row, !line.expanded)
-                              }
-                            />
+                            <MethodLabel row={row.original} />
                           ) : (
                             flexRender(
                               cell.column.columnDef.cell,

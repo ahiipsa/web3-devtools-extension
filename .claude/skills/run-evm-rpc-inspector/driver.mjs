@@ -526,14 +526,14 @@ export async function launch() {
     rowSelector: (match, n = 0) =>
       ev(`(() => {
         const match = ${JSON.stringify(match)};
-        const rows = [...document.querySelectorAll(".rpc-table-body [role=row][aria-level='1']")]
+        const rows = [...document.querySelectorAll(".rpc-table-body [role=row]")]
           .filter((row) => {
             const [method, contract, fn] = [...row.querySelectorAll("[role=gridcell]")]
               .map((cell) => cell.innerText.trim());
             const hidden = Object.fromEntries(row.title.split("\\n").map((line) =>
               [line.slice(0, line.indexOf(": ")), line.slice(line.indexOf(": ") + 2)]));
             const cells = {
-              method: method?.replace(/^[▸▾]\\s*/, "").split(" ")[0],
+              method: method?.split(" ")[0],
               contract: contract ?? hidden.Contract,
               fn: fn ?? hidden.Function,
             };
@@ -1374,118 +1374,65 @@ async function smoke() {
       ),
     );
 
-    // Expanding a Multicall into its Inner Call rows. MULTICALL_CALL is the
-    // first Multicall row, so its chevron is the first one
-    const MULTICALL_ROW = `document.querySelector(".rpc-table-body [role=row][aria-expanded]")`;
-    const multicallExpanded = () =>
-      ev(`${MULTICALL_ROW}?.getAttribute("aria-expanded") === "true"`);
-    const innerCallRows = () =>
+    // A Multicall stays a single row: Inner Calls are in its Params only.
+    // MULTICALL_CALL is the first Multicall row, and the selected one
+    const COUNTED_MULTICALL = /^eth_call · 2 · 1 ✗/;
+    const noInnerCallRows = () =>
       ev(
-        `[...document.querySelectorAll(".rpc-table-body [role=row][aria-level='2']")].map((r) => [...r.querySelectorAll("[role=gridcell]")].map((c) => c.innerText.trim()))`,
+        `!document.querySelector(".rpc-table-chevron, .rpc-table-body [role=row][aria-expanded], .rpc-table-body [role=row][aria-level]") && ![...document.querySelectorAll(".rpc-table-body [role=row]")].some((r) => /^#\\d/.test(r.innerText.trim()))`,
       );
-    const innerCallTitles = () =>
+    const selectedRowIndex = () =>
       ev(
-        `[...document.querySelectorAll(".rpc-table-body [role=row][aria-level='2']")].map((r) => r.title)`,
+        `[...document.querySelectorAll(".rpc-table-body [role=row]")].findIndex((r) => r.getAttribute("aria-selected") === "true")`,
       );
     await key("Escape");
+    const multicallRow = await app.selected();
     check(
-      "a Multicall row shows its Inner Call count, the failed ones', and a collapsed chevron",
-      /^▸\s*eth_call · 2 · 1 ✗/.test(
-        await ev(`${MULTICALL_ROW}?.innerText.split("\\n")[0]`),
-      ) &&
-        !(await multicallExpanded()) &&
-        (await innerCallRows()).length === 0,
-      await ev(`${MULTICALL_ROW}?.innerText.split("\\n")[0]`),
+      "a Multicall row shows its Inner Call count and the failed ones', with no chevron and no aria-expanded",
+      COUNTED_MULTICALL.test(multicallRow ?? "") && (await noInnerCallRows()),
+      multicallRow,
     );
-    await click(".rpc-table-chevron");
-    const expandedInner = await innerCallRows();
-    check(
-      "a click on the chevron lists the Inner Calls below it, #n and ✗ in Method, Contract and function in theirs",
-      (await multicallExpanded()) &&
-        json(expandedInner) ===
-          json([
-            ["#1", "WETH9", "balanceOf", "", "", ""],
-            ["#2 ✗", "0x2222...2222", "0x12345678", "", "", ""],
-          ]) &&
-        !(await app.detailsOpen()),
-      JSON.stringify(expandedInner),
-    );
-    await shot("11-multicall-expanded");
-    await click(".rpc-table-chevron");
-    check(
-      "a second click on the chevron collapses it",
-      !(await multicallExpanded()) && (await innerCallRows()).length === 0,
-    );
-    // The Multicall row is still the selected one
+    const rowsBefore = await app.rows();
     await key("ArrowRight");
-    const rightExpands = await multicallExpanded();
-    await key("ArrowLeft");
     check(
-      "→ expands the selected Multicall and ← collapses it",
-      rightExpands && !(await multicallExpanded()),
+      "→ on the selected Multicall adds no Inner Call rows",
+      json(await app.rows()) === json(rowsBefore) &&
+        (await app.selected()) === multicallRow &&
+        (await noInnerCallRows()),
+      json(await app.rows()),
     );
-    await key("ArrowRight");
+    await shot("11-multicall-row");
+    const multicallIndex = await selectedRowIndex();
     await key("ArrowDown");
-    const intoInner = json(await app.selectedCells());
-    await key("ArrowLeft");
-    const backToMulticall = await app.selected();
+    const nextIndex = await selectedRowIndex();
     check(
-      "↓ walks into the Inner Calls and ← goes back to the Multicall",
-      intoInner === json(["#1", "WETH9", "balanceOf", "", "", ""]) &&
-        /^▸?▾?\s*eth_call · 2 · 1 ✗/.test(backToMulticall ?? "") &&
-        (await multicallExpanded()),
-      `${intoInner} | ${backToMulticall}`,
+      "↓ from the Multicall goes to the next RPC Request",
+      nextIndex === multicallIndex + 1 &&
+        (await app.selected()) === rowsBefore[multicallIndex + 1],
+      `${multicallIndex} → ${nextIndex}`,
     );
-    await key("ArrowDown");
-    await key("ArrowDown");
+    await key("ArrowUp");
     await key("Enter");
-    check(
-      "Enter on an Inner Call opens its Multicall's Params with it highlighted",
-      (await app.detailsOpen()) &&
-        (await ev(
-          `document.querySelector(".rpc-details-tab-selected")?.innerText`,
-        )) === "Params" &&
-        /^#2 0x2222\.\.\.2222 ✗/.test(
-          (await ev(
-            `document.querySelector(".rpc-details-inner-call-highlighted")?.innerText`,
-          )) ?? "",
-        ) &&
-        json(await app.selectedCells()) === json(["#2 ✗"]),
-    );
-    const openInner = await innerCallRows();
-    const openInnerTitles = await innerCallTitles();
-    check(
-      "with the details open Inner Call rows keep #n and ✗ in Method, their tooltip their Contract and Function",
-      json(openInner) === json([["#1"], ["#2 ✗"]]) &&
-        json(openInnerTitles) ===
-          json([
-            "Contract: WETH9\nFunction: balanceOf",
-            "Contract: 0x2222...2222\nFunction: 0x12345678",
-          ]),
-      `${json(openInner)} ${json(openInnerTitles)}`,
-    );
-    await shot("12-inner-call-params");
-    await key("ArrowLeft");
-    await key("ArrowLeft");
-    const collapsedAgain = !(await multicallExpanded());
+    await click(".rpc-details-tab", "Params");
     await key("f", "meta");
     await type("balanceOf");
-    // The details are still open, so the Inner Calls' Contracts are in their tooltips
-    const searchedInner = await innerCallTitles();
-    check(
-      "a search for an Inner Call's function shows the Multicall expanded with only it",
-      collapsedAgain &&
-        (await multicallExpanded()) &&
-        searchedInner.some((title) => title.startsWith("Contract: WETH9\n")) &&
-        !searchedInner.some((title) => title.includes("0x2222")),
-      JSON.stringify(searchedInner),
+    const searchedRows = await until(app.rows, (rows) =>
+      rows?.some((row) => COUNTED_MULTICALL.test(row)),
     );
-    await shot("13-inner-call-search");
+    check(
+      "a search for an Inner Call's function shows the Multicall as a single row",
+      searchedRows.filter((row) => COUNTED_MULTICALL.test(row)).length === 1 &&
+        (await noInnerCallRows()),
+      json(searchedRows),
+    );
+    await shot("12-inner-call-search");
+    const searchedInnerCalls = await until(detailsInnerCalls, innerCallsListed);
+    check(
+      "Params still lists both Inner Calls, the failed one ✗ with its revert message",
+      innerCallsListed(searchedInnerCalls),
+      JSON.stringify(searchedInnerCalls),
+    );
     await key("Escape");
-    check(
-      "clearing the search restores the Multicall collapsed",
-      !(await multicallExpanded()) && (await innerCallRows()).length === 0,
-    );
 
     // With a key, Etherscan is asked when Sourcify fails too
     await app.rpc(callTo(14, SOURCIFY_DOWN));

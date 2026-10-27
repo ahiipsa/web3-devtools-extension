@@ -8,8 +8,6 @@ import {
 import {
   formatDuration,
   getFunctionLabel,
-  getInnerCallCells,
-  InnerCallRow,
   RpcRequestRow,
 } from "./rpcRequestRow.ts";
 
@@ -76,16 +74,7 @@ const ALL_VISIBLE: VisibilityState = {};
 export const getColumnVisibility = (detailsOpen: boolean): VisibilityState =>
   detailsOpen ? HIDDEN_WITH_DETAILS : ALL_VISIBLE;
 
-// The Contract and Function lines, leaving out what the row has none of
-const formatContractCall = (
-  contract: string | undefined,
-  functionLabel: ReturnType<typeof getFunctionLabel>,
-) =>
-  [
-    contract && `Contract: ${contract}`,
-    functionLabel && `Function: ${functionLabel.text}`,
-  ].filter((line): line is string => !!line);
-
+// Leaves out the Contract and Function a row has none of
 export const formatHiddenWithDetails = (
   row: Pick<
     RpcRequestRow,
@@ -96,16 +85,15 @@ export const formatHiddenWithDetails = (
     | "endpoint"
     | "time"
   >,
-) =>
-  [
-    ...formatContractCall(row.contractLabel, getFunctionLabel(row)),
+) => {
+  const functionLabel = getFunctionLabel(row);
+  return [
+    row.contractLabel && `Contract: ${row.contractLabel}`,
+    functionLabel && `Function: ${functionLabel.text}`,
     `Status: ${row.status}`,
     `Endpoint: ${row.endpoint}`,
     `Time: ${formatDuration(row.time)}`,
-  ].join("\n");
-
-// An Inner Call has no Status, Endpoint or Time of its own
-export const formatInnerCallHiddenWithDetails = (innerCall: InnerCallRow) => {
-  const cells = getInnerCallCells(innerCall);
-  return formatContractCall(cells.contract, cells.function).join("\n");
+  ]
+    .filter(Boolean)
+    .join("\n");
 };

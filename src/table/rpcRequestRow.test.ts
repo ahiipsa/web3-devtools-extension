@@ -11,7 +11,6 @@ import {
   buildRpcRequestRow,
   formatDuration,
   getFunctionLabel,
-  getInnerCallCells,
 } from "./rpcRequestRow.ts";
 import { RpcRequest } from "../types/main.ts";
 import { Contract } from "../dal/contract.ts";
@@ -213,7 +212,7 @@ describe("buildRpcRequestRow", () => {
     ]).toEqual(["USDC", "0x82ad56cb"]);
   });
 
-  it("lists a Multicall's Inner Calls by Contract and function, else short target and Selector, flagging failed ones", () => {
+  it("lists a Multicall's Inner Calls by target, Contract and function, else Selector, flagging failed ones", () => {
     const UNKNOWN = "0x2222222222222222222222222222222222222222";
     const UNKNOWN_CALLDATA = `0x12345678${"0".repeat(64)}` as const;
     const data = encodeFunctionData({
@@ -260,8 +259,6 @@ describe("buildRpcRequestRow", () => {
 
     expect(row.innerCalls).toEqual([
       {
-        index: 0,
-        contractLabel: "USDC",
         contractAddress: expect.stringMatching(new RegExp(TOKEN, "i")),
         contractName: "USDC",
         functionName: "balanceOf",
@@ -269,25 +266,11 @@ describe("buildRpcRequestRow", () => {
         failed: false,
       },
       {
-        index: 1,
-        contractLabel: "0x2222...2222",
         contractAddress: expect.stringMatching(new RegExp(UNKNOWN, "i")),
         contractName: undefined,
         functionName: undefined,
         functionSelector: "0x12345678",
         failed: true,
-      },
-    ]);
-    expect(row.innerCalls!.map(getInnerCallCells)).toEqual([
-      {
-        method: "#1",
-        contract: "USDC",
-        function: { text: "balanceOf", decoded: true },
-      },
-      {
-        method: "#2",
-        contract: "0x2222...2222",
-        function: { text: "0x12345678", decoded: false },
       },
     ]);
     // A Multicall with failed Inner Calls is still ok
@@ -358,51 +341,5 @@ describe("formatDuration", () => {
   it("shows milliseconds below a second and seconds above", () => {
     expect(formatDuration(42.4)).toBe("42 ms");
     expect(formatDuration(1534)).toBe("1.53 s");
-  });
-});
-
-describe("getInnerCallCells", () => {
-  const innerCall = {
-    index: 0,
-    contractLabel: "USDC",
-    contractAddress: TOKEN,
-    contractName: "USDC",
-    functionName: "balanceOf",
-    functionSelector: "0x70a08231",
-    failed: false,
-  } as const;
-
-  it("numbers the Inner Call from 1 and fills the Contract and Function columns", () => {
-    expect(getInnerCallCells({ ...innerCall, index: 2 })).toEqual({
-      method: "#3",
-      contract: "USDC",
-      function: { text: "balanceOf", decoded: true },
-    });
-  });
-
-  it("shows the short target address and the Selector when nothing decodes", () => {
-    expect(
-      getInnerCallCells({
-        ...innerCall,
-        contractLabel: "0x2222...2222",
-        contractName: undefined,
-        functionName: undefined,
-        functionSelector: "0x12345678",
-      }),
-    ).toEqual({
-      method: "#1",
-      contract: "0x2222...2222",
-      function: { text: "0x12345678", decoded: false },
-    });
-  });
-
-  it("leaves the Function column empty without calldata", () => {
-    expect(
-      getInnerCallCells({
-        ...innerCall,
-        functionName: undefined,
-        functionSelector: undefined,
-      }).function,
-    ).toBeUndefined();
   });
 });

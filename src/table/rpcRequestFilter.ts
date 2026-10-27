@@ -18,7 +18,7 @@ export const emptyRpcRequestFilter = (): RpcRequestFilter => ({
 
 // What a search compares, ignoring case and surrounding spaces; empty
 // matches everything
-export const normalizeSearch = (search: string) => search.trim().toLowerCase();
+const normalizeSearch = (search: string) => search.trim().toLowerCase();
 
 const includesNeedle = (texts: (string | undefined)[], needle: string) =>
   texts.some((text) => text?.toLowerCase().includes(needle));
@@ -33,21 +33,6 @@ const innerCallMatches = (innerCall: InnerCallRow, needle: string) =>
     ],
     needle,
   );
-
-// The Inner Calls of a Multicall a search matches; undefined without a
-// search, an empty list when none matches
-export const getMatchingInnerCalls = (
-  row: RpcRequestRow,
-  search: string,
-): InnerCallRow[] | undefined => {
-  const needle = normalizeSearch(search);
-  if (!needle || !row.innerCalls) {
-    return undefined;
-  }
-  return row.innerCalls.filter((innerCall) =>
-    innerCallMatches(innerCall, needle),
-  );
-};
 
 const matchesSearch = (row: RpcRequestRow, search: string) => {
   const needle = normalizeSearch(search);
@@ -65,7 +50,8 @@ const matchesSearch = (row: RpcRequestRow, search: string) => {
         row.functionSelector,
       ],
       needle,
-    ) || !!getMatchingInnerCalls(row, needle)?.length
+    ) ||
+    !!row.innerCalls?.some((innerCall) => innerCallMatches(innerCall, needle))
   );
 };
 

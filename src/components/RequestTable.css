@@ -356,21 +356,6 @@
   opacity: 0.7;
 }
 
-/* A Multicall's expand chevron, before its method */
-.rpc-table-chevron {
-  display: inline-block;
-  width: 12px;
-  margin-right: 2px;
-  color: var(--rpc-table-muted);
-  text-align: center;
-  cursor: pointer;
-}
-
-/* Inner Calls sit indented under their Multicall's method */
-.rpc-table-cell.rpc-table-inner-call-cell {
-  padding-left: 22px;
-}
-
 .rpc-table-failed-mark {
   color: var(--rpc-table-failed);
 }

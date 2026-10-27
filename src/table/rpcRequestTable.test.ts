@@ -6,11 +6,10 @@ import {
 } from "@tanstack/react-table";
 import {
   formatHiddenWithDetails,
-  formatInnerCallHiddenWithDetails,
   getColumnVisibility,
   rpcRequestTableOptions,
 } from "./rpcRequestTable.ts";
-import { InnerCallRow, RpcRequestRow } from "./rpcRequestRow.ts";
+import { RpcRequestRow } from "./rpcRequestRow.ts";
 import { RpcRequest } from "../types/main.ts";
 
 const row = (
@@ -193,44 +192,6 @@ describe("formatHiddenWithDetails", () => {
   it("leaves out the Contract and Function a row has none of", () => {
     expect(formatHiddenWithDetails(row("1", { method: "eth_chainId" }))).toBe(
       "Status: ok\nEndpoint: rpc.example\nTime: 10 ms",
-    );
-  });
-});
-
-const innerCall = (fields: Partial<InnerCallRow>): InnerCallRow => ({
-  index: 0,
-  contractLabel: "WETH9",
-  contractAddress: "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
-  failed: false,
-  ...fields,
-});
-
-describe("formatInnerCallHiddenWithDetails", () => {
-  it("lists the Contract and Function the open details hide", () => {
-    expect(
-      formatInnerCallHiddenWithDetails(
-        innerCall({
-          functionName: "balanceOf",
-          functionSelector: "0x70a08231",
-        }),
-      ),
-    ).toBe("Contract: WETH9\nFunction: balanceOf");
-  });
-
-  it("gives the selector as the Function when the name is not decoded", () => {
-    expect(
-      formatInnerCallHiddenWithDetails(
-        innerCall({
-          contractLabel: "0x2222...2222",
-          functionSelector: "0x12345678",
-        }),
-      ),
-    ).toBe("Contract: 0x2222...2222\nFunction: 0x12345678");
-  });
-
-  it("leaves out a Function the Inner Call has none of", () => {
-    expect(formatInnerCallHiddenWithDetails(innerCall({}))).toBe(
-      "Contract: WETH9",
     );
   });
 });

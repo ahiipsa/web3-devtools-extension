@@ -3,7 +3,6 @@ import { Abi } from "viem";
 import { buildRpcRequestRow, RpcRequestRow } from "./rpcRequestRow.ts";
 import {
   emptyRpcRequestFilter,
-  getMatchingInnerCalls,
   matchesRpcRequestFilter,
   RpcRequestFilter,
   selectMethodCategory,
@@ -107,8 +106,6 @@ describe("matchesRpcRequestFilter on a Multicall", () => {
     method: "eth_call",
     innerCalls: [
       {
-        index: 0,
-        contractLabel: "WETH9",
         contractAddress: "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
         contractName: "WETH9",
         functionName: "balanceOf",
@@ -116,8 +113,6 @@ describe("matchesRpcRequestFilter on a Multicall", () => {
         failed: false,
       },
       {
-        index: 1,
-        contractLabel: "0x2222...2222",
         contractAddress: "0x2222222222222222222222222222222222222222",
         functionSelector: "0x12345678",
         failed: true,
@@ -134,13 +129,11 @@ describe("matchesRpcRequestFilter on a Multicall", () => {
     );
   });
 
-  it("lists only the matching Inner Calls, and none without a search", () => {
+  it("keeps the Multicall, a single row, in the filtered rows for an Inner Call's function", () => {
+    const rows = [blockNumberRow, multicallRow];
     expect(
-      getMatchingInnerCalls(multicallRow, "weth")?.map(({ index }) => index),
-    ).toEqual([0]);
-    expect(getMatchingInnerCalls(multicallRow, "transfer")).toEqual([]);
-    expect(getMatchingInnerCalls(multicallRow, "  ")).toBeUndefined();
-    expect(getMatchingInnerCalls(blockNumberRow, "weth")).toBeUndefined();
+      rows.filter((row) => matchesRpcRequestFilter(row, search("balanceOf"))),
+    ).toEqual([multicallRow]);
   });
 
   it("is not failed for failed Inner Calls under Errors", () => {
