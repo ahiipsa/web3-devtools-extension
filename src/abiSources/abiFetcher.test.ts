@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { Abi } from "viem";
 import { RpcRequest } from "../types/main.ts";
 import { Contract } from "../dal/contract.ts";
-import { FetchedAbi } from "./abiSources.ts";
+import { ContractAbi } from "./abiSources.ts";
 import { createAbiFetcher } from "./abiFetcher.ts";
 
 const ENDPOINT = "https://rpc.example/mainnet";
@@ -49,7 +49,11 @@ const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
 const setup = (
   options: {
     contracts?: Record<string, Contract>;
-    fetchAbi?: (chainId: number, address: string) => Promise<FetchedAbi>;
+    fetchAbi?: (
+      chainId: number,
+      address: string,
+      endpoint: string,
+    ) => Promise<ContractAbi>;
     requestChainId?: (endpoint: string) => Promise<number>;
     chainLookupDelay?: number;
   } = {},
@@ -70,7 +74,7 @@ const setup = (
     }),
     fetchAbi: vi.fn(
       options.fetchAbi ??
-        (async (): Promise<FetchedAbi> => ({
+        (async (): Promise<ContractAbi> => ({
           kind: "found",
           name: "WETH9",
           abi: ABI,
@@ -91,7 +95,7 @@ describe("Chain of an Endpoint", () => {
     await flush();
 
     expect(deps.requestChainId).not.toHaveBeenCalled();
-    expect(deps.fetchAbi).toHaveBeenCalledWith(1, WETH);
+    expect(deps.fetchAbi).toHaveBeenCalledWith(1, WETH, ENDPOINT);
   });
 
   it("is asked of the Endpoint when its eth_chainId was not captured", async () => {
@@ -104,7 +108,7 @@ describe("Chain of an Endpoint", () => {
     await flush();
 
     expect(deps.requestChainId).toHaveBeenCalledWith(OTHER_ENDPOINT);
-    expect(deps.fetchAbi).toHaveBeenCalledWith(137, WETH);
+    expect(deps.fetchAbi).toHaveBeenCalledWith(137, WETH, OTHER_ENDPOINT);
   });
 
   it("waits a moment for the page's own eth_chainId before asking the Endpoint", async () => {
@@ -116,7 +120,7 @@ describe("Chain of an Endpoint", () => {
     await new Promise((resolve) => setTimeout(resolve, 40));
 
     expect(deps.requestChainId).not.toHaveBeenCalled();
-    expect(deps.fetchAbi).toHaveBeenCalledWith(1, WETH);
+    expect(deps.fetchAbi).toHaveBeenCalledWith(1, WETH, ENDPOINT);
   });
 
   it("follows a later eth_chainId of the Endpoint that names another Chain", async () => {
@@ -132,8 +136,8 @@ describe("Chain of an Endpoint", () => {
     await flush();
 
     expect(deps.fetchAbi.mock.calls).toEqual([
-      [1, WETH],
-      [8453, DAI],
+      [1, WETH, ENDPOINT],
+      [8453, DAI, ENDPOINT],
     ]);
   });
 
@@ -189,8 +193,8 @@ describe("Fetching a Contract's ABI", () => {
     await flush();
 
     expect(deps.fetchAbi.mock.calls).toEqual([
-      [1, WETH],
-      [137, WETH],
+      [1, WETH, ENDPOINT],
+      [137, WETH, OTHER_ENDPOINT],
     ]);
   });
 
@@ -233,6 +237,34 @@ describe("Fetching a Contract's ABI", () => {
     await flush();
 
     expect(contracts[WETH]).toMatchObject({ source: "etherscan" });
+  });
+
+  it("saves a proxy's Contract at the proxy's address, marked via proxy", async () => {
+    const proxy = {
+      implementation: DAI,
+      abi: "implementation",
+    } as const;
+    const { fetcher, contracts } = setup({
+      fetchAbi: async () => ({
+        kind: "found",
+        name: "FiatTokenV2_2",
+        abi: ABI,
+        source: "sourcify",
+        proxy,
+      }),
+    });
+
+    fetcher.observe([chainIdOn(ENDPOINT, "0x1"), callOn(ENDPOINT, WETH)], true);
+    await flush();
+
+    expect(contracts[WETH]).toEqual({
+      address: WETH,
+      name: "FiatTokenV2_2",
+      abi: ABI,
+      source: "sourcify",
+      proxy,
+    });
+    expect(contracts[DAI]).toBeUndefined();
   });
 
   it("reports a miss on every ABI Source asked", async () => {
@@ -346,7 +378,7 @@ describe("Automatic fetching turned off", () => {
     await fetcher.fetchManually(OTHER_ENDPOINT, WETH);
 
     expect(deps.requestChainId).toHaveBeenCalledWith(OTHER_ENDPOINT);
-    expect(deps.fetchAbi).toHaveBeenCalledWith(137, WETH);
+    expect(deps.fetchAbi).toHaveBeenCalledWith(137, WETH, OTHER_ENDPOINT);
     expect(contracts[WETH]).toMatchObject({ source: "sourcify" });
   });
 });
@@ -380,6 +412,6 @@ describe("Fetching on demand", () => {
     await fetcher.fetchManually(ENDPOINT, WETH);
 
     expect(deps.requestChainId).toHaveBeenCalledTimes(2);
-    expect(deps.fetchAbi).toHaveBeenCalledWith(1, WETH);
+    expect(deps.fetchAbi).toHaveBeenCalledWith(1, WETH, ENDPOINT);
   });
 });

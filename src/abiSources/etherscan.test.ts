@@ -48,6 +48,47 @@ describe("fetchFromEtherscan", () => {
     });
   });
 
+  it("names the implementation of a proxy", async () => {
+    const fetchFn = respond(
+      sourceCode({
+        ABI: JSON.stringify(ABI),
+        ContractName: "FiatTokenProxy",
+        Proxy: "1",
+        Implementation: "0x43506849D7C04F9138D1A2050bbF3A0c054402dd",
+      }),
+    );
+
+    expect(await fetchFromEtherscan(1, ADDRESS, KEY, fetchFn)).toEqual({
+      kind: "found",
+      name: "FiatTokenProxy",
+      abi: ABI,
+      implementation: "0x43506849d7c04f9138d1a2050bbf3a0c054402dd",
+    });
+  });
+
+  it("names no implementation for a contract not marked as a proxy", async () => {
+    for (const fields of [
+      { Proxy: "0", Implementation: "" },
+      {
+        Proxy: "0",
+        Implementation: "0x43506849D7C04F9138D1A2050bbF3A0c054402dd",
+      },
+      { Proxy: "1", Implementation: "" },
+      {
+        Proxy: "1",
+        Implementation: "0x0000000000000000000000000000000000000000",
+      },
+    ]) {
+      const fetchFn = respond(
+        sourceCode({ ABI: JSON.stringify(ABI), ContractName: "X", ...fields }),
+      );
+
+      expect(
+        await fetchFromEtherscan(1, ADDRESS, KEY, fetchFn),
+      ).not.toHaveProperty("implementation");
+    }
+  });
+
   it("reports no verified ABI for a contract whose source is not verified", async () => {
     const fetchFn = respond(
       sourceCode({

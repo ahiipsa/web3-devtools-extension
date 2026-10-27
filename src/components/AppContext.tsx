@@ -9,7 +9,8 @@ import {
   ETHERSCAN_REQUEST_INTERVAL,
   fetchFromEtherscan,
 } from "../abiSources/etherscan.ts";
-import { fetchFromAbiSources } from "../abiSources/abiSources.ts";
+import { fetchContractAbi } from "../abiSources/abiSources.ts";
+import { readEip1967Implementation } from "../abiSources/eip1967.ts";
 import { requestChainId } from "../abiSources/chainId.ts";
 import { getContract, saveFetchedContract } from "../dal/contract.ts";
 import { useSettings } from "../hooks/useSettings.ts";
@@ -21,8 +22,8 @@ const etherscanQueue = createSerialQueue(ETHERSCAN_REQUEST_INTERVAL);
 const abiFetcher = createAbiFetcher({
   getContract,
   saveFetchedContract,
-  fetchAbi: (chainId, address) =>
-    fetchFromAbiSources(
+  fetchAbi: (chainId, address, endpoint) =>
+    fetchContractAbi(
       {
         sourcify: (chainId, address) => fetchFromSourcify(chainId, address),
         etherscan: (chainId, address, apiKey) =>
@@ -32,6 +33,8 @@ const abiFetcher = createAbiFetcher({
             (settings) => settings.etherscanApiKey,
             () => "",
           ),
+        readImplementation: (address) =>
+          readEip1967Implementation(endpoint, address),
       },
       chainId,
       address,

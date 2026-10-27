@@ -1,4 +1,9 @@
-import { deleteContract, parseAbiJson, saveContract } from "../dal/contract.ts";
+import {
+  ContractProxy,
+  deleteContract,
+  parseAbiJson,
+  saveContract,
+} from "../dal/contract.ts";
 import { useEffect, useState } from "react";
 import { useContractQuery } from "../hooks/useContractQuery.ts";
 import { Button, Form, FormProps, Input, message } from "antd";
@@ -28,6 +33,18 @@ const formatAbiFetchState = (state: AbiFetchState) => {
       return `Fetch failed: ${state.reason}`;
     case "idle":
       return undefined;
+  }
+};
+
+// Follows "From <ABI Source>"
+const formatContractProxy = (proxy: ContractProxy | undefined) => {
+  switch (proxy?.abi) {
+    case "implementation":
+      return ", via proxy";
+    case "proxy":
+      return ", proxy's own ABI: its implementation has no verified ABI";
+    default:
+      return "";
   }
 };
 
@@ -100,8 +117,16 @@ export const ContractForm = (props: ContractInfoProps) => {
     <>
       {messageContextHolder}
       {contract?.source && ABI_SOURCE_NAMES[contract.source] && (
-        <div className="rpc-details-muted mb-2">
+        <div
+          className="rpc-details-muted mb-2"
+          title={
+            contract.proxy
+              ? `Implementation ${contract.proxy.implementation}`
+              : undefined
+          }
+        >
           From {ABI_SOURCE_NAMES[contract.source]}
+          {formatContractProxy(contract.proxy)}
         </div>
       )}
       {/* Only for an address without a Contract; the form stays usable */}

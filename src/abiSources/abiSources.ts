@@ -1,13 +1,31 @@
 import { Abi } from "viem";
 import { AbiSourceResult } from "./sourcify.ts";
 
-import { AbiSourceName } from "../dal/contract.ts";
+import { AbiSourceName, ContractProxy } from "../dal/contract.ts";
 
 export type { AbiSourceName };
 
-// The outcome of asking the ABI Sources in turn; a miss lists those asked
+// The outcome of asking the ABI Sources in turn; a miss lists those asked.
+// `implementation` is set when the ABI Source marks the address as a proxy
 export type FetchedAbi =
-  | { kind: "found"; name: string; abi: Abi; source: AbiSourceName }
+  | {
+      kind: "found";
+      name: string;
+      abi: Abi;
+      source: AbiSourceName;
+      implementation?: `0x${string}`;
+    }
+  | { kind: "not-found"; sources: AbiSourceName[] };
+
+// The ABI to save for an address: for a proxy, the implementation's
+export type ContractAbi =
+  | {
+      kind: "found";
+      name: string;
+      abi: Abi;
+      source: AbiSourceName;
+      proxy?: ContractProxy;
+    }
   | { kind: "not-found"; sources: AbiSourceName[] };
 
 export interface AbiSources {
@@ -45,4 +63,62 @@ export async function fetchFromAbiSources(
     return { ...etherscan, source: "etherscan" };
   }
   return { kind: "not-found", sources: ["sourcify", "etherscan"] };
+}
+
+export interface ContractAbiSources extends AbiSources {
+  // The EIP-1967 implementation of the address, read on the Endpoint
+  readImplementation: (
+    address: `0x${string}`,
+  ) => Promise<`0x${string}` | undefined>;
+}
+
+// Fetches the ABI of the address and, when it is a proxy, its
+// implementation's ABI from the same ABI Sources. The proxy is the one the
+// ABI Source names, else the EIP-1967 slots on the Endpoint say; a failed
+// read of the slots counts as no proxy. A failure to fetch the
+// implementation's ABI is thrown, so no proxy's own ABI gets saved for good.
+export async function fetchContractAbi(
+  sources: ContractAbiSources,
+  chainId: number,
+  address: `0x${string}`,
+): Promise<ContractAbi> {
+  const fetched = await fetchFromAbiSources(sources, chainId, address);
+  const own: ContractAbi =
+    fetched.kind === "found"
+      ? {
+          kind: "found",
+          name: fetched.name,
+          abi: fetched.abi,
+          source: fetched.source,
+        }
+      : fetched;
+
+  const implementation =
+    (fetched.kind === "found" ? fetched.implementation : undefined) ??
+    (await sources.readImplementation(address).catch(() => undefined));
+  if (!implementation || implementation === address) {
+    return own;
+  }
+
+  const fetchedImplementation = await fetchFromAbiSources(
+    sources,
+    chainId,
+    implementation,
+  );
+  if (fetchedImplementation.kind === "found") {
+    return {
+      kind: "found",
+      name: fetchedImplementation.name,
+      abi: fetchedImplementation.abi,
+      source: fetchedImplementation.source,
+      proxy: { implementation, abi: "implementation" },
+    };
+  }
+  if (own.kind === "found") {
+    return { ...own, proxy: { implementation, abi: "proxy" } };
+  }
+  return {
+    kind: "not-found",
+    sources: [...new Set([...own.sources, ...fetchedImplementation.sources])],
+  };
 }

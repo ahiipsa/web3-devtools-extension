@@ -3,7 +3,7 @@ import { Contract, normalizeAddress } from "../dal/contract.ts";
 import { getContractCallParams } from "../utils/requestUtils.ts";
 import { trimContractAddress } from "../utils/text.ts";
 import { getCapturedChainId } from "./chainId.ts";
-import { AbiSourceName, FetchedAbi } from "./abiSources.ts";
+import { AbiSourceName, ContractAbi } from "./abiSources.ts";
 
 // What the Contract tab shows for an address without a Contract
 export type AbiFetchState =
@@ -17,7 +17,13 @@ export interface AbiFetcherDeps {
   saveFetchedContract: (
     contract: Contract & { source: AbiSourceName },
   ) => Promise<boolean>;
-  fetchAbi: (chainId: number, address: `0x${string}`) => Promise<FetchedAbi>;
+  // The Endpoint the address was called on, to read a proxy's
+  // implementation from
+  fetchAbi: (
+    chainId: number,
+    address: `0x${string}`,
+    endpoint: string,
+  ) => Promise<ContractAbi>;
   requestChainId: (endpoint: string) => Promise<number>;
   // How long to wait for the page's own eth_chainId, which often finishes
   // after its first calls, before asking the Endpoint; 1 s by default
@@ -63,7 +69,11 @@ export function createAbiFetcher(deps: AbiFetcherDeps) {
     notify();
   };
 
-  const fetchAbi = async (chainId: number, address: `0x${string}`) => {
+  const fetchAbi = async (
+    chainId: number,
+    address: `0x${string}`,
+    endpoint: string,
+  ) => {
     const key = attemptKey(chainId, address);
     setAttempt(key, { kind: "fetching" });
     try {
@@ -71,7 +81,7 @@ export function createAbiFetcher(deps: AbiFetcherDeps) {
         setAttempt(key, IDLE);
         return;
       }
-      const result = await deps.fetchAbi(chainId, address);
+      const result = await deps.fetchAbi(chainId, address, endpoint);
       if (result.kind === "not-found") {
         setAttempt(key, result);
         return;
@@ -81,6 +91,7 @@ export function createAbiFetcher(deps: AbiFetcherDeps) {
         name: result.name || trimContractAddress(address),
         abi: result.abi,
         source: result.source,
+        ...(result.proxy && { proxy: result.proxy }),
       });
       setAttempt(key, IDLE);
     } catch (error) {
@@ -88,9 +99,13 @@ export function createAbiFetcher(deps: AbiFetcherDeps) {
     }
   };
 
-  const fetchAutomatically = (chainId: number, address: `0x${string}`) => {
+  const fetchAutomatically = (
+    chainId: number,
+    address: `0x${string}`,
+    endpoint: string,
+  ) => {
     if (!attempts.has(attemptKey(chainId, address))) {
-      void fetchAbi(chainId, address);
+      void fetchAbi(chainId, address, endpoint);
     }
   };
 
@@ -108,7 +123,9 @@ export function createAbiFetcher(deps: AbiFetcherDeps) {
     const addresses = waiting.get(endpoint);
     waiting.delete(endpoint);
     if (automatic) {
-      addresses?.forEach((address) => fetchAutomatically(chainId, address));
+      addresses?.forEach((address) =>
+        fetchAutomatically(chainId, address, endpoint),
+      );
     }
     notify();
   };
@@ -175,7 +192,7 @@ export function createAbiFetcher(deps: AbiFetcherDeps) {
       const address = normalizeAddress(to);
       const chainId = chainIds.get(request.url);
       if (chainId !== undefined) {
-        fetchAutomatically(chainId, address);
+        fetchAutomatically(chainId, address, request.url);
         continue;
       }
       addWaiting(request.url, address);
@@ -200,7 +217,7 @@ export function createAbiFetcher(deps: AbiFetcherDeps) {
       }
     }
     if (attempts.get(attemptKey(chainId, address))?.kind !== "fetching") {
-      await fetchAbi(chainId, address);
+      await fetchAbi(chainId, address, endpoint);
     }
   };
 

@@ -39,10 +39,52 @@ export const BALANCE_OF_ABI = [
   },
 ];
 
-// Verified on the fake Sourcify; any other address answers 404
+const UPGRADE_TO_ABI = [
+  {
+    type: "function",
+    name: "upgradeTo",
+    stateMutability: "nonpayable",
+    inputs: [{ name: "newImplementation", type: "address" }],
+    outputs: [],
+  },
+];
+
+// Verified on the fake Sourcify; any other address answers 404. PROXY is a
+// proxy Sourcify resolves to IMPLEMENTATION; SLOT_PROXY is unverified and
+// names SLOT_IMPLEMENTATION in its EIP-1967 slot on the mock node only
 export const WETH = "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2";
+export const PROXY = "0x4444444444444444444444444444444444444444";
+export const IMPLEMENTATION = "0x43506849d7c04f9138d1a2050bbf3a0c054402dd";
+export const SLOT_PROXY = "0x5555555555555555555555555555555555555555";
+export const SLOT_IMPLEMENTATION = "0x6666666666666666666666666666666666666666";
 export const SOURCIFY = {
   [WETH]: { abi: BALANCE_OF_ABI, compilation: { name: "WETH9" } },
+  [PROXY]: {
+    abi: UPGRADE_TO_ABI,
+    compilation: { name: "FiatTokenProxy" },
+    proxyResolution: {
+      isProxy: true,
+      proxyType: "ZeppelinOSProxy",
+      implementations: [{ address: IMPLEMENTATION, name: "FiatTokenV2_2" }],
+    },
+  },
+  [IMPLEMENTATION]: {
+    abi: BALANCE_OF_ABI,
+    compilation: { name: "FiatTokenV2_2" },
+  },
+  [SLOT_IMPLEMENTATION]: {
+    abi: BALANCE_OF_ABI,
+    compilation: { name: "SlotToken" },
+  },
+};
+
+// The mock node's eth_getStorageAt, by `${address}:${slot}`; any other slot
+// holds zero
+const EIP1967_IMPLEMENTATION_SLOT =
+  "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc";
+const STORAGE = {
+  [`${SLOT_PROXY}:${EIP1967_IMPLEMENTATION_SLOT}`]:
+    "0x" + pad(SLOT_IMPLEMENTATION),
 };
 
 // Verified on the fake Etherscan only; any other address is not verified
@@ -123,7 +165,14 @@ const startNode = () =>
         const one = (r) => ({
           jsonrpc: "2.0",
           id: r.id,
-          ...(ANSWERS[r.method] ?? { result: null }),
+          ...(r.method === "eth_getStorageAt"
+            ? {
+                result:
+                  STORAGE[
+                    `${String(r.params?.[0]).toLowerCase()}:${r.params?.[1]}`
+                  ] ?? "0x" + pad("0"),
+              }
+            : (ANSWERS[r.method] ?? { result: null })),
         });
         res.setHeader("content-type", "application/json");
         res.end(
@@ -487,7 +536,7 @@ async function smoke() {
     check(
       "Sourcify asked once for the called address on the captured Chain",
       app.sourcifyUrls.join() ===
-        "https://sourcify.dev/server/v2/contract/1/0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48?fields=abi,compilation",
+        "https://sourcify.dev/server/v2/contract/1/0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48?fields=abi,compilation,proxyResolution",
       app.sourcifyUrls.join(", "),
     );
     await click(".rpc-details input");
@@ -649,7 +698,10 @@ async function smoke() {
     check(
       "the Panel asks an Endpoint for its chain id once",
       app.nodeLog.filter(
-        (r) => r.origin.startsWith("chrome-extension://") && r.path === "/rpc2",
+        (r) =>
+          r.origin.startsWith("chrome-extension://") &&
+          r.path === "/rpc2" &&
+          r.method === "eth_chainId",
       ).length === 1 &&
         app.sourcifyUrls.some((url) => url.toLowerCase().includes(DAI)),
       JSON.stringify(app.nodeLog.filter((r) => r.path === "/rpc2")),
@@ -718,6 +770,49 @@ async function smoke() {
       })()`),
     );
 
+    // A proxy decodes with its implementation's ABI, saved at its own address
+    await app.rpc(callTo(12, PROXY));
+    await app.sleep(800);
+    check(
+      "an eth_call to a proxy Sourcify resolves decodes as <impl name> / <function>",
+      /FiatTokenV2_2 \/ balanceOf|FiatTokenV2_2\s+balanceOf/.test(
+        await app.text(),
+      ),
+    );
+    await click(".rpc-table-body [role=row]:nth-child(10)");
+    await click(".rpc-details-tab", "Contract");
+    check(
+      "the Contract tab says From Sourcify, via proxy",
+      /From Sourcify, via proxy/.test(await app.text()),
+    );
+    await shot("08-via-proxy");
+    await app.rpc(callTo(13, SLOT_PROXY));
+    await app.sleep(800);
+    check(
+      "an eth_call to an EIP-1967 proxy decodes as <impl name> / <function>",
+      /SlotToken \/ balanceOf|SlotToken\s+balanceOf/.test(await app.text()),
+    );
+    check(
+      "the Panel reads the EIP-1967 slot on the Endpoint",
+      app.nodeLog.some(
+        (r) =>
+          r.origin.startsWith("chrome-extension://") &&
+          r.method === "eth_getStorageAt",
+      ),
+    );
+    const proxyContracts = await ev(
+      `chrome.storage.local.get("contracts").then((s) => s.contracts)`,
+    );
+    check(
+      "proxy Contracts are saved at the proxy addresses only",
+      proxyContracts?.[PROXY]?.proxy?.implementation === IMPLEMENTATION &&
+        proxyContracts?.[SLOT_PROXY]?.proxy?.implementation ===
+          SLOT_IMPLEMENTATION &&
+        !proxyContracts?.[IMPLEMENTATION] &&
+        !proxyContracts?.[SLOT_IMPLEMENTATION],
+      JSON.stringify(Object.keys(proxyContracts ?? {})),
+    );
+
     // Settings: off means no Sourcify request and no eth_chainId of its own
     await click(".rpc-table-settings-button");
     await click(".rpc-table-settings .ant-checkbox-wrapper");
@@ -743,7 +838,7 @@ async function smoke() {
         ),
       app.sourcifyUrls.slice(before).join(", "),
     );
-    await shot("08-end");
+    await shot("09-end");
   } catch (e) {
     check("scenario ran to the end", false, e.message.split("\n")[0]);
     await shot("99-crash").catch(() => {});

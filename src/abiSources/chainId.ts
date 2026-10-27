@@ -1,4 +1,5 @@
 import { RpcRequest } from "../types/main.ts";
+import { sendRpcRequest } from "./endpointRpc.ts";
 
 const parseChainId = (value: unknown) =>
   typeof value === "string" && /^0x[0-9a-f]+$/i.test(value)
@@ -18,25 +19,8 @@ export async function requestChainId(
   endpoint: string,
   fetchFn: typeof fetch = fetch,
 ): Promise<number> {
-  const response = await fetchFn(endpoint, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      jsonrpc: "2.0",
-      id: 1,
-      method: "eth_chainId",
-      params: [],
-    }),
-  });
-  if (!response.ok) {
-    throw new Error(`HTTP ${response.status}`);
-  }
-
-  const body = await response.json().catch(() => undefined);
-  if (body?.error?.message) {
-    throw new Error(String(body.error.message));
-  }
-  const chainId = parseChainId(body?.result);
+  const result = await sendRpcRequest(endpoint, "eth_chainId", [], fetchFn);
+  const chainId = parseChainId(result);
   if (chainId === undefined) {
     throw new Error("invalid eth_chainId response");
   }

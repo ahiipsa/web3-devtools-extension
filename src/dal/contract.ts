@@ -3,12 +3,20 @@ import { Abi } from "viem";
 // A public registry of verified contracts an ABI can be fetched from
 export type AbiSourceName = "sourcify" | "etherscan";
 
+// A fetched Contract at a proxy's address: the ABI is its implementation's,
+// or the proxy's own when the implementation has no verified ABI
+export interface ContractProxy {
+  implementation: `0x${string}`;
+  abi: "implementation" | "proxy";
+}
+
 export interface Contract {
   address: `0x${string}`;
   name: string;
   abi: Abi;
   // The ABI Source it was fetched from; none once the user saves it
   source?: AbiSourceName;
+  proxy?: ContractProxy;
 }
 
 type ContractStore = Record<string, Contract>;

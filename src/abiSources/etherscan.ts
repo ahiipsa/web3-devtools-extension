@@ -1,5 +1,5 @@
 import { Abi } from "viem";
-import { AbiSourceResult } from "./sourcify.ts";
+import { AbiSourceResult, parseImplementation } from "./sourcify.ts";
 
 const ETHERSCAN_API = "https://api.etherscan.io/v2/api";
 
@@ -78,10 +78,13 @@ export async function fetchFromEtherscan(
     return { kind: "not-found" };
   }
   const name = first.ContractName;
+  const implementation =
+    first.Proxy === "1" ? parseImplementation(first.Implementation) : undefined;
   return {
     kind: "found",
     name: typeof name === "string" ? name : "",
     abi: abi as Abi,
+    ...(implementation && { implementation }),
   };
 }
 
