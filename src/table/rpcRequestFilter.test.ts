@@ -164,7 +164,7 @@ describe("selectMethodCategory", () => {
   });
 });
 
-it("hides an RPC Request nothing answered when Errors is on", () => {
+it("keeps an RPC Request nothing answered when Errors is on", () => {
   const unanswered = buildRpcRequestRow(
     rpcRequest("eth_call", { response: undefined }),
     () => undefined,
@@ -172,5 +172,5 @@ it("hides an RPC Request nothing answered when Errors is on", () => {
 
   expect(
     matchesRpcRequestFilter(unanswered, { ...noFilter, errorsOnly: true }),
-  ).toBe(false);
+  ).toBe(true);
 });

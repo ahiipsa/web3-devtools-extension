@@ -35,7 +35,10 @@ export type MethodCategory = (typeof METHOD_CATEGORIES)[number];
 export type RpcRequestStatus =
   | { kind: "ok" }
   | { kind: "error"; code: number; message: string }
-  | { kind: "http"; code: number };
+  // HTTP status outside 2xx; 0 when the request never got an HTTP response
+  | { kind: "http"; code: number }
+  // HTTP succeeded, but the body holds no RPC Response for this RPC Request
+  | { kind: "no-response" };
 
 export interface RpcRequest {
   id: string;

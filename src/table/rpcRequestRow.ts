@@ -1,8 +1,12 @@
 import { Abi, decodeFunctionData } from "viem";
-import { RpcRequest, RpcRequestStatus } from "../types/main.ts";
+import { RpcRequest } from "../types/main.ts";
 import { Contract } from "../dal/contract.ts";
 import { getContractCallParams } from "../utils/requestUtils.ts";
-import { getRpcRequestStatus } from "../capture/getRpcRequestStatus.ts";
+import {
+  formatRpcRequestStatus,
+  getRpcRequestStatus,
+  isFailedRpcRequestStatus,
+} from "../capture/getRpcRequestStatus.ts";
 import { trimContractAddress } from "../utils/text.ts";
 import { findAbiFunction } from "../decoding/findAbiFunction.ts";
 
@@ -48,19 +52,6 @@ const getHost = (url: string) => {
   }
 };
 
-const formatStatus = (status: RpcRequestStatus | undefined) => {
-  switch (status?.kind) {
-    case "ok":
-      return "ok";
-    case "error":
-      return `error ${status.code}`;
-    case "http":
-      return `HTTP ${status.code}`;
-    default:
-      return undefined;
-  }
-};
-
 export function buildRpcRequestRow(
   request: RpcRequest,
   findContract: FindContract,
@@ -80,8 +71,8 @@ export function buildRpcRequestRow(
       contract && callParams?.data
         ? getFunctionName(contract.abi, callParams.data)
         : undefined,
-    status: formatStatus(status),
-    failed: status !== undefined && status.kind !== "ok",
+    status: formatRpcRequestStatus(status),
+    failed: isFailedRpcRequestStatus(status),
     endpoint: getHost(request.url),
     time: request.time,
   };

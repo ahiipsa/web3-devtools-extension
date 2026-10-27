@@ -129,15 +129,23 @@ describe("buildRpcRequestRow", () => {
     expect([httpError.status, httpError.failed]).toEqual(["HTTP 429", true]);
   });
 
-  it("leaves the status empty, and not failed, when nothing answered the RPC Request", () => {
-    const row = buildRpcRequestRow(
-      rpcRequest({ response: undefined, hasRpcResponseBody: true }),
-      noContracts,
-    );
+  it.each([
+    ["a JSON-RPC body for another id", 500, true, "HTTP 500"],
+    ["a text body", 500, false, "HTTP 500"],
+    ["an HTML body", 200, false, "no response"],
+    ["a JSON-RPC body for another id", 200, true, "no response"],
+    ["no HTTP response", 0, false, "failed"],
+  ])(
+    "flags an RPC Request without its RPC Response as failed: %s, HTTP %i",
+    (_body, httpStatus, hasRpcResponseBody, status) => {
+      const row = buildRpcRequestRow(
+        rpcRequest({ response: undefined, httpStatus, hasRpcResponseBody }),
+        noContracts,
+      );
 
-    expect(row.status).toBeUndefined();
-    expect(row.failed).toBe(false);
-  });
+      expect([row.status, row.failed]).toEqual([status, true]);
+    },
+  );
 });
 
 describe("formatDuration", () => {

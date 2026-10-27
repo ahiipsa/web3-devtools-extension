@@ -1,12 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { getRpcRequestStatus } from "./getRpcRequestStatus.ts";
+import {
+  formatRpcRequestStatus,
+  getRpcRequestStatus,
+  isFailedRpcRequestStatus,
+} from "./getRpcRequestStatus.ts";
 
 describe("getRpcRequestStatus", () => {
   it("is ok when the RPC Response has a result", () => {
     expect(
       getRpcRequestStatus({
         httpStatus: 200,
-        hasRpcResponseBody: true,
         response: { jsonrpc: "2.0", id: 1, result: "0x1" },
       }),
     ).toEqual({ kind: "ok" });
@@ -16,7 +19,6 @@ describe("getRpcRequestStatus", () => {
     expect(
       getRpcRequestStatus({
         httpStatus: 200,
-        hasRpcResponseBody: true,
         response: { jsonrpc: "2.0", id: 1, result: null },
       }),
     ).toEqual({ kind: "ok" });
@@ -26,7 +28,6 @@ describe("getRpcRequestStatus", () => {
     expect(
       getRpcRequestStatus({
         httpStatus: 200,
-        hasRpcResponseBody: true,
         response: {
           jsonrpc: "2.0",
           id: 1,
@@ -40,7 +41,6 @@ describe("getRpcRequestStatus", () => {
     expect(
       getRpcRequestStatus({
         httpStatus: 429,
-        hasRpcResponseBody: true,
         response: {
           jsonrpc: "2.0",
           id: 1,
@@ -51,11 +51,9 @@ describe("getRpcRequestStatus", () => {
   });
 
   it.each([400, 429, 500, 502])(
-    "is HTTP %i when the HTTP request failed and the body is not JSON-RPC",
+    "is HTTP %i when the HTTP request failed and no RPC Response was paired",
     (httpStatus) => {
-      expect(
-        getRpcRequestStatus({ httpStatus, hasRpcResponseBody: false }),
-      ).toEqual({
+      expect(getRpcRequestStatus({ httpStatus })).toEqual({
         kind: "http",
         code: httpStatus,
       });
@@ -63,33 +61,65 @@ describe("getRpcRequestStatus", () => {
   );
 
   it("is HTTP 0 when the request never got an HTTP response", () => {
-    expect(
-      getRpcRequestStatus({ httpStatus: 0, hasRpcResponseBody: false }),
-    ).toEqual({
+    expect(getRpcRequestStatus({ httpStatus: 0 })).toEqual({
       kind: "http",
       code: 0,
     });
   });
 
-  it("is none when HTTP succeeded but no RPC Response was paired", () => {
-    expect(
-      getRpcRequestStatus({ httpStatus: 200, hasRpcResponseBody: false }),
-    ).toBeUndefined();
-  });
-
-  it("is none when a failed batch response is JSON-RPC but omits the RPC Request", () => {
-    expect(
-      getRpcRequestStatus({ httpStatus: 500, hasRpcResponseBody: true }),
-    ).toBeUndefined();
+  it("is no response when HTTP succeeded but no RPC Response was paired", () => {
+    expect(getRpcRequestStatus({ httpStatus: 200 })).toEqual({
+      kind: "no-response",
+    });
   });
 
   it("is none when the RPC Response has neither a result nor an error", () => {
     expect(
       getRpcRequestStatus({
         httpStatus: 200,
-        hasRpcResponseBody: true,
         response: { jsonrpc: "2.0", id: 1 },
       }),
     ).toBeUndefined();
+  });
+});
+
+describe("formatRpcRequestStatus", () => {
+  it.each([
+    [{ kind: "ok" } as const, "ok"],
+    [
+      { kind: "error", code: -32000, message: "execution reverted" } as const,
+      "error -32000",
+    ],
+    [{ kind: "http", code: 500 } as const, "HTTP 500"],
+    [{ kind: "http", code: 0 } as const, "failed"],
+    [{ kind: "no-response" } as const, "no response"],
+  ])("labels %o as %s", (status, label) => {
+    expect(formatRpcRequestStatus(status)).toBe(label);
+  });
+
+  it("labels no status as nothing", () => {
+    expect(formatRpcRequestStatus(undefined)).toBeUndefined();
+  });
+});
+
+describe("isFailedRpcRequestStatus", () => {
+  it("is failed for every status but ok", () => {
+    expect(
+      [
+        { kind: "ok" },
+        { kind: "error", code: 3, message: "execution reverted" },
+        { kind: "http", code: 500 },
+        { kind: "http", code: 0 },
+        { kind: "no-response" },
+      ].map((status) =>
+        isFailedRpcRequestStatus(
+          status as Parameters<typeof isFailedRpcRequestStatus>[0],
+        ),
+      ),
+    ).toEqual([false, true, true, true, true]);
+  });
+
+  it("is not failed without a status", () => {
+    expect(isFailedRpcRequestStatus(undefined)).toBe(false);
   });
 });

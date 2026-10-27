@@ -18,7 +18,11 @@ import {
   decodeRpcRequest,
   Decoding,
 } from "../decoding/decodeRpcRequest.ts";
-import { getRpcRequestStatus } from "../capture/getRpcRequestStatus.ts";
+import {
+  formatRpcRequestStatus,
+  getRpcRequestStatus,
+  isFailedRpcRequestStatus,
+} from "../capture/getRpcRequestStatus.ts";
 import { formatDuration } from "../table/rpcRequestRow.ts";
 import { getDetailsTabs, getShownDetailsTab } from "../details/detailsTabs.ts";
 import { getTabListScrollDelta } from "../details/tabListWheel.ts";
@@ -182,28 +186,19 @@ const DecodingMismatch = (props: { children: ReactNode }) => (
 
 const StatusLabel = ({ request }: { request: RpcRequest }) => {
   const status = getRpcRequestStatus(request);
-  switch (status?.kind) {
-    case "ok":
-      return <span>ok</span>;
-    case "error":
-      return (
-        <span className="rpc-details-failed">
-          {`error ${status.code}: ${status.message}`}
-        </span>
-      );
-    case "http":
-      return (
-        <span className="rpc-details-failed">{`HTTP ${status.code}`}</span>
-      );
-    default:
-      return (
-        <span className="rpc-details-muted">
-          {request.hasRpcResponseBody
-            ? "No RPC Response with this id"
-            : "No RPC Response"}
-        </span>
-      );
+  const label = formatRpcRequestStatus(status);
+  if (!label) {
+    return <span className="rpc-details-muted">No result or error</span>;
   }
+  return (
+    <span
+      className={
+        isFailedRpcRequestStatus(status) ? "rpc-details-failed" : undefined
+      }
+    >
+      {status?.kind === "error" ? `${label}: ${status.message}` : label}
+    </span>
+  );
 };
 
 const Overview = (props: {
@@ -296,7 +291,16 @@ const Response = (props: {
   const { response } = request;
 
   if (!response) {
-    return <StatusLabel request={request} />;
+    return (
+      <>
+        <StatusLabel request={request} />
+        <div className="rpc-details-muted">
+          {request.hasRpcResponseBody
+            ? "No RPC Response with this id"
+            : "No RPC Response"}
+        </div>
+      </>
+    );
   }
 
   return (
