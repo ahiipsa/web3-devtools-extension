@@ -45,6 +45,12 @@ export const SOURCIFY = {
   [WETH]: { abi: BALANCE_OF_ABI, compilation: { name: "WETH9" } },
 };
 
+// Verified on the fake Etherscan only; any other address is not verified
+export const LINK = "0x514910771af9ca656af840dff83e8264ecf986ca";
+export const ETHERSCAN = {
+  [LINK]: { ABI: JSON.stringify(BALANCE_OF_ABI), ContractName: "LinkToken" },
+};
+
 // The mock node's answer per method; anything else gets `result: null`
 const ANSWERS = {
   eth_chainId: { result: "0x1" },
@@ -190,23 +196,50 @@ const KEY_CODES = {
   End: 35,
 };
 const MODIFIERS = { alt: 1, ctrl: 2, meta: 4, shift: 8 };
-// Answers the Panel's requests to https://sourcify.dev/* from SOURCIFY, so
-// nothing reaches the real Sourcify; returns the URLs it was asked for
-const interceptSourcify = async (panel) => {
-  const urls = [];
+const answerEtherscan = (url) => {
+  const address = new URL(url).searchParams.get("address")?.toLowerCase();
+  const fixture = ETHERSCAN[address] ?? {
+    ABI: "Contract source code not verified",
+    ContractName: "",
+  };
+  return {
+    status: 200,
+    body: {
+      status: "1",
+      message: "OK",
+      result: [{ SourceCode: "", ...fixture }],
+    },
+  };
+};
+
+const answerSourcify = (url) => {
+  const address = /\/contract\/\d+\/(0x[0-9a-fA-F]{40})/
+    .exec(url)?.[1]
+    ?.toLowerCase();
+  const fixture = SOURCIFY[address];
+  return fixture
+    ? { status: 200, body: fixture }
+    : {
+        status: 404,
+        body: { error: "Contract not found", customCode: "not_found" },
+      };
+};
+
+// Answers the Panel's requests to https://sourcify.dev/* from SOURCIFY and to
+// https://api.etherscan.io/* from ETHERSCAN, so nothing reaches the real ABI
+// Sources; returns the URLs each was asked for
+const interceptAbiSources = async (panel) => {
+  const sourcifyUrls = [];
+  const etherscanUrls = [];
   panel.on("Fetch.requestPaused", ({ requestId, request }) => {
-    urls.push(request.url);
-    const address = /\/contract\/\d+\/(0x[0-9a-fA-F]{40})/
-      .exec(request.url)?.[1]
-      ?.toLowerCase();
-    const fixture = SOURCIFY[address];
-    const body = fixture ?? {
-      error: "Contract not found",
-      customCode: "not_found",
-    };
+    const etherscan = request.url.startsWith("https://api.etherscan.io/");
+    (etherscan ? etherscanUrls : sourcifyUrls).push(request.url);
+    const { status, body } = (etherscan ? answerEtherscan : answerSourcify)(
+      request.url,
+    );
     panel.send("Fetch.fulfillRequest", {
       requestId,
-      responseCode: fixture ? 200 : 404,
+      responseCode: status,
       responseHeaders: [
         { name: "content-type", value: "application/json" },
         { name: "access-control-allow-origin", value: "*" },
@@ -215,9 +248,12 @@ const interceptSourcify = async (panel) => {
     });
   });
   await panel.send("Fetch.enable", {
-    patterns: [{ urlPattern: "https://sourcify.dev/*" }],
+    patterns: [
+      { urlPattern: "https://sourcify.dev/*" },
+      { urlPattern: "https://api.etherscan.io/*" },
+    ],
   });
-  return urls;
+  return { sourcifyUrls, etherscanUrls };
 };
 
 const LEGACY = `(async () => (await import("./ui/legacy/legacy.js")).InspectorView.InspectorView.instance())()`;
@@ -270,7 +306,7 @@ export async function launch() {
     /^chrome-extension:\/\/[a-z]+\/index\.html/.test(u),
   );
   await panel.send("Runtime.enable");
-  const sourcifyUrls = await interceptSourcify(panel);
+  const { sourcifyUrls, etherscanUrls } = await interceptAbiSources(panel);
   for (
     let i = 0;
     i < 50 && !(await panel.evaluate(`!!document.querySelector(".rpc-table")`));
@@ -291,8 +327,9 @@ export async function launch() {
     panel,
     ev,
     sleep,
-    // Requests the Panel sent to the fake Sourcify, and that the node got
+    // Requests the Panel sent to the fake ABI Sources, and that the node got
     sourcifyUrls,
+    etherscanUrls,
     nodeLog,
     // Sends one request body (object, batch array or raw string) from the dApp
     // page; another `path` is another Endpoint
@@ -618,9 +655,71 @@ async function smoke() {
       JSON.stringify(app.nodeLog.filter((r) => r.path === "/rpc2")),
     );
 
+    check(
+      "without an Etherscan API key no Etherscan request is made",
+      app.etherscanUrls.length === 0,
+      app.etherscanUrls.join(", "),
+    );
+
+    // With a key, Etherscan is asked after a Sourcify 404
+    const KEY = "SMOKETESTKEY123";
+    await click(".rpc-table-settings-button");
+    await click(".rpc-table-settings-field input");
+    await type(KEY);
+    await app.sleep(300);
+    await shot("06-settings");
+    const withKey = await ev(
+      `chrome.storage.local.get("settings").then((s) => s.settings)`,
+    );
+    check("the Etherscan API key is stored", withKey?.etherscanApiKey === KEY);
+    // Closes the popover
+    await click(".rpc-table-settings-button");
+    await app.rpc(callTo(10, LINK));
+    await app.sleep(800);
+    check(
+      "an eth_call to an address verified on Etherscan only decodes",
+      /LinkToken \/ balanceOf|LinkToken\s+balanceOf/.test(await app.text()),
+    );
+    check(
+      "Etherscan asked once, after Sourcify, with the Chain, address and key",
+      app.etherscanUrls.length === 1 &&
+        app.etherscanUrls[0] ===
+          `https://api.etherscan.io/v2/api?chainid=1&module=contract&action=getsourcecode&address=${LINK}&apikey=${KEY}` &&
+        app.sourcifyUrls.some((url) => url.toLowerCase().includes(LINK)),
+      app.etherscanUrls.join(", ").replaceAll(KEY, "<key>"),
+    );
+    await click(".rpc-table-body [role=row]:nth-child(8)");
+    await click(".rpc-details-tab", "Contract");
+    check(
+      "the Contract tab says From Etherscan",
+      /From Etherscan/.test(await app.text()),
+    );
+    await shot("07-from-etherscan");
+    const UNVERIFIED = "0x2222222222222222222222222222222222222222";
+    await app.rpc(callTo(11, UNVERIFIED));
+    await app.sleep(800);
+    await click(".rpc-table-body [role=row]:nth-child(9)");
+    await click(".rpc-details-tab", "Contract");
+    check(
+      "a miss on both says so in the Contract tab",
+      /No verified ABI on Sourcify or Etherscan/.test(await app.text()),
+    );
+    // React mirrors a controlled input's value into its attribute, so the
+    // settings field itself is left out
+    check(
+      "the key is nowhere in the Panel's DOM outside the settings field",
+      await ev(`(() => {
+        const body = document.body.cloneNode(true);
+        body
+          .querySelectorAll(".rpc-table-settings-field input")
+          .forEach((input) => input.remove());
+        return !body.outerHTML.includes(${JSON.stringify(KEY)}) &&
+          !document.body.innerText.includes(${JSON.stringify(KEY)});
+      })()`),
+    );
+
     // Settings: off means no Sourcify request and no eth_chainId of its own
     await click(".rpc-table-settings-button");
-    await shot("06-settings");
     await click(".rpc-table-settings .ant-checkbox-wrapper");
     const stored = await ev(
       `chrome.storage.local.get("settings").then((s) => s.settings)`,
@@ -644,7 +743,7 @@ async function smoke() {
         ),
       app.sourcifyUrls.slice(before).join(", "),
     );
-    await shot("07-end");
+    await shot("08-end");
   } catch (e) {
     check("scenario ran to the end", false, e.message.split("\n")[0]);
     await shot("99-crash").catch(() => {});

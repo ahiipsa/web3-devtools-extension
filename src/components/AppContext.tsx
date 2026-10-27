@@ -4,16 +4,38 @@ import { RpcRequest } from "../types/main.ts";
 import { DetailsTab } from "../details/detailsTabs.ts";
 import { AbiFetcher, createAbiFetcher } from "../abiSources/abiFetcher.ts";
 import { fetchFromSourcify } from "../abiSources/sourcify.ts";
+import {
+  createSerialQueue,
+  ETHERSCAN_REQUEST_INTERVAL,
+  fetchFromEtherscan,
+} from "../abiSources/etherscan.ts";
+import { fetchFromAbiSources } from "../abiSources/abiSources.ts";
 import { requestChainId } from "../abiSources/chainId.ts";
 import { getContract, saveFetchedContract } from "../dal/contract.ts";
 import { useSettings } from "../hooks/useSettings.ts";
-import { Settings } from "../dal/settings.ts";
+import { DEFAULT_SETTINGS, getSettings, Settings } from "../dal/settings.ts";
+
+const etherscanQueue = createSerialQueue(ETHERSCAN_REQUEST_INTERVAL);
 
 // One per Panel session, so attempts survive Clear and navigation
 const abiFetcher = createAbiFetcher({
   getContract,
   saveFetchedContract,
-  fetchAbi: (chainId, address) => fetchFromSourcify(chainId, address),
+  fetchAbi: (chainId, address) =>
+    fetchFromAbiSources(
+      {
+        sourcify: (chainId, address) => fetchFromSourcify(chainId, address),
+        etherscan: (chainId, address, apiKey) =>
+          etherscanQueue(() => fetchFromEtherscan(chainId, address, apiKey)),
+        getEtherscanApiKey: () =>
+          getSettings().then(
+            (settings) => settings.etherscanApiKey,
+            () => "",
+          ),
+      },
+      chainId,
+      address,
+    ),
   requestChainId: (endpoint) => requestChainId(endpoint),
 });
 
@@ -39,7 +61,7 @@ export const AppContext = React.createContext<AppContext>({
   setDetailsTab: (_detailsTab: DetailsTab) => {},
   rpcRequestList: [],
   clearRpcRequestList: () => {},
-  settings: { fetchAbisAutomatically: true },
+  settings: DEFAULT_SETTINGS,
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   updateSettings: (_changes: Partial<Settings>) => {},
   abiFetcher,

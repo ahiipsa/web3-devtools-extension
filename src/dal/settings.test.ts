@@ -22,21 +22,46 @@ describe("Panel settings", () => {
     });
   });
 
-  it("fetches ABIs automatically by default", async () => {
-    expect(await getSettings()).toEqual({ fetchAbisAutomatically: true });
+  it("fetches ABIs automatically and has no Etherscan API key by default", async () => {
+    expect(await getSettings()).toEqual({
+      fetchAbisAutomatically: true,
+      etherscanApiKey: "",
+    });
   });
 
   it("remembers that automatic fetching is turned off", async () => {
-    await saveSettings({ fetchAbisAutomatically: false });
+    await saveSettings({ fetchAbisAutomatically: false, etherscanApiKey: "" });
 
-    expect(await getSettings()).toEqual({ fetchAbisAutomatically: false });
+    expect(await getSettings()).toMatchObject({
+      fetchAbisAutomatically: false,
+    });
   });
 
-  it("falls back to the default for a malformed stored value", async () => {
+  it("remembers the Etherscan API key", async () => {
+    await saveSettings({ fetchAbisAutomatically: true, etherscanApiKey: "K" });
+
+    expect(await getSettings()).toMatchObject({ etherscanApiKey: "K" });
+  });
+
+  it("keeps the setting stored before there was an Etherscan API key", async () => {
     await chrome.storage.local.set({
-      settings: { fetchAbisAutomatically: "no" },
+      settings: { fetchAbisAutomatically: false },
     });
 
-    expect(await getSettings()).toEqual({ fetchAbisAutomatically: true });
+    expect(await getSettings()).toEqual({
+      fetchAbisAutomatically: false,
+      etherscanApiKey: "",
+    });
+  });
+
+  it("falls back to the defaults for malformed stored values", async () => {
+    await chrome.storage.local.set({
+      settings: { fetchAbisAutomatically: "no", etherscanApiKey: 42 },
+    });
+
+    expect(await getSettings()).toEqual({
+      fetchAbisAutomatically: true,
+      etherscanApiKey: "",
+    });
   });
 });

@@ -3,24 +3,21 @@ import { Contract, normalizeAddress } from "../dal/contract.ts";
 import { getContractCallParams } from "../utils/requestUtils.ts";
 import { trimContractAddress } from "../utils/text.ts";
 import { getCapturedChainId } from "./chainId.ts";
-import { AbiSourceResult } from "./sourcify.ts";
+import { AbiSourceName, FetchedAbi } from "./abiSources.ts";
 
 // What the Contract tab shows for an address without a Contract
 export type AbiFetchState =
   | { kind: "idle" }
   | { kind: "fetching" }
-  | { kind: "not-found" }
+  | { kind: "not-found"; sources: AbiSourceName[] }
   | { kind: "failed"; reason: string };
 
 export interface AbiFetcherDeps {
   getContract: (address: `0x${string}`) => Promise<Contract | null>;
   saveFetchedContract: (
-    contract: Contract & { source: "sourcify" },
+    contract: Contract & { source: AbiSourceName },
   ) => Promise<boolean>;
-  fetchAbi: (
-    chainId: number,
-    address: `0x${string}`,
-  ) => Promise<AbiSourceResult>;
+  fetchAbi: (chainId: number, address: `0x${string}`) => Promise<FetchedAbi>;
   requestChainId: (endpoint: string) => Promise<number>;
   // How long to wait for the page's own eth_chainId, which often finishes
   // after its first calls, before asking the Endpoint; 1 s by default
@@ -83,7 +80,7 @@ export function createAbiFetcher(deps: AbiFetcherDeps) {
         address,
         name: result.name || trimContractAddress(address),
         abi: result.abi,
-        source: "sourcify",
+        source: result.source,
       });
       setAttempt(key, IDLE);
     } catch (error) {

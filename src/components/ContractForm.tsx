@@ -4,6 +4,7 @@ import { useContractQuery } from "../hooks/useContractQuery.ts";
 import { Button, Form, FormProps, Input, message } from "antd";
 import { useAbiFetchState } from "../hooks/useAbiFetchState.ts";
 import { AbiFetchState } from "../abiSources/abiFetcher.ts";
+import { AbiSourceName } from "../abiSources/abiSources.ts";
 
 interface ContractInfoProps {
   contractAddress: `0x${string}`;
@@ -11,12 +12,18 @@ interface ContractInfoProps {
   endpoint: string;
 }
 
+const ABI_SOURCE_NAMES: Record<AbiSourceName, string> = {
+  sourcify: "Sourcify",
+  etherscan: "Etherscan",
+};
+
 const formatAbiFetchState = (state: AbiFetchState) => {
   switch (state.kind) {
     case "fetching":
       return "Fetching ABI…";
     case "not-found":
-      return "No verified ABI on Sourcify";
+      // The ABI Sources asked, not those that would be asked now
+      return `No verified ABI on ${state.sources.map((source) => ABI_SOURCE_NAMES[source]).join(" or ")}`;
     case "failed":
       return `Fetch failed: ${state.reason}`;
     case "idle":
@@ -48,7 +55,7 @@ export const ContractForm = (props: ContractInfoProps) => {
   useEffect(() => {
     setConfirmingDelete(false);
     // A fetched Contract that lands while the user types keeps their edits
-    if (contract?.source === "sourcify" && form.isFieldsTouched()) {
+    if (contract?.source && form.isFieldsTouched()) {
       return;
     }
     form.resetFields();
@@ -92,8 +99,10 @@ export const ContractForm = (props: ContractInfoProps) => {
   return (
     <>
       {messageContextHolder}
-      {contract?.source === "sourcify" && (
-        <div className="rpc-details-muted mb-2">From Sourcify</div>
+      {contract?.source && (
+        <div className="rpc-details-muted mb-2">
+          From {ABI_SOURCE_NAMES[contract.source]}
+        </div>
       )}
       {/* Only for an address without a Contract; the form stays usable */}
       {contractQuery.isSuccess && !contract && (

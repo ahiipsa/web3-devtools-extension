@@ -141,8 +141,23 @@ const SettingsButton = () => {
           >
             Fetch ABIs automatically
           </Checkbox>
+          <label className="rpc-table-settings-field">
+            Etherscan API key
+            {/* Masked; saved as typed, used from the next fetch on */}
+            <Input.Password
+              size="small"
+              placeholder="Optional"
+              autoComplete="off"
+              spellCheck={false}
+              value={settings.etherscanApiKey}
+              onChange={(event) =>
+                updateSettings({ etherscanApiKey: event.target.value })
+              }
+            />
+          </label>
           <div className="rpc-table-settings-note">
-            Addresses of called contracts and the chain id are sent to Sourcify.
+            Addresses of called contracts and the chain id are sent to Sourcify
+            and, with a key, to Etherscan.
           </div>
         </div>
       }

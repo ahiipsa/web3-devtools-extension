@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { Abi } from "viem";
 import { RpcRequest } from "../types/main.ts";
 import { Contract } from "../dal/contract.ts";
-import { AbiSourceResult } from "./sourcify.ts";
+import { FetchedAbi } from "./abiSources.ts";
 import { createAbiFetcher } from "./abiFetcher.ts";
 
 const ENDPOINT = "https://rpc.example/mainnet";
@@ -49,7 +49,7 @@ const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
 const setup = (
   options: {
     contracts?: Record<string, Contract>;
-    fetchAbi?: (chainId: number, address: string) => Promise<AbiSourceResult>;
+    fetchAbi?: (chainId: number, address: string) => Promise<FetchedAbi>;
     requestChainId?: (endpoint: string) => Promise<number>;
     chainLookupDelay?: number;
   } = {},
@@ -70,10 +70,11 @@ const setup = (
     }),
     fetchAbi: vi.fn(
       options.fetchAbi ??
-        (async (): Promise<AbiSourceResult> => ({
+        (async (): Promise<FetchedAbi> => ({
           kind: "found",
           name: "WETH9",
           abi: ABI,
+          source: "sourcify",
         })),
     ),
     requestChainId: vi.fn(options.requestChainId ?? (async () => 137)),
@@ -173,7 +174,7 @@ describe("Fetching a Contract's ABI", () => {
 
   it("fetches the same address again on another Chain", async () => {
     const { fetcher, deps } = setup({
-      fetchAbi: async () => ({ kind: "not-found" }),
+      fetchAbi: async () => ({ kind: "not-found", sources: ["sourcify"] }),
     });
 
     fetcher.observe(
@@ -218,9 +219,47 @@ describe("Fetching a Contract's ABI", () => {
     });
   });
 
+  it("marks a Contract found on Etherscan as from Etherscan", async () => {
+    const { fetcher, contracts } = setup({
+      fetchAbi: async () => ({
+        kind: "found",
+        name: "WETH9",
+        abi: ABI,
+        source: "etherscan",
+      }),
+    });
+
+    fetcher.observe([chainIdOn(ENDPOINT, "0x1"), callOn(ENDPOINT, WETH)], true);
+    await flush();
+
+    expect(contracts[WETH]).toMatchObject({ source: "etherscan" });
+  });
+
+  it("reports a miss on every ABI Source asked", async () => {
+    const { fetcher } = setup({
+      fetchAbi: async () => ({
+        kind: "not-found",
+        sources: ["sourcify", "etherscan"],
+      }),
+    });
+
+    fetcher.observe([chainIdOn(ENDPOINT, "0x1"), callOn(ENDPOINT, WETH)], true);
+    await flush();
+
+    expect(fetcher.getState(ENDPOINT, WETH)).toEqual({
+      kind: "not-found",
+      sources: ["sourcify", "etherscan"],
+    });
+  });
+
   it("names a found Contract without a compilation name by its short address", async () => {
     const { fetcher, contracts } = setup({
-      fetchAbi: async () => ({ kind: "found", name: "", abi: ABI }),
+      fetchAbi: async () => ({
+        kind: "found",
+        name: "",
+        abi: ABI,
+        source: "sourcify",
+      }),
     });
 
     fetcher.observe([chainIdOn(ENDPOINT, "0x1"), callOn(ENDPOINT, WETH)], true);
@@ -240,13 +279,16 @@ describe("Fetching a Contract's ABI", () => {
 
   it("reports no verified ABI on 404", async () => {
     const { fetcher, contracts } = setup({
-      fetchAbi: async () => ({ kind: "not-found" }),
+      fetchAbi: async () => ({ kind: "not-found", sources: ["sourcify"] }),
     });
 
     fetcher.observe([chainIdOn(ENDPOINT, "0x1"), callOn(ENDPOINT, WETH)], true);
     await flush();
 
-    expect(fetcher.getState(ENDPOINT, WETH)).toEqual({ kind: "not-found" });
+    expect(fetcher.getState(ENDPOINT, WETH)).toEqual({
+      kind: "not-found",
+      sources: ["sourcify"],
+    });
     expect(contracts).toEqual({});
   });
 
@@ -312,7 +354,7 @@ describe("Automatic fetching turned off", () => {
 describe("Fetching on demand", () => {
   it("retries an address that was not found", async () => {
     const { fetcher, deps } = setup({
-      fetchAbi: async () => ({ kind: "not-found" }),
+      fetchAbi: async () => ({ kind: "not-found", sources: ["sourcify"] }),
     });
     fetcher.observe([chainIdOn(ENDPOINT, "0x1"), callOn(ENDPOINT, WETH)], true);
     await flush();
