@@ -17,7 +17,7 @@ The URL an RPC Request was sent to. One page can talk to several Endpoints.
 _Avoid_: RPC URL, node, provider
 
 **Method Category**:
-The group an RPC Request falls into by its `method`: Calls, Transactions, Logs, Chain or Other. Every method belongs to exactly one Method Category.
+The group an RPC Request falls into by its `method`: Calls, Transactions, Logs, Chain or Other. Every method belongs to exactly one Method Category. Wallet actions (accounts, signing) are Other.
 _Avoid_: Request type, kind
 
 **RPC Response**:
