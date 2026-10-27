@@ -20,6 +20,10 @@ _Avoid_: RPC URL, node, provider
 The group an RPC Request falls into by its `method`: Calls, Transactions, Logs, Chain or Other. Every method belongs to exactly one Method Category. Wallet actions (accounts, signing) are Other.
 _Avoid_: Request type, kind
 
+**Selected RPC Request**:
+The highlighted RPC Request in the Panel, whether or not its details are open. At most one at a time.
+_Avoid_: Active request, current row
+
 **RPC Response**:
 The JSON-RPC result or error that answers one RPC Request.
 _Avoid_: Reply, result
