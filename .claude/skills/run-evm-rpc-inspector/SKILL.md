@@ -35,22 +35,23 @@ It covers capture (single, batch, non-RPC POST skipped), the details, adding a C
 Ad hoc, for whatever the change touches, pipe line commands into the REPL:
 
 ```bash
-printf '%s\n' traffic 'click .rpc-table-body [role=row]:nth-child(2)' selected 'key ArrowDown' selected \
+printf '%s\n' traffic 'clickrow {"method":"eth_blockNumber"}' selected 'key ArrowDown' selected \
   'click .rpc-details-tab @ Params' 'key f meta' 'eval document.activeElement.getAttribute("aria-label")' \
   'rpc {"jsonrpc":"2.0","id":9,"method":"eth_chainId"}' rows drawer errors 'ss repl' quit \
   | node .claude/skills/run-evm-rpc-inspector/driver.mjs repl
 ```
 
-| Command                                               | Does                                                                              |
-| ----------------------------------------------------- | --------------------------------------------------------------------------------- |
-| `traffic`                                             | sends the standard traffic (five RPC Requests, see `TRAFFIC` in the driver)       |
-| `rpc <json>`                                          | sends one request body from the dApp page, prints the node's response             |
-| `click <selector> [@ text]`                           | real mouse click on the first match in the Panel (text = innerText or aria-label) |
-| `key <key> [meta ctrl alt shift]`                     | real key press to whatever has focus, e.g. `key Escape`, `key f meta`             |
-| `type <text>`                                         | inserts text into the focused field                                               |
-| `eval <js>` / `devtools <js>`                         | evaluates in the Panel / in the DevTools frontend, prints JSON                    |
-| `rows`, `selected`, `drawer`, `closedrawer`, `errors` | table rows, selected row, DevTools drawer open?, close it, Panel exceptions       |
-| `ss <name>`                                           | screenshot of the DevTools window to `$OUT/<name>.png`                            |
+| Command                                               | Does                                                                                  |
+| ----------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| `traffic`                                             | sends the standard traffic (five RPC Requests, see `TRAFFIC` in the driver)           |
+| `rpc <json>`                                          | sends one request body from the dApp page, prints the node's response                 |
+| `click <selector> [@ text]`                           | real mouse click on the first match in the Panel (text = innerText or aria-label)     |
+| `clickrow <json> [n]`                                 | clicks the n-th (from 0) row whose `method`, `contract` and `fn` equal the given ones |
+| `key <key> [meta ctrl alt shift]`                     | real key press to whatever has focus, e.g. `key Escape`, `key f meta`                 |
+| `type <text>`                                         | inserts text into the focused field                                                   |
+| `eval <js>` / `devtools <js>`                         | evaluates in the Panel / in the DevTools frontend, prints JSON                        |
+| `rows`, `selected`, `drawer`, `closedrawer`, `errors` | table rows, selected row, DevTools drawer open?, close it, Panel exceptions           |
+| `ss <name>`                                           | screenshot of the DevTools window to `$OUT/<name>.png`                                |
 
 **Sourcify and Etherscan are never hit.** `launch()` enables CDP `Fetch` on the Panel target for `https://sourcify.dev/*` and `https://api.etherscan.io/*`. Sourcify answers from `SOURCIFY` in the driver: a 200 with an ABI and `compilation.name` (`WETH9`) for `WETH`, a proxy with `proxyResolution` naming `IMPLEMENTATION` (`FiatTokenV2_2`) for `PROXY`, `SlotToken` for `SLOT_IMPLEMENTATION`, a 500 for `SOURCIFY_DOWN`, a 404 for any other address. Etherscan answers from `ETHERSCAN`: `LinkToken` for `LINK`, `DownToken` for `SOURCIFY_DOWN`, "Contract source code not verified" for any other address. `app.sourcifyUrls` and `app.etherscanUrls` list the URLs the Panel asked for, in order (the Etherscan ones carry the key). The mock node answers with open CORS and logs every RPC Request it gets in `app.nodeLog` (`{ origin, path, method }`); the Panel's own `eth_chainId` has a `chrome-extension://` origin. `app.rpc(body, "/rpc2")` sends to another path, i.e. another Endpoint whose chain id the Panel has not captured. In the REPL, `eval` the storage or `click .rpc-table-settings-button` for the settings.
 

@@ -410,15 +410,18 @@ const interceptAbiSources = async (panel) => {
     const { status, body } = (etherscan ? answerEtherscan : answerSourcify)(
       request.url,
     );
-    panel.send("Fetch.fulfillRequest", {
-      requestId,
-      responseCode: status,
-      responseHeaders: [
-        { name: "content-type", value: "application/json" },
-        { name: "access-control-allow-origin", value: "*" },
-      ],
-      body: Buffer.from(JSON.stringify(body)).toString("base64"),
-    });
+    // Fire and forget: a Panel that went away no longer waits for the answer
+    panel
+      .send("Fetch.fulfillRequest", {
+        requestId,
+        responseCode: status,
+        responseHeaders: [
+          { name: "content-type", value: "application/json" },
+          { name: "access-control-allow-origin", value: "*" },
+        ],
+        body: Buffer.from(JSON.stringify(body)).toString("base64"),
+      })
+      .catch(() => {});
   });
   await panel.send("Fetch.enable", {
     patterns: [
@@ -503,12 +506,17 @@ export async function launch() {
     // Polls `read` until `ok` holds for what it returns, or `timeout` ms
     // pass, and returns the last value either way, so a check can still
     // print it. The Panel captures, decodes and fetches asynchronously: wait
-    // for the state a check needs rather than for a fixed time
+    // for the state a check needs rather than for a fixed time. A `read` that
+    // throws (the Panel mid-reload) is retried, and rethrown at the timeout
     until: async (read, ok = Boolean, timeout = 5000) => {
       const end = Date.now() + timeout;
       for (;;) {
-        const value = await read();
-        if (ok(value) || Date.now() > end) return value;
+        try {
+          const value = await read();
+          if (ok(value) || Date.now() > end) return value;
+        } catch (e) {
+          if (Date.now() > end) throw e;
+        }
         await sleep(100);
       }
     },
@@ -714,6 +722,9 @@ async function smoke() {
   const callsContractSoon = (contract, fn) =>
     until(() => callsContract(contract, fn));
   const textSoon = (test) => until(app.text, test);
+  // A check that something happened only once, or not at all, cannot wait
+  // for a state: it gives the Panel this long to do it anyway
+  const DUPLICATE_WINDOW = 500;
   const json = (value) => JSON.stringify(value);
   try {
     await shot("01-empty");
@@ -992,6 +1003,8 @@ async function smoke() {
     const daiFetched = () =>
       app.sourcifyUrls.some((url) => url.toLowerCase().includes(DAI));
     await until(() => ownChainIds() > 0 && daiFetched());
+    // Time for a duplicate to show up
+    await app.sleep(DUPLICATE_WINDOW);
     check(
       "the Panel asks an Endpoint for its chain id once",
       ownChainIds() === 1 && daiFetched(),
@@ -1022,6 +1035,7 @@ async function smoke() {
       "an eth_call to an address verified on Etherscan only decodes",
       await callsContractSoon("LinkToken", "balanceOf"),
     );
+    await app.sleep(DUPLICATE_WINDOW);
     check(
       "Etherscan asked once, after Sourcify, with the Chain, address and key",
       app.etherscanUrls.length === 1 &&
@@ -1088,19 +1102,22 @@ async function smoke() {
           r.method === "eth_getStorageAt",
       ),
     );
-    const proxiesSaved = (contracts) =>
-      contracts?.[PROXY]?.proxy?.implementation === IMPLEMENTATION &&
-      contracts?.[SLOT_PROXY]?.proxy?.implementation === SLOT_IMPLEMENTATION &&
-      !contracts?.[IMPLEMENTATION] &&
-      !contracts?.[SLOT_IMPLEMENTATION];
-    const proxyContracts = await until(
-      () =>
-        ev(`chrome.storage.local.get("contracts").then((s) => s.contracts)`),
-      proxiesSaved,
+    const storedContracts = () =>
+      ev(`chrome.storage.local.get("contracts").then((s) => s.contracts)`);
+    await until(
+      storedContracts,
+      (contracts) => contracts?.[PROXY] && contracts?.[SLOT_PROXY],
     );
+    // Time for a save at an implementation's own address to show up
+    await app.sleep(DUPLICATE_WINDOW);
+    const proxyContracts = await storedContracts();
     check(
       "proxy Contracts are saved at the proxy addresses only",
-      proxiesSaved(proxyContracts),
+      proxyContracts?.[PROXY]?.proxy?.implementation === IMPLEMENTATION &&
+        proxyContracts?.[SLOT_PROXY]?.proxy?.implementation ===
+          SLOT_IMPLEMENTATION &&
+        !proxyContracts?.[IMPLEMENTATION] &&
+        !proxyContracts?.[SLOT_IMPLEMENTATION],
       JSON.stringify(Object.keys(proxyContracts ?? {})),
     );
 
@@ -1341,7 +1358,8 @@ async function smoke() {
     const before = app.sourcifyUrls.length;
     await app.rpc(callTo(8, USDT), "/rpc3");
     await app.rpc(callTo(9, "0x1111111111111111111111111111111111111111"));
-    // Nothing to wait for: give the Panel the time it would take to ask
+    // Nothing to wait for: the Panel first waits 1 s for the page's own
+    // eth_chainId, then would ask
     await app.sleep(1600);
     check(
       "with the setting off no Sourcify request is made",
@@ -1375,7 +1393,8 @@ const HELP = `commands (one per line):
   traffic                       send the standard RPC traffic from the dApp page
   rpc <json>                    send one request body, e.g. rpc {"jsonrpc":"2.0","id":9,"method":"eth_chainId"}
   click <selector> [@ text]     real click in the Panel, e.g. click .rpc-details-tab @ Contract
-                                or click .rpc-table-body [role=row]:nth-child(2)
+  clickrow <json> [n]           click the n-th (from 0) row whose method, contract and fn equal
+                                the given ones, e.g. clickrow {"contract":"Multicall3"} 1
   key <key> [meta|ctrl|alt|shift...]   real key press, e.g. key f meta
   type <text>                   insert text into the focused field
   eval <js>                     evaluate in the Panel, prints JSON
@@ -1399,6 +1418,9 @@ async function repl() {
       else if (cmd === "click") {
         const [selector, text] = arg.split(" @ ");
         out = await app.click(selector, text);
+      } else if (cmd === "clickrow") {
+        const [, match, n] = arg.match(/^(\{.*\})\s*(\d*)$/) ?? [];
+        out = await app.clickRow(JSON.parse(match ?? "null"), Number(n || 0));
       } else if (cmd === "key") out = await app.key(rest[0], ...rest.slice(1));
       else if (cmd === "type") out = await app.type(arg);
       else if (cmd === "eval") out = await app.ev(arg);
