@@ -99,9 +99,13 @@ export const RequestToolbar = ({
               className="rpc-table-search-clear"
               title="Clear filter"
               aria-label="Clear filter"
-              // Keeps the focus in the box
+              // A click leaves the focus in the box
               onMouseDown={(event) => event.preventDefault()}
-              onClick={() => onFilterChange({ ...filter, search: "" })}
+              onClick={() => {
+                onFilterChange({ ...filter, search: "" });
+                // The button goes with the text: keep the focus in the box
+                searchRef.current?.focus();
+              }}
             >
               <CrossCircleFilledIcon />
             </button>

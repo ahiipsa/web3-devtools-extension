@@ -722,6 +722,7 @@ export async function launch() {
             'bar.querySelector(".filter-bitset-filter span:not(.selected)")',
           )}; })()`),
       );
+      if (!network) throw new Error("the Network panel shows no filter bar");
       network.shot = await api.clip(network.rect);
       await devtools.evaluate(
         `(async () => { await (await ${LEGACY}).showPanel(${JSON.stringify(panelId)}); return 1 })()`,
@@ -729,7 +730,7 @@ export async function launch() {
       // Clicks land by the Panel's offset in DevTools: wait until the Panel
       // is selected again and its frame has stopped moving
       let last;
-      await api.until(async () => {
+      const settled = await api.until(async () => {
         const selected = await devtools.evaluate(
           `(async () => (await ${LEGACY}).tabbedPane.selectedTabId)()`,
         );
@@ -742,6 +743,7 @@ export async function launch() {
         last = now;
         return settled;
       });
+      if (!settled) throw new Error("the Panel did not come back from Network");
       const ours = await ev(
         measure(
           'document.querySelector(".rpc-table-toolbar")',
@@ -857,8 +859,12 @@ async function smoke() {
     await shot("02-table");
 
     // The toolbar looks like the Network tab's filter bar, measured in both
-    const bars = await app.filterBars();
-    for (const property of Object.keys(bars.network).filter(
+    // Network's internals may move in another Chrome: fail these checks only
+    const bars = await app.filterBars().catch((e) => {
+      check("the Network filter bar measured", false, e.message);
+      return null;
+    });
+    for (const property of Object.keys(bars?.network ?? {}).filter(
       (p) => p !== "rect" && p !== "shot",
     ))
       check(
@@ -882,7 +888,7 @@ async function smoke() {
         const box = (selector) => document.querySelector(selector).getBoundingClientRect();
         const gear = box(".rpc-table-settings-button"), clear = box(".rpc-table-toolbar-button"), bar = box(".rpc-table-toolbar");
         return gear.top === clear.top && Math.round(bar.right - gear.right) <= 3; })()`),
-      `Panel ${await ev("innerWidth")} px, toolbar ${bars.ours.barHeight} px high`,
+      `Panel ${await ev("innerWidth")} px, toolbar ${bars?.ours.barHeight} px high`,
     );
     const closedWidths = await app.headerWidths();
 
@@ -1532,10 +1538,11 @@ async function smoke() {
     );
     await shot("15-end");
     // Both bars, for a human to compare by eye
-    await app.stackShots("03-filter-bars", [
-      ["Network", bars.network.shot],
-      ["EVM RPC", bars.ours.shot],
-    ]);
+    if (bars)
+      await app.stackShots("03-filter-bars", [
+        ["Network", bars.network.shot],
+        ["EVM RPC", bars.ours.shot],
+      ]);
   } catch (e) {
     check("scenario ran to the end", false, e.message.split("\n")[0]);
     await shot("99-crash").catch(() => {});

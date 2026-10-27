@@ -95,20 +95,24 @@
   min-width: 0;
 }
 
-.rpc-table-toolbar-button {
+.rpc-table-toolbar-button,
+.rpc-table-search-clear {
   display: flex;
   flex: none;
   align-items: center;
   justify-content: center;
-  width: 26px;
-  height: 26px;
-  margin: 0 1px;
   padding: 0;
   border: none;
   border-radius: 9999px;
   background: transparent;
   color: inherit;
   cursor: pointer;
+}
+
+.rpc-table-toolbar-button {
+  width: 26px;
+  height: 26px;
+  margin: 0 1px;
 }
 
 .rpc-table-toolbar-button:hover {
@@ -118,13 +122,6 @@
 .rpc-table-toolbar-button svg {
   width: 20px;
   height: 20px;
-}
-
-.rpc-table-toolbar-button:focus-visible,
-.rpc-table-chip:focus-visible,
-.rpc-table-search-clear:focus-visible {
-  outline: 2px solid var(--rpc-toolbar-focus-ring);
-  outline-offset: -2px;
 }
 
 /* Rows break by the 160px basis, then the box takes the free space */
@@ -178,18 +175,8 @@
 }
 
 .rpc-table-search-clear {
-  display: flex;
-  flex: none;
-  align-items: center;
-  justify-content: center;
   width: 20px;
   height: 20px;
-  padding: 0;
-  border: none;
-  border-radius: 9999px;
-  background: transparent;
-  color: inherit;
-  cursor: pointer;
 }
 
 .rpc-table-search-clear svg {
@@ -262,6 +249,14 @@
   outline: none;
   background: var(--rpc-toolbar-chip-pressed);
   color: var(--rpc-toolbar-chip-pressed-text);
+}
+
+/* After the hover rules, so hovering keeps the focus ring */
+.rpc-table-toolbar-button:focus-visible,
+.rpc-table-chip:focus-visible,
+.rpc-table-search-clear:focus-visible {
+  outline: 2px solid var(--rpc-toolbar-focus-ring);
+  outline-offset: -2px;
 }
 
 .rpc-table-settings {
