@@ -29,7 +29,11 @@ import {
   matchesRpcRequestFilter,
   RpcRequestFilter,
 } from "../table/rpcRequestFilter.ts";
-import { formatContractCall } from "../table/rpcRequestRow.ts";
+import {
+  formatContractCall,
+  getFunctionLabel,
+  RpcRequestRow,
+} from "../table/rpcRequestRow.ts";
 
 // Match --rpc-table-row-height and .rpc-table-collapsed in RequestTable.css
 const ROW_HEIGHT = 21;
@@ -51,6 +55,22 @@ const KEY_MOVES: Partial<Record<string, SelectionMove>> = {
   ArrowUp: "previous",
   Home: "first",
   End: "last",
+};
+
+// Contract / function under the method, with an undecoded selector muted
+const ContractCall = ({ row }: { row: RpcRequestRow }) => {
+  const functionLabel = getFunctionLabel(row);
+  return (
+    <>
+      {row.contractLabel}
+      {row.contractLabel && functionLabel && " / "}
+      {functionLabel && (
+        <span className={cx({ "rpc-table-muted": !functionLabel.decoded })}>
+          {functionLabel.text}
+        </span>
+      )}
+    </>
+  );
 };
 
 interface RequestTableProps {
@@ -131,14 +151,16 @@ export const RequestTable = ({ filter }: RequestTableProps) => {
     overscan: 20,
   });
 
-  // Follow new rows only while the user has not scrolled up
+  // Follow new rows only while the user has not scrolled up. A sorted table
+  // never follows: new rows land anywhere in it, not at the bottom.
   const stickToBottom = useRef(true);
+  const sorted = sorting.length > 0;
   useLayoutEffect(() => {
     const scrollElement = scrollRef.current;
-    if (scrollElement && stickToBottom.current) {
+    if (scrollElement && stickToBottom.current && !sorted) {
       scrollElement.scrollTop = scrollElement.scrollHeight;
     }
-  }, [rows.length]);
+  }, [rows.length, sorted]);
 
   // Rows change height as the details open and close; keep the selected one
   // in view through the change
@@ -288,13 +310,16 @@ export const RequestTable = ({ filter }: RequestTableProps) => {
                         {row.original.method}
                       </span>
                       <span className="rpc-table-cell-text rpc-table-cell-subtitle">
-                        {formatContractCall(row.original)}
+                        <ContractCall row={row.original} />
                       </span>
                     </div>
                   )}
                   {!collapsed &&
                     row.getVisibleCells().map((cell) => {
                       const value = cell.getValue();
+                      const muted =
+                        cell.column.id === "function" &&
+                        getFunctionLabel(row.original)?.decoded === false;
                       return (
                         <div
                           key={cell.id}
@@ -304,7 +329,11 @@ export const RequestTable = ({ filter }: RequestTableProps) => {
                           // Full text of a cell the column width truncates
                           title={typeof value === "string" ? value : undefined}
                         >
-                          <span className="rpc-table-cell-text">
+                          <span
+                            className={cx("rpc-table-cell-text", {
+                              "rpc-table-muted": muted,
+                            })}
+                          >
                             {flexRender(
                               cell.column.columnDef.cell,
                               cell.getContext(),

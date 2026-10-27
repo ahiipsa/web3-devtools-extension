@@ -83,6 +83,21 @@ describe("matchesRpcRequestFilter", () => {
       false,
     );
   });
+
+  it("searches the selector, with or without a Contract for the address", () => {
+    const undecodedRow = buildRpcRequestRow(
+      rpcRequest("eth_call"),
+      () => undefined,
+    );
+
+    for (const row of [undecodedRow, balanceOfRow]) {
+      expect(matchesRpcRequestFilter(row, search("0x70A08231"))).toBe(true);
+      expect(matchesRpcRequestFilter(row, search("70a0"))).toBe(true);
+    }
+    expect(matchesRpcRequestFilter(undecodedRow, search("a9059cbb"))).toBe(
+      false,
+    );
+  });
 });
 
 describe("matchesRpcRequestFilter by Method Category and errors", () => {

@@ -27,6 +27,7 @@ const matchesSearch = (row: RpcRequestRow, search: string) => {
     row.contractAddress,
     row.contractName,
     row.functionName,
+    row.functionSelector,
   ].some((text) => text?.toLowerCase().includes(needle));
 };
 

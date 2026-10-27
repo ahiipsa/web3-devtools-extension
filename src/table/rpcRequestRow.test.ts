@@ -4,6 +4,7 @@ import {
   buildRpcRequestRow,
   formatContractCall,
   formatDuration,
+  getFunctionLabel,
 } from "./rpcRequestRow.ts";
 import { RpcRequest } from "../types/main.ts";
 import { Contract } from "../dal/contract.ts";
@@ -45,6 +46,16 @@ const rpcRequest = (overrides: Partial<RpcRequest> = {}): RpcRequest => ({
 });
 
 const noContracts = () => undefined;
+
+const ethCall = (data?: string) =>
+  rpcRequest({
+    requestBody: {
+      jsonrpc: "2.0",
+      id: 1,
+      method: "eth_call",
+      params: [{ to: TOKEN, data }, "latest"],
+    },
+  });
 
 describe("buildRpcRequestRow", () => {
   it("shows the method, the Endpoint's host and the duration", () => {
@@ -101,6 +112,66 @@ describe("buildRpcRequestRow", () => {
     );
 
     expect(row.functionName).toBeUndefined();
+  });
+
+  it("shows the selector when no Contract is known for the address", () => {
+    const row = buildRpcRequestRow(rpcRequest(), noContracts);
+
+    expect(row.functionSelector).toBe("0x70a08231");
+    expect(getFunctionLabel(row)).toEqual({
+      text: "0x70a08231",
+      decoded: false,
+    });
+  });
+
+  it("shows the selector when the Contract's ABI does not match it", () => {
+    const row = buildRpcRequestRow(
+      // transfer(address,uint256), not in the ABI
+      ethCall(
+        "0xa9059cbb00000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000002",
+      ),
+      () => token,
+    );
+
+    expect(getFunctionLabel(row)).toEqual({
+      text: "0xa9059cbb",
+      decoded: false,
+    });
+  });
+
+  it("shows the function name, not the selector, once decoded", () => {
+    const row = buildRpcRequestRow(rpcRequest(), () => token);
+
+    expect(getFunctionLabel(row)).toEqual({ text: "balanceOf", decoded: true });
+  });
+
+  it("lowercases the selector", () => {
+    const row = buildRpcRequestRow(ethCall("0x70A08231"), noContracts);
+
+    expect(row.functionSelector).toBe("0x70a08231");
+  });
+
+  it.each([
+    ["no calldata", undefined],
+    ["empty calldata", "0x"],
+    ["calldata shorter than 4 bytes", "0x70a082"],
+    ["calldata that is not hex", "0x70a0823z"],
+  ])("shows no function for %s", (_case, data) => {
+    const row = buildRpcRequestRow(ethCall(data), noContracts);
+
+    expect(row.functionSelector).toBeUndefined();
+    expect(getFunctionLabel(row)).toBeUndefined();
+  });
+
+  it("shows no function for an RPC Request that calls no Contract", () => {
+    const row = buildRpcRequestRow(
+      rpcRequest({
+        requestBody: { jsonrpc: "2.0", id: 1, method: "eth_blockNumber" },
+      }),
+      noContracts,
+    );
+
+    expect(getFunctionLabel(row)).toBeUndefined();
   });
 
   it("labels the status and flags anything but ok as failed", () => {
@@ -162,8 +233,14 @@ describe("formatContractCall", () => {
     expect(formatContractCall(row)).toBe("USDC / balanceOf");
   });
 
-  it("shows only the Contract when the function is not decoded", () => {
+  it("joins the Contract and the selector when the function is not decoded", () => {
     const row = buildRpcRequestRow(rpcRequest(), noContracts);
+
+    expect(formatContractCall(row)).toBe("0x0000...00aa / 0x70a08231");
+  });
+
+  it("shows only the Contract without calldata", () => {
+    const row = buildRpcRequestRow(ethCall(undefined), noContracts);
 
     expect(formatContractCall(row)).toBe("0x0000...00aa");
   });

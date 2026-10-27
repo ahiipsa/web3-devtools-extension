@@ -4,7 +4,11 @@ import {
   getSortedRowModel,
   TableOptions,
 } from "@tanstack/react-table";
-import { formatDuration, RpcRequestRow } from "./rpcRequestRow.ts";
+import {
+  formatDuration,
+  getFunctionLabel,
+  RpcRequestRow,
+} from "./rpcRequestRow.ts";
 
 const column = createColumnHelper<RpcRequestRow>();
 
@@ -22,7 +26,8 @@ export const rpcRequestColumns = [
     header: "Contract",
     size: 140,
   }),
-  column.accessor("functionName", {
+  // Names and selectors sort together; the Panel mutes the selectors
+  column.accessor((row) => getFunctionLabel(row)?.text, {
     ...textColumn,
     id: "function",
     header: "Function",

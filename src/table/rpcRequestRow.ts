@@ -19,7 +19,10 @@ export interface RpcRequestRow {
   // For search: the full address, and the user's name for the Contract if any
   contractAddress?: string;
   contractName?: string;
+  // Decoded with the Contract's ABI
   functionName?: string;
+  // The first 4 bytes of the calldata, lowercase; set whenever there are any
+  functionSelector?: string;
   status?: string;
   // Any status other than ok
   failed: boolean;
@@ -43,6 +46,11 @@ const getFunctionName = (abi: Abi, data: `0x${string}`) => {
     return undefined;
   }
 };
+
+const getFunctionSelector = (data: string | undefined) =>
+  data && /^0x[0-9a-f]{8}/i.test(data)
+    ? data.slice(0, 10).toLowerCase()
+    : undefined;
 
 const getHost = (url: string) => {
   try {
@@ -71,6 +79,7 @@ export function buildRpcRequestRow(
       contract && callParams?.data
         ? getFunctionName(contract.abi, callParams.data)
         : undefined,
+    functionSelector: getFunctionSelector(callParams?.data),
     status: formatRpcRequestStatus(status),
     failed: isFailedRpcRequestStatus(status),
     endpoint: getHost(request.url),
@@ -84,10 +93,27 @@ export function formatDuration(milliseconds: number) {
     : `${(milliseconds / 1000).toFixed(2)} s`;
 }
 
-// The second line under the method while the details are open
-export function formatContractCall({
-  contractLabel,
+type FunctionFields = Pick<RpcRequestRow, "functionName" | "functionSelector">;
+
+// The Function column: the decoded name, else the selector shown muted
+export function getFunctionLabel({
   functionName,
-}: Pick<RpcRequestRow, "contractLabel" | "functionName">) {
-  return [contractLabel, functionName].filter(Boolean).join(" / ");
+  functionSelector,
+}: FunctionFields) {
+  if (functionName) {
+    return { text: functionName, decoded: true };
+  }
+  if (functionSelector) {
+    return { text: functionSelector, decoded: false };
+  }
+  return undefined;
+}
+
+// The second line under the method while the details are open
+export function formatContractCall(
+  row: Pick<RpcRequestRow, "contractLabel"> & FunctionFields,
+) {
+  return [row.contractLabel, getFunctionLabel(row)?.text]
+    .filter(Boolean)
+    .join(" / ");
 }

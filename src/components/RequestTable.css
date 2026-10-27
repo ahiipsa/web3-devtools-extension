@@ -11,6 +11,8 @@
   --rpc-table-hover: #eef3fd;
   --rpc-table-selected: #d3e3fd;
   --rpc-table-failed: #d93025;
+  /* Matches --rpc-details-muted in RequestDetails.css */
+  --rpc-table-muted: #5f6368;
   --rpc-table-resizer: #1a73e8;
   --rpc-table-chip-pressed: #d3e3fd;
 }
@@ -41,6 +43,7 @@
   --rpc-table-hover: #2c3339;
   --rpc-table-selected: #1f3760;
   --rpc-table-failed: #f28b82;
+  --rpc-table-muted: #9aa0a6;
   --rpc-table-resizer: #8ab4f8;
   --rpc-table-chip-pressed: #1f3760;
 }
@@ -164,6 +167,10 @@
   border-right: 1px solid var(--rpc-table-separator);
   box-sizing: border-box;
   overflow: hidden;
+}
+
+.rpc-table-muted {
+  color: var(--rpc-table-muted);
 }
 
 .rpc-table-cell-text {

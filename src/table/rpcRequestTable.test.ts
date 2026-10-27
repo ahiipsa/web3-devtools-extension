@@ -103,6 +103,19 @@ describe("RPC Request table", () => {
     expect(order(table)).toEqual(["2", "3", "1"]);
   });
 
+  // alphanumeric puts letters before digits, so selectors follow the names
+  it("sorts function names and selectors together", () => {
+    const table = buildTable([
+      row("1", { functionName: "transfer" }),
+      row("2", { functionSelector: "0x70a08231" }),
+      row("3", {}),
+      row("4", { functionName: "balanceOf", functionSelector: "0xffffffff" }),
+    ]);
+
+    clickHeader(table, "function");
+    expect(order(table)).toEqual(["4", "1", "2", "3"]);
+  });
+
   it("sorts by one column at a time", () => {
     const table = buildTable([
       row("1", { method: "b", time: 1 }),
