@@ -12,7 +12,8 @@ import { ContractCall, RpcRequest } from "../types/main.ts";
 import { AppContext } from "./AppContext.tsx";
 import { ContractForm } from "./ContractForm.tsx";
 import { useContractQuery } from "../hooks/useContractQuery.ts";
-import { getContractCallParams, stringifyArgs } from "../utils/requestUtils.ts";
+import { getContractCallParams } from "../utils/requestUtils.ts";
+import { formatDecodedValue } from "../decoding/formatDecodedValue.ts";
 import {
   DecodedValue,
   decodeRpcRequest,
@@ -170,10 +171,11 @@ const DecodedValues = (props: { values: DecodedValue[]; empty: string }) =>
       {props.values.map(({ name, type, value }, index) => (
         <Fragment key={index}>
           <div className="rpc-details-field-name">
-            {name} <span className="rpc-details-muted">{type}</span>
+            {name && `${name} `}
+            <span className="rpc-details-muted">{type}</span>
           </div>
           <div className="rpc-details-field-value rpc-details-decoded-value">
-            {stringifyArgs(value)}
+            {formatDecodedValue(value)}
           </div>
         </Fragment>
       ))}
@@ -271,18 +273,6 @@ const Params = (props: {
   );
 };
 
-const ReturnValues = ({ values }: { values: DecodedValue[] }) => {
-  // A single unnamed output needs no label
-  if (values.length === 1 && values[0].name === "[0]") {
-    return (
-      <div className="rpc-details-field-value rpc-details-decoded-value">
-        {stringifyArgs(values[0].value)}
-      </div>
-    );
-  }
-  return <DecodedValues values={values} empty="No return value" />;
-};
-
 const Response = (props: {
   request: RpcRequest;
   decoding: Decoding | undefined;
@@ -305,7 +295,10 @@ const Response = (props: {
     <>
       {decoding?.status === "decoded" && decoding.returnValues && (
         <Section title="Decoded return value">
-          <ReturnValues values={decoding.returnValues} />
+          <DecodedValues
+            values={decoding.returnValues}
+            empty="No return value"
+          />
         </Section>
       )}
       {decoding?.status === "decoded" && decoding.returnValueMismatch && (

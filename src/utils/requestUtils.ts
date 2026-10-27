@@ -33,25 +33,3 @@ export function getContractCallParams(
 
   return { ...call, data: call.data ?? call.input };
 }
-
-export function stringifyArgs(args: unknown[] | unknown): string {
-  if (Array.isArray(args)) {
-    return `[${args.map((arg) => stringifyArgs(arg)).join(", ")}]`;
-  }
-
-  if (typeof args === "object") {
-    return JSON.stringify(
-      args,
-      function (_key, value) {
-        if (typeof value === "bigint") {
-          return value.toString();
-        } else {
-          return value;
-        }
-      },
-      4,
-    );
-  }
-
-  return String(args);
-}

@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { Abi, encodeFunctionData, encodeFunctionResult } from "viem";
+import {
+  Abi,
+  AbiFunction,
+  encodeFunctionData,
+  encodeFunctionResult,
+} from "viem";
 import { decodeRpcRequest } from "./decodeRpcRequest.ts";
 import { RpcRequest } from "../types/main.ts";
 import { getMethodCategory } from "../capture/getMethodCategory.ts";
@@ -41,7 +46,7 @@ const rpcRequest = (
 });
 
 describe("decodeRpcRequest", () => {
-  it("decodes an eth_call's arguments and return value", () => {
+  it("decodes an eth_call's arguments and its lone unnamed return value, labelled by type only", () => {
     const request = rpcRequest(
       "eth_call",
       [{ to: TOKEN, data: BALANCE_OF_CALLDATA }, "latest"],
@@ -53,7 +58,7 @@ describe("decodeRpcRequest", () => {
       functionName: "balanceOf",
       signature: "balanceOf(address owner)",
       args: [{ name: "owner", type: "address", value: OWNER }],
-      returnValues: [{ name: "[0]", type: "uint256", value: 1000n }],
+      returnValues: [{ name: "", type: "uint256", value: 1000n }],
     });
   });
 
@@ -234,7 +239,7 @@ describe("decodeRpcRequest", () => {
     const ethCall = (data: `0x${string}`, result?: `0x${string}`) =>
       rpcRequest("eth_call", [{ to: TOKEN, data }, "latest"], result);
 
-    it("falls back to the position of unnamed inputs and outputs", () => {
+    it("falls back to the position of unnamed inputs, and to no name for a lone unnamed output", () => {
       const request = ethCall(
         encodeFunctionData({
           abi,
@@ -256,7 +261,7 @@ describe("decodeRpcRequest", () => {
           { name: "[0]", type: "address", value: OWNER },
           { name: "[1]", type: "uint256", value: 5n },
         ],
-        returnValues: [{ name: "[0]", type: "bool", value: true }],
+        returnValues: [{ name: "", type: "bool", value: true }],
       });
     });
 
@@ -310,7 +315,8 @@ describe("decodeRpcRequest", () => {
       expect(decodeRpcRequest(request, abi)).toEqual({
         status: "decoded",
         functionName: "submit",
-        signature: "submit(tuple order, uint256[] ids)",
+        signature:
+          "submit((address maker, uint256 amount) order, uint256[] ids)",
         args: [
           {
             name: "order",
@@ -322,6 +328,88 @@ describe("decodeRpcRequest", () => {
         returnValues: [],
       });
     });
+
+    it.each([
+      [
+        "a nested tuple with named components",
+        [
+          {
+            name: "order",
+            type: "tuple",
+            components: [
+              { name: "maker", type: "address" },
+              {
+                name: "fee",
+                type: "tuple",
+                components: [
+                  { name: "recipient", type: "address" },
+                  { name: "bps", type: "uint16" },
+                ],
+              },
+            ],
+          },
+          { name: "deadline", type: "uint256" },
+        ],
+        [{ maker: OWNER, fee: { recipient: TOKEN, bps: 30 } }, 1n],
+        "fill((address maker, (address recipient, uint16 bps) fee) order, uint256 deadline)",
+      ],
+      [
+        "a tuple array",
+        [
+          {
+            name: "calls",
+            type: "tuple[]",
+            components: [
+              { name: "to", type: "address" },
+              { name: "value", type: "uint256" },
+            ],
+          },
+        ],
+        [[{ to: TOKEN, value: 1n }]],
+        "fill((address to, uint256 value)[] calls)",
+      ],
+      [
+        "unnamed components and a fixed array of tuple arrays",
+        [
+          {
+            name: "",
+            type: "tuple[2][]",
+            components: [
+              { name: "", type: "address" },
+              {
+                name: "",
+                type: "tuple[]",
+                components: [{ name: "", type: "bytes32" }],
+              },
+            ],
+          },
+        ],
+        [[]],
+        "fill((address, (bytes32)[])[2][])",
+      ],
+    ] as const)(
+      "expands %s into its components in the signature",
+      (_label, inputs, args, signature) => {
+        const fill = {
+          type: "function",
+          name: "fill",
+          stateMutability: "nonpayable",
+          inputs,
+          outputs: [],
+        } as const satisfies AbiFunction;
+        const request = ethCall(
+          encodeFunctionData({
+            abi: [fill] as AbiFunction[],
+            functionName: "fill",
+            args: args as readonly unknown[],
+          }),
+        );
+
+        expect(decodeRpcRequest(request, [fill])).toMatchObject({
+          signature,
+        });
+      },
+    );
 
     it("names the arguments of the overload the calldata was encoded for", () => {
       const request = rpcRequest("eth_sendTransaction", [

@@ -4,7 +4,9 @@ import { RpcRequest } from "../types/main.ts";
 import { getContractCallParams } from "../utils/requestUtils.ts";
 
 // One decoded argument or return value, labelled by its ABI name or, when
-// the ABI leaves it unnamed, by its position (`[0]`, `[1]`, …)
+// the ABI leaves it unnamed, by its position (`[0]`, `[1]`, …). A lone
+// unnamed return value has no position worth showing: its name is empty
+// and its type alone labels it
 export interface DecodedValue {
   name: string;
   type: string;
@@ -38,10 +40,18 @@ const decodeValues = (
   }
 };
 
+// A tuple's type spells out its components, so `tuple[] calls` reads
+// `(address to, uint256 value)[] calls`
+const formatParameterType = (param: AbiParameter): string =>
+  "components" in param && param.type.startsWith("tuple")
+    ? `(${param.components.map(formatParameter).join(", ")})${param.type.slice("tuple".length)}`
+    : param.type;
+
+const formatParameter = (param: AbiParameter): string =>
+  [formatParameterType(param), param.name].filter(Boolean).join(" ");
+
 const buildSignature = (fn: AbiFunction) =>
-  `${fn.name}(${fn.inputs
-    .map((input) => [input.type, input.name].filter(Boolean).join(" "))
-    .join(", ")})`;
+  `${fn.name}(${fn.inputs.map(formatParameter).join(", ")})`;
 
 export function decodeRpcRequest(
   request: RpcRequest,
@@ -73,7 +83,10 @@ export function decodeRpcRequest(
   ) {
     const returnValues = decodeValues(fn.outputs ?? [], returnData as Hex);
     if (returnValues) {
-      decoding.returnValues = returnValues;
+      decoding.returnValues =
+        returnValues.length === 1 && !fn.outputs[0].name
+          ? [{ ...returnValues[0], name: "" }]
+          : returnValues;
     } else {
       decoding.returnValueMismatch = true;
     }
