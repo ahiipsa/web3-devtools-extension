@@ -27,7 +27,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { createRequire } from "node:module";
-import { tmpdir } from "node:os";
+import os, { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import readline from "node:readline";
@@ -446,14 +446,17 @@ const interceptAbiSources = async (panel) => {
 const LEGACY = `(async () => (await import("./ui/legacy/legacy.js")).InspectorView.InspectorView.instance())()`;
 
 // The switches launchPersistentContext adds itself, for a Chromium started
-// without Playwright (--use-mock-keychain spares a keychain prompt)
-const require = createRequire(import.meta.url);
-const { chromiumSwitches } = require(
-  join(
-    dirname(require.resolve("playwright-core")),
-    "lib/server/chromium/chromiumSwitches.js",
-  ),
-);
+// without Playwright (--use-mock-keychain spares a keychain prompt). Not
+// public API: read only on the macOS background path, from the pinned version
+const playwrightSwitches = () => {
+  const require = createRequire(import.meta.url);
+  return require(
+    join(
+      dirname(require.resolve("playwright-core")),
+      "lib/server/chromium/chromiumSwitches.js",
+    ),
+  ).chromiumSwitches;
+};
 // The window launchPersistentContext opens for a 1200×800 viewport on macOS
 const WINDOW_SIZE = "--window-size=1202,870";
 
@@ -483,21 +486,6 @@ function run([pid]) {
 // this process, so it is stopped by pid, also when the run dies
 const openInBackground = async (profile, args) => {
   const executable = chromium.executablePath();
-  execFileSync("open", [
-    "-g",
-    "-n",
-    "-a",
-    executable.replace(/\.app\/.*$/, ".app"),
-    "--args",
-    ...chromiumSwitches,
-    "--enable-use-zoom-for-dsf=false",
-    "--no-sandbox",
-    `--user-data-dir=${profile}`,
-    "--remote-debugging-port=0",
-    WINDOW_SIZE,
-    ...args,
-    "about:blank",
-  ]);
   // The browser process, not its helpers: those carry a --type
   const findPid = () =>
     execFileSync("ps", ["-axo", "pid=,command="], { encoding: "utf8" })
@@ -526,14 +514,26 @@ const openInBackground = async (profile, args) => {
       Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 50);
     return ok();
   };
+  // A signal would end the process without "exit"
+  const exitOn = (signal) => process.exit(128 + os.constants.signals[signal]);
+  const signals = ["SIGINT", "SIGTERM", "SIGHUP"];
   const stop = () => {
     process.off("exit", stop);
+    for (const signal of signals) process.off(signal, exitOn);
     keepHidden?.kill();
     pid ??= findPid();
-    if (pid && alive(pid)) {
-      process.kill(Number(pid), "SIGTERM");
+    // Chromium can exit between a check and a kill
+    const kill = (signal) => {
+      try {
+        process.kill(Number(pid), signal);
+      } catch {
+        // already gone
+      }
+    };
+    if (pid) {
+      kill("SIGTERM");
       if (!waitSync(() => !alive(pid), 5000)) {
-        process.kill(Number(pid), "SIGKILL");
+        kill("SIGKILL");
         waitSync(() => !alive(pid), 2000);
       }
     }
@@ -545,9 +545,22 @@ const openInBackground = async (profile, args) => {
     rmSync(profile, { recursive: true, force: true, maxRetries: 5 });
   };
   process.on("exit", stop);
-  // Ctrl+C would end the process without "exit"
-  for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"])
-    process.once(signal, () => process.exit(130));
+  for (const signal of signals) process.on(signal, exitOn);
+  execFileSync("open", [
+    "-g",
+    "-n",
+    "-a",
+    executable.replace(/\.app\/.*$/, ".app"),
+    "--args",
+    ...playwrightSwitches(),
+    "--enable-use-zoom-for-dsf=false",
+    "--no-sandbox",
+    `--user-data-dir=${profile}`,
+    "--remote-debugging-port=0",
+    WINDOW_SIZE,
+    ...args,
+    "about:blank",
+  ]);
   pid = await waitFor(findPid, "Chromium process");
   keepHidden = spawn(
     "osascript",
@@ -564,21 +577,21 @@ const openInBackground = async (profile, args) => {
   );
   const browser = await chromium.connectOverCDP(`http://127.0.0.1:${cdpPort}`);
   const context = browser.contexts()[0];
-  const page = context.pages()[0] ?? (await context.newPage());
+  // A new page made with Playwright would bring Chromium to the front
+  const newPage = async () => {
+    const session = await browser.newBrowserCDPSession();
+    const opened = context.waitForEvent("page");
+    await session.send("Target.createTarget", {
+      url: "about:blank",
+      background: true,
+    });
+    await session.detach();
+    return opened;
+  };
   return {
     cdpPort,
-    page,
-    // A new page made with Playwright would bring Chromium to the front
-    newPage: async () => {
-      const session = await browser.newBrowserCDPSession();
-      const opened = context.waitForEvent("page");
-      await session.send("Target.createTarget", {
-        url: "about:blank",
-        background: true,
-      });
-      await session.detach();
-      return opened;
-    },
+    page: context.pages()[0] ?? (await newPage()),
+    newPage,
     close: async () => {
       await browser.close().catch(() => {});
       stop();
