@@ -1,20 +1,17 @@
-import { Abi, getAddress, isAddress } from "viem";
+import { Abi, getAddress } from "viem";
+import { parseNonZeroAddress } from "./address.ts";
 
-// `implementation` is set when the ABI Source marks the address as a proxy
-// with one implementation
+// `implementation` is the one implementation of a proxy the ABI Source marks
+// as such; null when the ABI Source says there is none to follow (no proxy,
+// or a diamond with several); absent when it says nothing about proxies
 export type AbiSourceResult =
-  | { kind: "found"; name: string; abi: Abi; implementation?: `0x${string}` }
+  | {
+      kind: "found";
+      name: string;
+      abi: Abi;
+      implementation?: `0x${string}` | null;
+    }
   | { kind: "not-found" };
-
-// A lowercase non-zero address, or undefined for anything else
-export const parseImplementation = (
-  value: unknown,
-): `0x${string}` | undefined =>
-  typeof value === "string" &&
-  isAddress(value, { strict: false }) &&
-  !/^0x0{40}$/.test(value)
-    ? (value.toLowerCase() as `0x${string}`)
-    : undefined;
 
 // Only a proxy with exactly one implementation: a diamond's facets each hold
 // part of its ABI
@@ -25,8 +22,8 @@ const getSourcifyImplementation = (proxyResolution: {
   proxyResolution.isProxy === true &&
   Array.isArray(proxyResolution.implementations) &&
   proxyResolution.implementations.length === 1
-    ? parseImplementation(proxyResolution.implementations[0]?.address)
-    : undefined;
+    ? (parseNonZeroAddress(proxyResolution.implementations[0]?.address) ?? null)
+    : null;
 
 const SOURCIFY_API = "https://sourcify.dev/server/v2/contract";
 
@@ -58,6 +55,6 @@ export async function fetchFromSourcify(
     kind: "found",
     name: typeof name === "string" ? name : "",
     abi: body.abi,
-    ...(implementation && { implementation }),
+    ...(implementation !== undefined && { implementation }),
   };
 }

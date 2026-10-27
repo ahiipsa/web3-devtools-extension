@@ -127,12 +127,12 @@ const PROXY_ABI = [
 
 const proxyFound = (
   name: string,
-  implementation?: `0x${string}`,
+  implementation?: `0x${string}` | null,
 ): AbiSourceResult => ({
   kind: "found",
   name,
   abi: PROXY_ABI,
-  ...(implementation && { implementation }),
+  ...(implementation !== undefined && { implementation }),
 });
 
 // Each ABI Source answers by address; an address it does not list is a miss
@@ -225,6 +225,21 @@ describe("fetchContractAbi", () => {
       proxy: { implementation: IMPLEMENTATION, abi: "implementation" },
     });
     expect(sources.readImplementation).toHaveBeenCalledWith(PROXY);
+  });
+
+  it("does not read the slots when the ABI Source names no implementation to follow", async () => {
+    const { sources, fetch } = setupProxy({
+      sourcify: { [PROXY]: proxyFound("Diamond", null) },
+      readImplementation: async () => IMPLEMENTATION,
+    });
+
+    expect(await fetch()).toEqual({
+      kind: "found",
+      name: "Diamond",
+      abi: PROXY_ABI,
+      source: "sourcify",
+    });
+    expect(sources.readImplementation).not.toHaveBeenCalled();
   });
 
   it("reads the EIP-1967 slots of an address no ABI Source has verified", async () => {

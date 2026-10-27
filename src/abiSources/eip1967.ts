@@ -1,5 +1,5 @@
 import { sendRpcRequest } from "./endpointRpc.ts";
-import { parseImplementation } from "./sourcify.ts";
+import { parseNonZeroAddress } from "./address.ts";
 
 // bytes32(uint256(keccak256("eip1967.proxy.implementation")) - 1)
 const IMPLEMENTATION_SLOT =
@@ -10,10 +10,11 @@ const BEACON_SLOT =
 // implementation()
 const IMPLEMENTATION_SELECTOR = "0x5c60da1b";
 
-// The address in the low 20 bytes of a 32-byte word, unless it is zero
+// The address in the low 20 bytes of a word, unless it is zero; some nodes
+// drop the leading zeros
 const wordToAddress = (word: unknown) =>
-  typeof word === "string" && /^0x[0-9a-f]{64}$/i.test(word)
-    ? parseImplementation(`0x${word.slice(26)}`)
+  typeof word === "string" && /^0x[0-9a-f]{1,64}$/i.test(word)
+    ? parseNonZeroAddress(`0x${word.slice(2).padStart(64, "0").slice(24)}`)
     : undefined;
 
 // The implementation of an EIP-1967 proxy, read on the Endpoint: the

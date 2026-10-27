@@ -103,6 +103,30 @@ describe("readEip1967Implementation", () => {
     ).toBeUndefined();
   });
 
+  it("reads a slot value a node returns without leading zeros", async () => {
+    const fetchFn = node({
+      [`${PROXY}:${IMPLEMENTATION_SLOT}`]: IMPLEMENTATION,
+      [`${PROXY}:${BEACON_SLOT}`]: "0x0",
+    });
+
+    expect(await readEip1967Implementation(ENDPOINT, PROXY, fetchFn)).toBe(
+      IMPLEMENTATION,
+    );
+  });
+
+  it("gives up on an Endpoint that does not answer", async () => {
+    const fetchFn = vi.fn(
+      async (_url: string | URL | Request, init?: RequestInit) => {
+        expect(init?.signal).toBeInstanceOf(AbortSignal);
+        throw new DOMException("signal timed out", "TimeoutError");
+      },
+    );
+
+    await expect(
+      readEip1967Implementation(ENDPOINT, PROXY, fetchFn),
+    ).rejects.toThrow("the Endpoint did not answer in 10 s");
+  });
+
   it("fails when the Endpoint answers with an RPC error", async () => {
     const fetchFn = vi.fn(
       async () =>

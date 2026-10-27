@@ -60,7 +60,7 @@ describe("fetchFromSourcify", () => {
     });
   });
 
-  it("names no implementation when the proxy has several or none", async () => {
+  it("says there is no implementation to follow when Sourcify finds no single one", async () => {
     const proxyResolution = (implementations: unknown) => ({
       abi: ABI,
       compilation: { name: "Diamond" },
@@ -75,12 +75,20 @@ describe("fetchFromSourcify", () => {
       proxyResolution(several),
       proxyResolution([]),
       proxyResolution([{ address: "not an address" }]),
-      { ...proxyResolution(several.slice(0, 1)), proxyResolution: null },
+      { ...proxyResolution(several), proxyResolution: { isProxy: false } },
     ]) {
       expect(
         await fetchFromSourcify(1, ADDRESS, respond(200, body)),
-      ).not.toHaveProperty("implementation");
+      ).toMatchObject({ implementation: null });
     }
+  });
+
+  it("says nothing about a proxy without proxyResolution", async () => {
+    const fetchFn = respond(200, { abi: ABI, compilation: { name: "WETH9" } });
+
+    expect(await fetchFromSourcify(1, ADDRESS, fetchFn)).not.toHaveProperty(
+      "implementation",
+    );
   });
 
   it("reports no verified ABI on 404", async () => {

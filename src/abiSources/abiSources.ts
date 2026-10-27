@@ -6,14 +6,15 @@ import { AbiSourceName, ContractProxy } from "../dal/contract.ts";
 export type { AbiSourceName };
 
 // The outcome of asking the ABI Sources in turn; a miss lists those asked.
-// `implementation` is set when the ABI Source marks the address as a proxy
+// `implementation` is as the ABI Source that has the ABI says, see
+// AbiSourceResult
 export type FetchedAbi =
   | {
       kind: "found";
       name: string;
       abi: Abi;
       source: AbiSourceName;
-      implementation?: `0x${string}`;
+      implementation?: `0x${string}` | null;
     }
   | { kind: "not-found"; sources: AbiSourceName[] };
 
@@ -73,9 +74,10 @@ export interface ContractAbiSources extends AbiSources {
 }
 
 // Fetches the ABI of the address and, when it is a proxy, its
-// implementation's ABI from the same ABI Sources. The proxy is the one the
-// ABI Source names, else the EIP-1967 slots on the Endpoint say; a failed
-// read of the slots counts as no proxy. A failure to fetch the
+// implementation's ABI from the same ABI Sources. The implementation is the
+// one the ABI Source names; only when it says nothing about proxies, the
+// one the EIP-1967 slots on the Endpoint hold. A failed read of the slots
+// counts as no proxy. A failure to fetch the
 // implementation's ABI is thrown, so no proxy's own ABI gets saved for good.
 export async function fetchContractAbi(
   sources: ContractAbiSources,
@@ -93,9 +95,11 @@ export async function fetchContractAbi(
         }
       : fetched;
 
+  const named = fetched.kind === "found" ? fetched.implementation : undefined;
   const implementation =
-    (fetched.kind === "found" ? fetched.implementation : undefined) ??
-    (await sources.readImplementation(address).catch(() => undefined));
+    named === undefined
+      ? await sources.readImplementation(address).catch(() => undefined)
+      : named;
   if (!implementation || implementation === address) {
     return own;
   }

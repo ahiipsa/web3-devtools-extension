@@ -1,5 +1,6 @@
 import { Abi } from "viem";
-import { AbiSourceResult, parseImplementation } from "./sourcify.ts";
+import { AbiSourceResult } from "./sourcify.ts";
+import { parseNonZeroAddress } from "./address.ts";
 
 const ETHERSCAN_API = "https://api.etherscan.io/v2/api";
 
@@ -78,8 +79,9 @@ export async function fetchFromEtherscan(
     return { kind: "not-found" };
   }
   const name = first.ContractName;
+  // Proxy "0" says nothing: Etherscan marks only proxies someone verified
   const implementation =
-    first.Proxy === "1" ? parseImplementation(first.Implementation) : undefined;
+    first.Proxy === "1" ? parseNonZeroAddress(first.Implementation) : undefined;
   return {
     kind: "found",
     name: typeof name === "string" ? name : "",
