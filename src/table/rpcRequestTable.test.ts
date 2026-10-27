@@ -7,6 +7,7 @@ import {
 import {
   formatHiddenWithDetails,
   getColumnVisibility,
+  getShrinkWithDetails,
   rpcRequestTableOptions,
 } from "./rpcRequestTable.ts";
 import { RpcRequestRow } from "./rpcRequestRow.ts";
@@ -156,6 +157,15 @@ describe("RPC Request table", () => {
 
     expect(visibleColumns(table)).toEqual(["method", "contract", "function"]);
   });
+
+  it("lets every column left with the details open give way, the last first", () => {
+    const table = buildTable([]);
+    table.setColumnVisibility(getColumnVisibility(true));
+
+    const factors = visibleColumns(table).map(getShrinkWithDetails);
+    expect(factors.every((factor) => factor > 0)).toBe(true);
+    expect([...factors].sort((a, b) => a - b)).toEqual(factors);
+  });
 });
 
 describe("formatHiddenWithDetails", () => {
@@ -163,11 +173,11 @@ describe("formatHiddenWithDetails", () => {
     expect(
       formatHiddenWithDetails(
         row("1", {
-          status: "RPC error 3",
+          status: "error 3",
           endpoint: "eth.llamarpc.com",
           time: 1534,
         }),
       ),
-    ).toBe("Status: RPC error 3\nEndpoint: eth.llamarpc.com\nTime: 1.53 s");
+    ).toBe("Status: error 3\nEndpoint: eth.llamarpc.com\nTime: 1.53 s");
   });
 });

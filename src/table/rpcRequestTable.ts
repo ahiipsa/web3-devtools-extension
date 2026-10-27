@@ -66,8 +66,22 @@ const HIDDEN_WITH_DETAILS: VisibilityState = {
   time: false,
 };
 
+const ALL_VISIBLE: VisibilityState = {};
+
 export const getColumnVisibility = (detailsOpen: boolean): VisibilityState =>
-  detailsOpen ? HIDDEN_WITH_DETAILS : {};
+  detailsOpen ? HIDDEN_WITH_DETAILS : ALL_VISIBLE;
+
+// With the details open, columns that do not fit the table's side of the split
+// give way from the last: Function first, then Contract, then Method. Flex
+// shrinks by factor × width, so factors this far apart act as an order.
+const SHRINK_WITH_DETAILS: Record<string, number> = {
+  method: 1,
+  contract: 1e3,
+  function: 1e6,
+};
+
+export const getShrinkWithDetails = (columnId: string) =>
+  SHRINK_WITH_DETAILS[columnId] ?? 0;
 
 export const formatHiddenWithDetails = (
   row: Pick<RpcRequestRow, "status" | "endpoint" | "time">,
