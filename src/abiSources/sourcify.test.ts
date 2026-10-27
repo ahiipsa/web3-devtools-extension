@@ -23,6 +23,7 @@ describe("fetchFromSourcify", () => {
 
     expect(fetchFn).toHaveBeenCalledWith(
       "https://sourcify.dev/server/v2/contract/1/0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2?fields=abi,compilation,proxyResolution",
+      { signal: expect.any(AbortSignal) },
     );
   });
 
@@ -95,6 +96,16 @@ describe("fetchFromSourcify", () => {
     expect(
       await fetchFromSourcify(1, ADDRESS, respond(404, { message: "x" })),
     ).toEqual({ kind: "not-found" });
+  });
+
+  it("fails when Sourcify does not answer in time", async () => {
+    const fetchFn = vi.fn(async () => {
+      throw new DOMException("signal timed out", "TimeoutError");
+    });
+
+    await expect(fetchFromSourcify(1, ADDRESS, fetchFn)).rejects.toThrow(
+      /^Sourcify did not answer in 10 s$/,
+    );
   });
 
   it("fails on another HTTP status", async () => {

@@ -12,6 +12,14 @@ export const ETHERSCAN_TIMEOUT = 10_000;
 
 const NOT_VERIFIED = "Contract source code not verified";
 
+// Etherscan's explanations for a Chain it does not serve at all ("Missing or
+// unsupported chainid parameter …") or not on the key's plan ("Free API
+// access is not supported for this chain …")
+const UNSUPPORTED_CHAIN = /unsupported chainid|not supported for this chain/i;
+
+// A Chain Etherscan does not serve says nothing about the address
+export type EtherscanResult = AbiSourceResult | { kind: "unsupported-chain" };
+
 // Throws an Error whose message is fit to show the user; it never contains
 // the key
 export async function fetchFromEtherscan(
@@ -19,7 +27,7 @@ export async function fetchFromEtherscan(
   address: `0x${string}`,
   apiKey: string,
   fetchFn: typeof fetch = fetch,
-): Promise<AbiSourceResult> {
+): Promise<EtherscanResult> {
   const encodedKey = encodeURIComponent(apiKey);
   const fail = (message: string) =>
     new Error(
@@ -54,6 +62,9 @@ export async function fetchFromEtherscan(
       typeof body?.result === "string" && body.result
         ? body.result
         : body?.message;
+    if (typeof reason === "string" && UNSUPPORTED_CHAIN.test(reason)) {
+      return { kind: "unsupported-chain" };
+    }
     throw fail(
       typeof reason === "string" && reason
         ? reason

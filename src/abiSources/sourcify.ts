@@ -27,15 +27,29 @@ const getSourcifyImplementation = (proxyResolution: {
 
 const SOURCIFY_API = "https://sourcify.dev/server/v2/contract";
 
+// A stalled request fails, so Etherscan gets asked instead
+export const SOURCIFY_TIMEOUT = 10_000;
+
 // Throws an Error whose message is fit to show the user
 export async function fetchFromSourcify(
   chainId: number,
   address: `0x${string}`,
   fetchFn: typeof fetch = fetch,
 ): Promise<AbiSourceResult> {
-  const response = await fetchFn(
-    `${SOURCIFY_API}/${chainId}/${getAddress(address)}?fields=abi,compilation,proxyResolution`,
-  );
+  let response: Response;
+  try {
+    response = await fetchFn(
+      `${SOURCIFY_API}/${chainId}/${getAddress(address)}?fields=abi,compilation,proxyResolution`,
+      { signal: AbortSignal.timeout(SOURCIFY_TIMEOUT) },
+    );
+  } catch (error) {
+    if (error instanceof Error && error.name === "TimeoutError") {
+      throw new Error(
+        `Sourcify did not answer in ${SOURCIFY_TIMEOUT / 1000} s`,
+      );
+    }
+    throw error;
+  }
   if (response.status === 404) {
     return { kind: "not-found" };
   }

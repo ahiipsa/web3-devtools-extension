@@ -123,11 +123,33 @@ describe("fetchFromEtherscan", () => {
   });
 
   it("fails with the message of an error answer without an explanation", async () => {
-    const fetchFn = respond({ status: "0", message: "Invalid chainid" });
+    const fetchFn = respond({ status: "0", message: "Invalid API Key" });
 
     await expect(fetchFromEtherscan(1, ADDRESS, KEY, fetchFn)).rejects.toThrow(
-      /^Invalid chainid$/,
+      /^Invalid API Key$/,
     );
+  });
+
+  it.each([
+    "Missing or unsupported chainid parameter (required for v2 api), please see https://api.etherscan.io/v2/chainlist for the list of supported chainids",
+    "Free API access is not supported for this chain. Please upgrade your api plan for full chain coverage. https://etherscan.io/apis",
+  ])("says the Chain is not supported on %j", async (result) => {
+    const fetchFn = respond({ status: "0", message: "NOTOK", result });
+
+    expect(await fetchFromEtherscan(31337, ADDRESS, KEY, fetchFn)).toEqual({
+      kind: "unsupported-chain",
+    });
+  });
+
+  it("says the Chain is not supported when only the message says so", async () => {
+    const fetchFn = respond({
+      status: "0",
+      message: "Missing or unsupported chainid parameter",
+    });
+
+    expect(await fetchFromEtherscan(31337, ADDRESS, KEY, fetchFn)).toEqual({
+      kind: "unsupported-chain",
+    });
   });
 
   it("fails on an HTTP error", async () => {

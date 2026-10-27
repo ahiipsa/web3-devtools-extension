@@ -98,10 +98,16 @@ const STORAGE = {
     "0x" + pad(SLOT_IMPLEMENTATION),
 };
 
-// Verified on the fake Etherscan only; any other address is not verified
+// Verified on the fake Etherscan only; any other address is not verified.
+// The fake Sourcify answers 500 for SOURCIFY_DOWN
 export const LINK = "0x514910771af9ca656af840dff83e8264ecf986ca";
+export const SOURCIFY_DOWN = "0x3333333333333333333333333333333333333333";
 export const ETHERSCAN = {
   [LINK]: { ABI: JSON.stringify(BALANCE_OF_ABI), ContractName: "LinkToken" },
+  [SOURCIFY_DOWN]: {
+    ABI: JSON.stringify(BALANCE_OF_ABI),
+    ContractName: "DownToken",
+  },
 };
 
 // The mock node's answer per method; anything else gets `result: null`
@@ -335,6 +341,9 @@ const answerSourcify = (url) => {
   const address = /\/contract\/\d+\/(0x[0-9a-fA-F]{40})/
     .exec(url)?.[1]
     ?.toLowerCase();
+  if (address === SOURCIFY_DOWN) {
+    return { status: 500, body: { error: "Internal Server Error" } };
+  }
   const fixture = SOURCIFY[address];
   return fixture
     ? { status: 200, body: fixture }
@@ -1153,6 +1162,26 @@ async function smoke() {
       !(await multicallExpanded()) && (await innerCallRows()).length === 0,
     );
 
+    // With a key, Etherscan is asked when Sourcify fails too
+    await app.rpc(callTo(14, SOURCIFY_DOWN));
+    await app.sleep(800);
+    check(
+      "an eth_call to an address Sourcify fails for decodes from Etherscan",
+      (await callsContract("DownToken", "balanceOf")) &&
+        app.sourcifyUrls.some((url) =>
+          url.toLowerCase().includes(SOURCIFY_DOWN),
+        ) &&
+        app.etherscanUrls.some((url) => url.includes(SOURCIFY_DOWN)),
+    );
+    await click(".rpc-table-body [role=row]:last-child");
+    await click(".rpc-details-tab", "Contract");
+    check(
+      "the Contract tab says From Etherscan after a Sourcify failure",
+      /From Etherscan/.test(await app.text()),
+    );
+    await shot("14-sourcify-down");
+    await key("Escape");
+
     // Settings: off means no Sourcify request and no eth_chainId of its own
     await click(".rpc-table-settings-button");
     await click(".rpc-table-settings .ant-checkbox-wrapper");
@@ -1178,7 +1207,7 @@ async function smoke() {
         ),
       app.sourcifyUrls.slice(before).join(", "),
     );
-    await shot("14-end");
+    await shot("15-end");
   } catch (e) {
     check("scenario ran to the end", false, e.message.split("\n")[0]);
     await shot("99-crash").catch(() => {});
