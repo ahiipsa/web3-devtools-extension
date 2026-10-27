@@ -3,6 +3,7 @@
 //
 //   node .claude/skills/run-evm-rpc-inspector/driver.mjs smoke   # full scenario, exit 1 on any FAIL
 //   node .claude/skills/run-evm-rpc-inspector/driver.mjs repl    # line commands on stdin, see HELP
+//   import { launch } from "./driver.mjs"                        # the same handles from a script
 //
 // Loads build/ into Playwright's Chromium (branded Chrome ignores
 // --load-extension), opens DevTools on a local dApp page, switches DevTools to
@@ -17,6 +18,7 @@ import http from "node:http";
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import readline from "node:readline";
 
 const ROOT = resolve(new URL("../../..", import.meta.url).pathname);
@@ -544,10 +546,13 @@ async function repl() {
   await app.close();
 }
 
-const mode = process.argv[2];
-if (mode === "smoke") await smoke();
-else if (mode === "repl") await repl();
-else {
-  console.error("usage: driver.mjs smoke | repl");
-  process.exit(2);
+// Run as a script; imported, it only exports launch() and the fixtures
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  const mode = process.argv[2];
+  if (mode === "smoke") await smoke();
+  else if (mode === "repl") await repl();
+  else {
+    console.error("usage: driver.mjs smoke | repl");
+    process.exit(2);
+  }
 }
