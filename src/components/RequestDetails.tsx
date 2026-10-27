@@ -27,6 +27,17 @@ import {
 import { formatDuration } from "../table/rpcRequestRow.ts";
 import { getDetailsTabs, getShownDetailsTab } from "../details/detailsTabs.ts";
 import { getTabListScrollDelta } from "../details/tabListWheel.ts";
+import { useFindContract } from "../hooks/useFindContract.ts";
+import {
+  findBuiltInContract,
+  getInnerCalls,
+  InnerCall,
+} from "../decoding/multicall.ts";
+import {
+  formatInnerCallFunction,
+  formatInnerCallResult,
+  formatInnerCallTarget,
+} from "../decoding/formatInnerCall.ts";
 
 interface RequestDetailsProps {
   request: RpcRequest;
@@ -42,10 +53,16 @@ export const RequestDetails = ({ request, onClose }: RequestDetailsProps) => {
   const shownTab = getShownDetailsTab(detailsTab, callsContract);
 
   const contractQuery = useContractQuery({ contractAddress: callParams?.to });
-  const contract = contractQuery.data ?? undefined;
+  // Without a Contract, a Multicall still decodes with the built-in aggregator ABI
+  const contract = contractQuery.data ?? findBuiltInContract(callParams?.data);
   const decoding = useMemo(
     () => (contract ? decodeRpcRequest(request, contract.abi) : undefined),
     [contract, request],
+  );
+  const findContract = useFindContract();
+  const innerCalls = useMemo(
+    () => getInnerCalls(request, findContract),
+    [request, findContract],
   );
 
   const tabListRef = useRef<HTMLDivElement>(null);
@@ -121,6 +138,7 @@ export const RequestDetails = ({ request, onClose }: RequestDetailsProps) => {
             callParams={callParams}
             hasContract={!!contract}
             decoding={decoding}
+            innerCalls={innerCalls}
           />
         )}
         {shownTab === "Response" && (
@@ -226,42 +244,97 @@ const Overview = (props: {
   return <Fields fields={fields} />;
 };
 
+const InnerCalls = ({ innerCalls }: { innerCalls: InnerCall[] }) =>
+  innerCalls.length === 0 ? (
+    <div className="rpc-details-muted">No Inner Calls</div>
+  ) : (
+    <ol className="rpc-details-inner-calls">
+      {innerCalls.map((innerCall, index) => {
+        const result = formatInnerCallResult(innerCall);
+        return (
+          <li key={index} className="rpc-details-inner-call">
+            <div>
+              <span className="rpc-details-muted">#{index + 1}</span>{" "}
+              <span title={innerCall.target}>
+                {formatInnerCallTarget(innerCall)}
+              </span>
+              {innerCall.success === false && (
+                <span className="rpc-details-failed" title="Failed">
+                  {" "}
+                  ✗
+                </span>
+              )}
+            </div>
+            <div
+              className={cx("rpc-details-decoded-value", {
+                "rpc-details-muted": innerCall.decoding?.status !== "decoded",
+              })}
+            >
+              {formatInnerCallFunction(innerCall)}
+            </div>
+            {result !== undefined && (
+              <div className="rpc-details-decoded-value">→ {result}</div>
+            )}
+          </li>
+        );
+      })}
+    </ol>
+  );
+
 const Params = (props: {
   request: RpcRequest;
   callParams: ContractCall | undefined;
   hasContract: boolean;
   decoding: Decoding | undefined;
+  innerCalls: InnerCall[] | undefined;
 }) => {
-  const { request, callParams, hasContract, decoding } = props;
+  const { request, callParams, hasContract, decoding, innerCalls } = props;
+
+  const decodedInput = callParams && (
+    <>
+      {callParams.data && (
+        <Fields fields={[["Selector", callParams.data.slice(0, 10)]]} />
+      )}
+      {decoding?.status === "decoded" && (
+        <>
+          <Fields fields={[["Function", decoding.signature]]} />
+          <DecodedValues values={decoding.args} empty="No arguments" />
+        </>
+      )}
+      {decoding?.status === "mismatch" && (
+        <DecodingMismatch>
+          The Contract&apos;s ABI does not match this RPC Request
+        </DecodingMismatch>
+      )}
+      {!decoding && (
+        <div className="rpc-details-muted">
+          {!callParams.data
+            ? "This RPC Request sends no calldata"
+            : hasContract
+              ? "Not decoded"
+              : "Add the Contract's ABI in the Contract tab to decode"}
+        </div>
+      )}
+    </>
+  );
 
   return (
     <>
-      {callParams && (
-        <Section title="Decoded input">
-          {callParams.data && (
-            <Fields fields={[["Selector", callParams.data.slice(0, 10)]]} />
-          )}
-          {decoding?.status === "decoded" && (
-            <>
-              <Fields fields={[["Function", decoding.signature]]} />
-              <DecodedValues values={decoding.args} empty="No arguments" />
-            </>
-          )}
-          {decoding?.status === "mismatch" && (
-            <DecodingMismatch>
-              The Contract&apos;s ABI does not match this RPC Request
-            </DecodingMismatch>
-          )}
-          {!decoding && (
-            <div className="rpc-details-muted">
-              {!callParams.data
-                ? "This RPC Request sends no calldata"
-                : hasContract
-                  ? "Not decoded"
-                  : "Add the Contract's ABI in the Contract tab to decode"}
-            </div>
-          )}
-        </Section>
+      {innerCalls ? (
+        <>
+          <Section title="Inner Calls">
+            <InnerCalls innerCalls={innerCalls} />
+          </Section>
+          {/* A Multicall's raw decoded input is one long tuple: kept, folded */}
+          <details className="rpc-details-section rpc-details-collapsible">
+            <summary className="rpc-details-section-title">
+              Decoded input
+            </summary>
+            {decodedInput}
+          </details>
+        </>
+      ) : (
+        decodedInput && <Section title="Decoded input">{decodedInput}</Section>
       )}
       <Section title="Raw params">
         <Code value={request.requestBody.params} />

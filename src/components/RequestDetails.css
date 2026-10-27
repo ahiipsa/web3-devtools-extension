@@ -115,6 +115,27 @@
   padding: 6px 12px;
 }
 
+.rpc-details-collapsible > summary {
+  cursor: pointer;
+  user-select: none;
+}
+
+.rpc-details-inner-calls {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.rpc-details-inner-call {
+  padding: 3px 0;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+.rpc-details-inner-call + .rpc-details-inner-call {
+  border-top: 1px solid var(--rpc-details-separator);
+}
+
 .rpc-details-section + .rpc-details-section {
   margin-top: 10px;
 }

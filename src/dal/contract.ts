@@ -19,6 +19,9 @@ export interface Contract {
   proxy?: ContractProxy;
 }
 
+// A synchronous lookup over the Contract store, for whole lists of addresses
+export type FindContract = (address: `0x${string}`) => Contract | undefined;
+
 type ContractStore = Record<string, Contract>;
 
 // Contracts are identified by address alone: case-insensitive, chain-independent

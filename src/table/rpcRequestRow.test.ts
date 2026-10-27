@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { Abi } from "viem";
+import { Abi, encodeFunctionData, parseAbi } from "viem";
 import {
   buildRpcRequestRow,
   formatCollapsedSubtitle,
@@ -173,6 +173,33 @@ describe("buildRpcRequestRow", () => {
     );
 
     expect(getFunctionLabel(row)).toBeUndefined();
+  });
+
+  it("names a Multicall to an address without a Contract with the built-in aggregator ABI", () => {
+    // aggregate3([]) to an unlabelled address
+    const data = encodeFunctionData({
+      abi: parseAbi([
+        "function aggregate3((address target, bool allowFailure, bytes callData)[] calls) payable returns ((bool success, bytes returnData)[] returnData)",
+      ]),
+      functionName: "aggregate3",
+      args: [[]],
+    });
+    const request = rpcRequest({
+      requestBody: {
+        jsonrpc: "2.0",
+        id: 1,
+        method: "eth_estimateGas",
+        params: [{ to: TOKEN, data }],
+      },
+    });
+
+    const row = buildRpcRequestRow(request, noContracts);
+    expect(formatContractCall(row)).toBe("Multicall3 / aggregate3");
+
+    // A user Contract's ABI still wins for its address
+    expect(formatContractCall(buildRpcRequestRow(request, () => token))).toBe(
+      "USDC / 0x82ad56cb",
+    );
   });
 
   it("labels the status and flags anything but ok as failed", () => {

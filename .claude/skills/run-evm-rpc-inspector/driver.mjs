@@ -20,6 +20,12 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import readline from "node:readline";
+import {
+  encodeAbiParameters,
+  encodeFunctionData,
+  parseAbi,
+  parseAbiParameters,
+} from "viem";
 
 const ROOT = resolve(new URL("../../..", import.meta.url).pathname);
 const EXT = resolve(process.env.EXT ?? join(ROOT, "build"));
@@ -102,6 +108,52 @@ const ANSWERS = {
   eth_estimateGas: { error: { code: 3, message: "execution reverted" } },
 };
 
+// A Multicall3 aggregate3 to an address no ABI Source knows: WETH's
+// balanceOf (WETH9 once fetched) succeeds, an unknown call to UNVERIFIED fails
+export const MULTICALL = "0xca11bde05977b3631167028862be2a173976ca11";
+export const UNVERIFIED = "0x2222222222222222222222222222222222222222";
+export const MULTICALL_CALL = {
+  jsonrpc: "2.0",
+  id: 14,
+  method: "eth_call",
+  params: [
+    {
+      to: MULTICALL,
+      data: encodeFunctionData({
+        abi: parseAbi([
+          "function aggregate3((address target, bool allowFailure, bytes callData)[] calls) payable returns ((bool success, bytes returnData)[] returnData)",
+        ]),
+        functionName: "aggregate3",
+        args: [
+          [
+            {
+              target: WETH,
+              allowFailure: true,
+              callData: "0x70a08231" + pad(HOLDER),
+            },
+            {
+              target: UNVERIFIED,
+              allowFailure: true,
+              callData: "0x12345678",
+            },
+          ],
+        ],
+      }),
+    },
+    "latest",
+  ],
+};
+// What the mock node answers an eth_call to MULTICALL
+const MULTICALL_RESULT = encodeAbiParameters(
+  parseAbiParameters("(bool success, bytes returnData)[]"),
+  [
+    [
+      { success: true, returnData: "0x" + pad("f4240") }, // 1000000
+      { success: false, returnData: "0x" },
+    ],
+  ],
+);
+
 // What `traffic` sends: a single request, a batch, a call to TOKEN, a revert
 // and one POST that is not JSON-RPC (the Panel must skip it). Five RPC Requests.
 export const TRAFFIC = [
@@ -165,14 +217,17 @@ const startNode = () =>
         const one = (r) => ({
           jsonrpc: "2.0",
           id: r.id,
-          ...(r.method === "eth_getStorageAt"
-            ? {
-                result:
-                  STORAGE[
-                    `${String(r.params?.[0]).toLowerCase()}:${r.params?.[1]}`
-                  ] ?? "0x" + pad("0"),
-              }
-            : (ANSWERS[r.method] ?? { result: null })),
+          ...(r.method === "eth_call" &&
+          String(r.params?.[0]?.to).toLowerCase() === MULTICALL
+            ? { result: MULTICALL_RESULT }
+            : r.method === "eth_getStorageAt"
+              ? {
+                  result:
+                    STORAGE[
+                      `${String(r.params?.[0]).toLowerCase()}:${r.params?.[1]}`
+                    ] ?? "0x" + pad("0"),
+                }
+              : (ANSWERS[r.method] ?? { result: null })),
         });
         res.setHeader("content-type", "application/json");
         res.end(
@@ -747,7 +802,6 @@ async function smoke() {
       /From Etherscan/.test(await app.text()),
     );
     await shot("07-from-etherscan");
-    const UNVERIFIED = "0x2222222222222222222222222222222222222222";
     await app.rpc(callTo(11, UNVERIFIED));
     await app.sleep(800);
     await click(".rpc-table-body [role=row]:nth-child(9)");
@@ -813,6 +867,36 @@ async function smoke() {
       JSON.stringify(Object.keys(proxyContracts ?? {})),
     );
 
+    // A Multicall: named by the built-in aggregator ABI, its Inner Calls
+    // listed in Params, decoded where the target has a Contract (WETH9)
+    await app.rpc(MULTICALL_CALL);
+    await app.sleep(800);
+    check(
+      "a Multicall to an address without a Contract reads Multicall3 / aggregate3",
+      /Multicall3 \/ aggregate3|Multicall3\s+aggregate3/.test(await app.text()),
+    );
+    await click(".rpc-table-body [role=row]:nth-child(12)");
+    await click(".rpc-details-tab", "Params");
+    const innerCalls = await ev(
+      `[...document.querySelectorAll(".rpc-details-inner-call")].map((e) => e.innerText)`,
+    );
+    check(
+      "Params lists the Inner Calls, decoded with a result, the failed one ✗",
+      innerCalls?.length === 2 &&
+        /^#1 WETH9 0xC02a\.\.\.6Cc2\s+balanceOf\(account: 0x28C6c06298d514Db089934071355E5743bf21d60\)\s+→ 1000000$/.test(
+          innerCalls[0],
+        ) &&
+        /^#2 0x2222\.\.\.2222 ✗\s+0x12345678$/.test(innerCalls[1]),
+      JSON.stringify(innerCalls),
+    );
+    check(
+      "the Multicall's raw decoded input is folded below the list",
+      await ev(
+        `document.querySelector(".rpc-details-collapsible")?.open === false`,
+      ),
+    );
+    await shot("09-multicall");
+
     // Settings: off means no Sourcify request and no eth_chainId of its own
     await click(".rpc-table-settings-button");
     await click(".rpc-table-settings .ant-checkbox-wrapper");
@@ -838,7 +922,7 @@ async function smoke() {
         ),
       app.sourcifyUrls.slice(before).join(", "),
     );
-    await shot("09-end");
+    await shot("10-end");
   } catch (e) {
     check("scenario ran to the end", false, e.message.split("\n")[0]);
     await shot("99-crash").catch(() => {});

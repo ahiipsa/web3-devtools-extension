@@ -1,6 +1,6 @@
 import { Abi, decodeFunctionData } from "viem";
 import { RpcRequest } from "../types/main.ts";
-import { Contract } from "../dal/contract.ts";
+import { FindContract } from "../dal/contract.ts";
 import { getContractCallParams } from "../utils/requestUtils.ts";
 import {
   formatRpcRequestStatus,
@@ -9,6 +9,7 @@ import {
 } from "../capture/getRpcRequestStatus.ts";
 import { trimContractAddress } from "../utils/text.ts";
 import { findAbiFunction } from "../decoding/findAbiFunction.ts";
+import { findBuiltInContract } from "../decoding/multicall.ts";
 
 // What one line of the RPC Request table shows, derived once per RPC Request
 export interface RpcRequestRow {
@@ -16,7 +17,7 @@ export interface RpcRequestRow {
   method: string;
   // The Contract's name, else its short address; none when no Contract is called
   contractLabel?: string;
-  // For search: the full address, and the user's name for the Contract if any
+  // For search: the full address, and the Contract's name if any
   contractAddress?: string;
   contractName?: string;
   // Decoded with the Contract's ABI
@@ -31,8 +32,6 @@ export interface RpcRequestRow {
   // Duration in milliseconds
   time: number;
 }
-
-export type FindContract = (address: `0x${string}`) => Contract | undefined;
 
 // Same outcome as Decoding the calldata: no name unless it fully decodes
 const getFunctionName = (abi: Abi, data: `0x${string}`) => {
@@ -65,7 +64,10 @@ export function buildRpcRequestRow(
   findContract: FindContract,
 ): RpcRequestRow {
   const callParams = getContractCallParams(request);
-  const contract = callParams && findContract(callParams.to);
+  // Without a Contract, a Multicall still decodes with the built-in aggregator ABI
+  const contract =
+    callParams &&
+    (findContract(callParams.to) ?? findBuiltInContract(callParams.data));
   const status = getRpcRequestStatus(request);
 
   return {

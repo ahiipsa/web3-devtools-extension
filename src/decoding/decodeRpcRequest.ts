@@ -53,17 +53,11 @@ const formatParameter = (param: AbiParameter): string =>
 const buildSignature = (fn: AbiFunction) =>
   `${fn.name}(${fn.inputs.map(formatParameter).join(", ")})`;
 
-export function decodeRpcRequest(
-  request: RpcRequest,
-  abi: Abi,
-): Decoding | undefined {
-  const callParams = getContractCallParams(request);
-  if (!callParams?.data) {
-    return undefined;
-  }
-
-  const fn = findAbiFunction(abi, callParams.data);
-  const args = fn && decodeValues(fn.inputs, `0x${callParams.data.slice(10)}`);
+// Decodes calldata, and return data when given, with the function its
+// Selector names in the ABI
+export function decodeCall(abi: Abi, data: Hex, returnData?: Hex): Decoding {
+  const fn = findAbiFunction(abi, data);
+  const args = fn && decodeValues(fn.inputs, `0x${data.slice(10)}`);
   if (!fn || !args) {
     return { status: "mismatch" };
   }
@@ -75,13 +69,8 @@ export function decodeRpcRequest(
     args,
   };
 
-  // Only eth_call returns the function's return data
-  const returnData = request.response?.result;
-  if (
-    request.requestBody.method === "eth_call" &&
-    typeof returnData === "string"
-  ) {
-    const returnValues = decodeValues(fn.outputs ?? [], returnData as Hex);
+  if (returnData !== undefined) {
+    const returnValues = decodeValues(fn.outputs ?? [], returnData);
     if (returnValues) {
       decoding.returnValues = returnValues;
     } else {
@@ -90,4 +79,24 @@ export function decodeRpcRequest(
   }
 
   return decoding;
+}
+
+// Only eth_call returns the function's return data
+export const getReturnData = (request: RpcRequest): Hex | undefined => {
+  const returnData = request.response?.result;
+  return request.requestBody.method === "eth_call" &&
+    typeof returnData === "string"
+    ? (returnData as Hex)
+    : undefined;
+};
+
+export function decodeRpcRequest(
+  request: RpcRequest,
+  abi: Abi,
+): Decoding | undefined {
+  const callParams = getContractCallParams(request);
+  if (!callParams?.data) {
+    return undefined;
+  }
+  return decodeCall(abi, callParams.data, getReturnData(request));
 }
