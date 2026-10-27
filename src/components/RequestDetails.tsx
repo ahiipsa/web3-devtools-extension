@@ -8,7 +8,7 @@ import {
   useMemo,
   useRef,
 } from "react";
-import { ContractCall, RpcRequest } from "../types/main.ts";
+import { ContractCall, RpcRequest, RpcRequestStatus } from "../types/main.ts";
 import { AppContext } from "./AppContext.tsx";
 import { ContractForm } from "./ContractForm.tsx";
 import { useContractQuery } from "../hooks/useContractQuery.ts";
@@ -186,8 +186,7 @@ const DecodingMismatch = (props: { children: ReactNode }) => (
   <div className="rpc-details-failed">{props.children}</div>
 );
 
-const StatusLabel = ({ request }: { request: RpcRequest }) => {
-  const status = getRpcRequestStatus(request);
+const StatusLabel = ({ status }: { status: RpcRequestStatus }) => {
   const label = formatRpcRequestStatus(status);
   return (
     <span
@@ -211,7 +210,7 @@ const Overview = (props: {
     ["Endpoint", request.url],
     ["Method", request.requestBody.method],
     ["JSON-RPC id", JSON.stringify(request.requestBody.id ?? null)],
-    ["Status", <StatusLabel request={request} />],
+    ["Status", <StatusLabel status={getRpcRequestStatus(request)} />],
     ["HTTP status", request.httpStatus],
     ["Duration", formatDuration(request.time)],
     ["Started", new Date(request.startedDateTime).toLocaleString()],
@@ -276,11 +275,12 @@ const Response = (props: {
 }) => {
   const { request, decoding } = props;
   const { response } = request;
+  const status = getRpcRequestStatus(request);
 
   if (!response) {
     return (
       <>
-        <StatusLabel request={request} />
+        <StatusLabel status={status} />
         {request.hasRpcResponseBody && (
           <div className="rpc-details-muted">No RPC Response with this id</div>
         )}
@@ -288,10 +288,10 @@ const Response = (props: {
     );
   }
 
-  if (getRpcRequestStatus(request).kind === "invalid-response") {
+  if (status.kind === "invalid-response") {
     return (
       <>
-        <StatusLabel request={request} />
+        <StatusLabel status={status} />
         <Section title="Raw response">
           <Code value={response} />
         </Section>
