@@ -1,8 +1,13 @@
 import "./RequestTable.css";
 import cx from "classnames";
-import { useContext, useEffect, useRef } from "react";
-import { Button, Checkbox, Input, InputRef, Popover } from "antd";
-import { ClearOutlined, SettingOutlined } from "@ant-design/icons";
+import { Fragment, useContext, useEffect, useRef } from "react";
+import { Checkbox, Input, Popover } from "antd";
+import {
+  ClearIcon,
+  CrossCircleFilledIcon,
+  FilterIcon,
+  GearIcon,
+} from "./devtoolsIcons.tsx";
 import { AppContext } from "./AppContext.tsx";
 import { METHOD_CATEGORIES } from "../types/main.ts";
 import {
@@ -31,7 +36,7 @@ export const RequestToolbar = ({
       ? filter.methodCategories.length === 0
       : filter.methodCategories.includes(chip);
 
-  const searchRef = useRef<InputRef>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
 
   // Ctrl/⌘+F jumps to the search box from anywhere in the Panel, instead of
   // opening the DevTools search
@@ -47,78 +52,106 @@ export const RequestToolbar = ({
         ) {
           return false;
         }
-        searchRef.current?.focus({ cursor: "all" });
+        searchRef.current?.focus();
+        searchRef.current?.select();
         return true;
       }),
     [],
   );
 
+  // Network's order: Clear, the field, a checkbox where Network has Invert,
+  // then the type buttons with All set apart; ⚙ stays at the first line's end
   return (
     <div className="rpc-table-toolbar">
-      <Button
-        size="small"
-        type="text"
-        title="Clear"
-        icon={<ClearOutlined />}
-        onClick={onClear}
-      />
-      <Input
-        size="small"
-        allowClear
-        className="rpc-table-search"
-        placeholder="Filter"
-        aria-label="Filter"
-        ref={searchRef}
-        value={filter.search}
-        onChange={(event) =>
-          onFilterChange({ ...filter, search: event.target.value })
-        }
-        onKeyDown={(event) => {
-          // An empty box lets Esc through to DevTools
-          if (event.key === "Escape" && filter.search !== "") {
-            event.preventDefault();
-            onFilterChange({ ...filter, search: "" });
-          }
-        }}
-      />
-      <div
-        className="rpc-table-chips"
-        role="group"
-        aria-label="Method Category"
-      >
-        {CHIPS.map((chip) => (
-          <button
-            key={chip}
-            type="button"
-            className={cx("rpc-table-chip", {
-              "rpc-table-chip-pressed": isPressed(chip),
-            })}
-            aria-pressed={isPressed(chip)}
-            title={chip === "All" ? undefined : "Ctrl/⌘+click to add or remove"}
-            onClick={(event) =>
-              onFilterChange({
-                ...filter,
-                methodCategories: selectMethodCategory(
-                  filter.methodCategories,
-                  chip,
-                  event.ctrlKey || event.metaKey,
-                ),
-              })
+      <div className="rpc-table-toolbar-items">
+        <button
+          type="button"
+          className="rpc-table-toolbar-button"
+          title="Clear"
+          aria-label="Clear"
+          onClick={onClear}
+        >
+          <ClearIcon />
+        </button>
+        <div className="rpc-table-search">
+          <FilterIcon className="rpc-table-search-icon" />
+          <input
+            className="rpc-table-search-input"
+            placeholder="Filter"
+            aria-label="Filter"
+            spellCheck={false}
+            ref={searchRef}
+            value={filter.search}
+            onChange={(event) =>
+              onFilterChange({ ...filter, search: event.target.value })
             }
-          >
-            {chip}
-          </button>
-        ))}
+            onKeyDown={(event) => {
+              // An empty box lets Esc through to DevTools
+              if (event.key === "Escape" && filter.search !== "") {
+                event.preventDefault();
+                onFilterChange({ ...filter, search: "" });
+              }
+            }}
+          />
+          {filter.search !== "" && (
+            <button
+              type="button"
+              className="rpc-table-search-clear"
+              title="Clear filter"
+              aria-label="Clear filter"
+              // Keeps the focus in the box
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => onFilterChange({ ...filter, search: "" })}
+            >
+              <CrossCircleFilledIcon />
+            </button>
+          )}
+        </div>
+        <label className="rpc-table-errors">
+          <input
+            type="checkbox"
+            checked={filter.errorsOnly}
+            onChange={(event) =>
+              onFilterChange({ ...filter, errorsOnly: event.target.checked })
+            }
+          />
+          Errors
+        </label>
+        <div className="rpc-table-toolbar-divider" />
+        <div
+          className="rpc-table-chips"
+          role="group"
+          aria-label="Method Category"
+        >
+          {CHIPS.map((chip) => (
+            <Fragment key={chip}>
+              <button
+                type="button"
+                className={cx("rpc-table-chip", {
+                  "rpc-table-chip-pressed": isPressed(chip),
+                })}
+                aria-pressed={isPressed(chip)}
+                title={
+                  chip === "All" ? undefined : "Ctrl/⌘+click to add or remove"
+                }
+                onClick={(event) =>
+                  onFilterChange({
+                    ...filter,
+                    methodCategories: selectMethodCategory(
+                      filter.methodCategories,
+                      chip,
+                      event.ctrlKey || event.metaKey,
+                    ),
+                  })
+                }
+              >
+                {chip}
+              </button>
+              {chip === "All" && <div className="rpc-table-toolbar-divider" />}
+            </Fragment>
+          ))}
+        </div>
       </div>
-      <Checkbox
-        className="rpc-table-errors"
-        checked={filter.errorsOnly}
-        onChange={(event) =>
-          onFilterChange({ ...filter, errorsOnly: event.target.checked })
-        }
-      >
-        Errors
-      </Checkbox>
       <SettingsButton />
     </div>
   );
@@ -162,14 +195,14 @@ const SettingsButton = () => {
         </div>
       }
     >
-      <Button
-        size="small"
-        type="text"
-        className="rpc-table-settings-button"
+      <button
+        type="button"
+        className="rpc-table-toolbar-button rpc-table-settings-button"
         title="Settings"
         aria-label="Settings"
-        icon={<SettingOutlined />}
-      />
+      >
+        <GearIcon />
+      </button>
     </Popover>
   );
 };

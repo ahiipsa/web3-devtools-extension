@@ -681,6 +681,115 @@ export async function launch() {
         const style = getComputedStyle(e);
         return [Math.round(r.top), Math.round(r.height), style.backgroundColor, style.borderBottom];
       })`),
+    // The Network tab's filter bar and the Panel's toolbar, measured alike:
+    // the bar's height, background and bottom border, the filter field's
+    // height, radius and fill, a pressed and an unpressed type button, and
+    // `shot`, a screenshot of the bar as base64 PNG. Shows
+    // the Network panel for its part, then the Panel again
+    filterBars: async () => {
+      const measure = (bar, field, fieldFill, pressed, unpressed) => `(() => {
+        const box = (e) => e.getBoundingClientRect();
+        const style = (e, pseudo) => getComputedStyle(e, pseudo);
+        const chip = (e) => [Math.round(box(e).height * 10) / 10, style(e).fontSize, style(e).fontWeight, style(e).color, style(e).backgroundColor, style(e).outlineColor + " " + style(e).outlineStyle];
+        const bar = ${bar}, field = ${field};
+        return {
+          barHeight: Math.round(box(bar).height),
+          barBg: style(bar).backgroundColor,
+          barBorder: style(bar).borderBottom,
+          fontSize: style(bar).fontSize,
+          fontFamily: style(bar).fontFamily,
+          fieldHeight: Math.round(box(field).height),
+          fieldRadius: style(field).borderRadius,
+          fieldFill: ${fieldFill},
+          pressedChip: chip(${pressed}),
+          chip: chip(${unpressed}),
+          rect: [box(bar).x, box(bar).y, box(bar).width, box(bar).height].map(Math.round),
+        };
+      })()`;
+      await devtools.evaluate(
+        `(async () => { await (await ${LEGACY}).showPanel("network"); return 1 })()`,
+      );
+      const deep = `const deep = (root, sel) => root.querySelector(sel) ?? [...root.querySelectorAll("*")].map((e) => e.shadowRoot && deep(e.shadowRoot, sel)).find(Boolean);`;
+      const network = await api.until(() =>
+        devtools.evaluate(`(() => { ${deep}
+          const filterBar = deep(document, ".filter-bar");
+          if (!filterBar?.getBoundingClientRect().height) return null;
+          return ${measure(
+            "filterBar",
+            'deep(bar, ".toolbar-input")',
+            'style(field, "::before").backgroundColor',
+            'bar.querySelector(".filter-bitset-filter span.selected")',
+            'bar.querySelector(".filter-bitset-filter span:not(.selected)")',
+          )}; })()`),
+      );
+      network.shot = await api.clip(network.rect);
+      await devtools.evaluate(
+        `(async () => { await (await ${LEGACY}).showPanel(${JSON.stringify(panelId)}); return 1 })()`,
+      );
+      // Clicks land by the Panel's offset in DevTools: wait until the Panel
+      // is selected again and its frame has stopped moving
+      let last;
+      await api.until(async () => {
+        const selected = await devtools.evaluate(
+          `(async () => (await ${LEGACY}).tabbedPane.selectedTabId)()`,
+        );
+        const now = JSON.stringify([
+          selected,
+          await offset(),
+          await ev("innerWidth"),
+        ]);
+        const settled = selected === panelId && now === last;
+        last = now;
+        return settled;
+      });
+      const ours = await ev(
+        measure(
+          'document.querySelector(".rpc-table-toolbar")',
+          'document.querySelector(".rpc-table-search")',
+          "style(field).backgroundColor",
+          'document.querySelector(".rpc-table-chip-pressed")',
+          'document.querySelector(".rpc-table-chip:not(.rpc-table-chip-pressed)")',
+        ),
+      );
+      const [ox, oy] = await offset();
+      ours.rect = [ours.rect[0] + ox, ours.rect[1] + oy, ...ours.rect.slice(2)];
+      ours.shot = await api.clip(ours.rect);
+      return { network, ours };
+    },
+    // The part of DevTools at `rect`, as a full screenshot (base64 PNG) and
+    // where to crop it. A clipped Page.captureScreenshot would swallow the
+    // next click into the Panel
+    clip: async (rect) => ({
+      rect,
+      width: await devtools.evaluate("innerWidth"),
+      data: (await devtools.send("Page.captureScreenshot", { format: "png" }))
+        .result.data,
+    }),
+    // Clips stacked one under the other with a label, into `$OUT/<name>.png`.
+    // It renders them in a new tab, which unsettles DevTools: call it once
+    // the checks are done
+    stackShots: async (name, clips) => {
+      const sheet = await context.newPage();
+      await sheet.setContent(
+        `<body style="margin:0;padding:8px;background:#888;font:12px system-ui;display:inline-block">${clips
+          .map(
+            ([
+              label,
+              {
+                rect: [x, y, w, h],
+                width,
+                data,
+              },
+            ]) =>
+              `<div style="margin:4px 0">${label}</div><div style="width:${w}px;height:${h}px;background:url(data:image/png;base64,${data}) -${x}px -${y}px / ${width}px auto no-repeat"></div>`,
+          )
+          .join("")}</body>`,
+      );
+      const file = join(OUT, name + ".png");
+      await sheet.locator("body").screenshot({ path: file });
+      await sheet.close();
+      return file;
+    },
     detailsOpen: () =>
       ev(`document.querySelectorAll(".rpc-details-tab").length > 0`),
     text: () => ev("document.body.innerText"),
@@ -746,6 +855,35 @@ async function smoke() {
       rows.join(", "),
     );
     await shot("02-table");
+
+    // The toolbar looks like the Network tab's filter bar, measured in both
+    const bars = await app.filterBars();
+    for (const property of Object.keys(bars.network).filter(
+      (p) => p !== "rect" && p !== "shot",
+    ))
+      check(
+        `the toolbar's ${property} matches the Network filter bar's`,
+        json(bars.ours[property]) === json(bars.network[property]),
+        `Network ${json(bars.network[property])} · ours ${json(bars.ours[property])}`,
+      );
+    const toolbarOrder = await ev(
+      `[...document.querySelectorAll(".rpc-table-toolbar-items > button, .rpc-table-search-input, .rpc-table-errors, .rpc-table-chip")].map((e) => e.getAttribute("aria-label") ?? e.innerText.trim()).join()`,
+    );
+    check(
+      "the toolbar reads Clear, Filter, Errors, All, then the Method Categories",
+      toolbarOrder ===
+        "Clear,Filter,Errors,All,Calls,Transactions,Logs,Chain,Other",
+      toolbarOrder,
+    );
+    // The default side-docked DevTools is about 550 px wide
+    check(
+      "⚙ ends the toolbar's first line at side-docked width",
+      await ev(`(() => {
+        const box = (selector) => document.querySelector(selector).getBoundingClientRect();
+        const gear = box(".rpc-table-settings-button"), clear = box(".rpc-table-toolbar-button"), bar = box(".rpc-table-toolbar");
+        return gear.top === clear.top && Math.round(bar.right - gear.right) <= 3; })()`),
+      `Panel ${await ev("innerWidth")} px, toolbar ${bars.ours.barHeight} px high`,
+    );
     const closedWidths = await app.headerWidths();
 
     await clickRow({ method: "eth_call" });
@@ -1393,6 +1531,11 @@ async function smoke() {
       app.sourcifyUrls.slice(before).join(", "),
     );
     await shot("15-end");
+    // Both bars, for a human to compare by eye
+    await app.stackShots("03-filter-bars", [
+      ["Network", bars.network.shot],
+      ["EVM RPC", bars.ours.shot],
+    ]);
   } catch (e) {
     check("scenario ran to the end", false, e.message.split("\n")[0]);
     await shot("99-crash").catch(() => {});
