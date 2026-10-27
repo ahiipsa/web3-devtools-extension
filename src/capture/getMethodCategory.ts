@@ -7,12 +7,20 @@ const CATEGORY_BY_METHOD: Record<string, MethodCategory> = {
   eth_sendRawTransaction: "Transactions",
   eth_getTransactionByHash: "Transactions",
   eth_getTransactionReceipt: "Transactions",
+  eth_getTransactionByBlockHashAndIndex: "Transactions",
+  eth_getTransactionByBlockNumberAndIndex: "Transactions",
+  eth_getBlockReceipts: "Transactions",
   eth_getLogs: "Logs",
   eth_newFilter: "Logs",
   eth_newBlockFilter: "Logs",
+  eth_newPendingTransactionFilter: "Logs",
   eth_getFilterChanges: "Logs",
   eth_getFilterLogs: "Logs",
   eth_uninstallFilter: "Logs",
+  // Account methods are wallet actions, not chain reads.
+  eth_accounts: "Other",
+  eth_requestAccounts: "Other",
+  eth_coinbase: "Other",
 };
 
 export function getMethodCategory(method: string): MethodCategory {
