@@ -57,14 +57,25 @@
   touch-action: none;
 }
 
-.rpc-details-tabs {
+.rpc-details-tab-bar {
   display: flex;
   align-items: stretch;
+  flex: none;
   height: 26px;
   border-bottom: 1px solid var(--rpc-details-separator);
   background: var(--rpc-details-header-bg);
   white-space: nowrap;
-  overflow: hidden;
+}
+
+/* Close stays put; in a narrow Panel the tabs scroll sideways, never hide */
+.rpc-details-tabs {
+  display: flex;
+  align-items: stretch;
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
 }
 
 .rpc-details-close,
@@ -77,11 +88,13 @@
 }
 
 .rpc-details-close {
+  flex: none;
   width: 26px;
   color: var(--rpc-details-muted);
 }
 
 .rpc-details-tab {
+  flex: none;
   padding: 0 10px;
   border-bottom: 2px solid transparent;
 }

@@ -1,6 +1,13 @@
 import "./RequestDetails.css";
 import cx from "classnames";
-import { Fragment, ReactNode, useContext, useMemo } from "react";
+import {
+  Fragment,
+  ReactNode,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+} from "react";
 import { ContractCall, RpcRequest } from "../types/main.ts";
 import { AppContext } from "./AppContext.tsx";
 import { ContractForm } from "./ContractForm.tsx";
@@ -14,6 +21,7 @@ import {
 import { getRpcRequestStatus } from "../capture/getRpcRequestStatus.ts";
 import { formatDuration } from "../table/rpcRequestRow.ts";
 import { getDetailsTabs, getShownDetailsTab } from "../details/detailsTabs.ts";
+import { getTabBarScrollDelta } from "../details/tabBarWheel.ts";
 
 interface RequestDetailsProps {
   request: RpcRequest;
@@ -35,9 +43,37 @@ export const RequestDetails = ({ request, onClose }: RequestDetailsProps) => {
     [contract, request],
   );
 
+  const tabListRef = useRef<HTMLDivElement>(null);
+  const shownTabRef = useRef<HTMLButtonElement>(null);
+
+  // A narrow Panel scrolls the tab bar; keep the shown tab, also a remembered one, in view
+  useEffect(() => {
+    shownTabRef.current?.scrollIntoView({
+      block: "nearest",
+      inline: "nearest",
+    });
+  }, [shownTab]);
+
+  // Not a React onWheel: that listener is passive and cannot preventDefault
+  useEffect(() => {
+    const tabList = tabListRef.current;
+    if (!tabList) {
+      return;
+    }
+    const onWheel = (event: WheelEvent) => {
+      const delta = getTabBarScrollDelta(event, tabList.clientWidth);
+      if (delta !== null && tabList.scrollWidth > tabList.clientWidth) {
+        event.preventDefault();
+        tabList.scrollLeft += delta;
+      }
+    };
+    tabList.addEventListener("wheel", onWheel, { passive: false });
+    return () => tabList.removeEventListener("wheel", onWheel);
+  }, []);
+
   return (
     <div className="rpc-details">
-      <div className="rpc-details-tabs" role="tablist">
+      <div className="rpc-details-tab-bar">
         <button
           type="button"
           className="rpc-details-close"
@@ -47,20 +83,23 @@ export const RequestDetails = ({ request, onClose }: RequestDetailsProps) => {
         >
           ✕
         </button>
-        {tabs.map((tab) => (
-          <button
-            key={tab}
-            type="button"
-            role="tab"
-            aria-selected={tab === shownTab}
-            className={cx("rpc-details-tab", {
-              "rpc-details-tab-selected": tab === shownTab,
-            })}
-            onClick={() => setDetailsTab(tab)}
-          >
-            {tab}
-          </button>
-        ))}
+        <div className="rpc-details-tabs" role="tablist" ref={tabListRef}>
+          {tabs.map((tab) => (
+            <button
+              key={tab}
+              ref={tab === shownTab ? shownTabRef : undefined}
+              type="button"
+              role="tab"
+              aria-selected={tab === shownTab}
+              className={cx("rpc-details-tab", {
+                "rpc-details-tab-selected": tab === shownTab,
+              })}
+              onClick={() => setDetailsTab(tab)}
+            >
+              {tab}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="rpc-details-body" role="tabpanel">

@@ -36,25 +36,29 @@
   --rpc-table-chip-pressed: #1f3760;
 }
 
+/* Wraps onto further rows when it does not fit, like the Network filter bar */
 .rpc-table-toolbar {
   display: flex;
+  flex: none;
+  flex-wrap: wrap;
   align-items: center;
-  height: 26px;
+  min-height: 26px;
   padding: 0 4px;
   border-bottom: 1px solid var(--rpc-table-separator);
   background: var(--rpc-table-header-bg);
-  gap: 6px;
+  gap: 2px 6px;
   white-space: nowrap;
-  overflow: hidden;
 }
 
+/* Rows break by the 80px basis, so the box shrinks before anything wraps */
 .rpc-table-search {
-  flex: 0 1 200px;
-  min-width: 80px;
+  flex: 1 1 80px;
+  max-width: 200px;
 }
 
 .rpc-table-chips {
   display: flex;
+  flex-wrap: wrap;
   gap: 2px;
 }
 
