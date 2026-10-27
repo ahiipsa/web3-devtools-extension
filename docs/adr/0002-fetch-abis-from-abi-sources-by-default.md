@@ -7,3 +7,5 @@ We chose convenience over the stricter privacy default: pasting ABIs by hand for
 ## Consequences
 
 `PRIVACY.md`, the README and the Chrome Web Store data disclosure must say what is sent and to whom, and how to turn it off. Turning the default off later breaks the "it just decodes" experience for existing users; turning it on was the visible change, so do not silently widen what is sent (e.g. calldata, page URLs, other services) without revisiting this record.
+
+The target addresses of a Multicall's Inner Calls are called contracts too, and are fetched under the same rules; this sends more public addresses, not a new kind of data.

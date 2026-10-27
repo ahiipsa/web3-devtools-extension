@@ -48,6 +48,14 @@ _Avoid_: Explorer, verifier
 Turning an RPC Request's calldata and its RPC Response's return data into a function name and named arguments, using the target Contract's ABI.
 _Avoid_: Parsing, interpreting
 
+**Multicall**:
+An RPC Request that calls an aggregator contract (Multicall3, Multicall2) to bundle several Inner Calls into one, recognised by the aggregator function it calls, at any address.
+_Avoid_: Batch (a batch POST is several RPC Requests), aggregate call
+
+**Inner Call**:
+One call bundled in a Multicall: a target address, its calldata and, when the RPC Response carries it, its own success flag and return data. Not an RPC Request: it has no `id`, Endpoint or Status of its own. An Inner Call that is itself a Multicall is not unpacked further.
+_Avoid_: Subcall, child, nested request
+
 **Selector**:
 The first 4 bytes of an RPC Request's calldata, naming the function it calls.
 _Avoid_: Function id, signature hash, method id
