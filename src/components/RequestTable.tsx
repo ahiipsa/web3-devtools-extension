@@ -27,6 +27,7 @@ import { isScrolledToBottom } from "../table/isScrolledToBottom.ts";
 import {
   buildRpcRequestLines,
   emptyExpansion,
+  getInnerCallLineId,
   getLineKeyAction,
   getSelectedLineId,
   LineKey,
@@ -99,12 +100,13 @@ const CollapsedSubtitle = ({ row }: { row: RpcRequestRow }) =>
   );
 
 // A Multicall's Inner Call count, and its failed ones' if any: ` · 12 · 2 ✗`
-const countInnerCalls = (innerCalls: InnerCallRow[]) => ({
-  total: ` · ${innerCalls.length}`,
-  failed: innerCalls.some((innerCall) => innerCall.failed)
-    ? ` · ${innerCalls.filter((innerCall) => innerCall.failed).length} ✗`
-    : "",
-});
+const countInnerCalls = (innerCalls: InnerCallRow[]) => {
+  const failed = innerCalls.filter((innerCall) => innerCall.failed).length;
+  return {
+    total: ` · ${innerCalls.length}`,
+    failed: failed ? ` · ${failed} ✗` : "",
+  };
+};
 
 const formatInnerCallCount = (innerCalls: InnerCallRow[]) => {
   const { total, failed } = countInnerCalls(innerCalls);
@@ -118,6 +120,7 @@ const MethodLabel = (props: {
 }) => {
   const { line, onToggle } = props;
   const { innerCalls } = line.row;
+  const count = innerCalls && countInnerCalls(innerCalls);
   return (
     <>
       {line.expandable && (
@@ -134,14 +137,10 @@ const MethodLabel = (props: {
         </span>
       )}
       {line.row.method}
-      {innerCalls && (
+      {count && (
         <>
-          <span className="rpc-table-muted">
-            {countInnerCalls(innerCalls).total}
-          </span>
-          <span className="rpc-table-failed-mark">
-            {countInnerCalls(innerCalls).failed}
-          </span>
+          <span className="rpc-table-muted">{count.total}</span>
+          <span className="rpc-table-failed-mark">{count.failed}</span>
         </>
       )}
     </>
@@ -158,6 +157,20 @@ const InnerCallLabel = ({ innerCall }: { innerCall: InnerCallRow }) => (
 
 const formatInnerCallLabel = (innerCall: InnerCallRow) =>
   formatContractCall(innerCall) + (innerCall.failed ? " ✗" : "");
+
+// The indented cell an Inner Call line shows, in the first column
+const InnerCallCell = (props: { innerCall: InnerCallRow; width?: number }) => (
+  <div
+    role="gridcell"
+    className="rpc-table-cell rpc-table-inner-call-cell"
+    style={props.width === undefined ? undefined : { width: props.width }}
+    title={formatInnerCallLabel(props.innerCall)}
+  >
+    <span className="rpc-table-cell-text">
+      <InnerCallLabel innerCall={props.innerCall} />
+    </span>
+  </div>
+);
 
 interface RequestTableProps {
   filter: RpcRequestFilter;
@@ -223,10 +236,6 @@ export const RequestTable = ({ filter, scrollRef }: RequestTableProps) => {
     setExpansion((current) =>
       setExpanded(current, row, filter.search, expanded),
     );
-    // A hidden Inner Call hands the highlight back to its Multicall
-    if (!expanded && selectedInnerCall?.requestId === row.request.id) {
-      setSelectedInnerCall(null);
-    }
   };
 
   // A filtered-out RPC Request can no longer be selected
@@ -289,6 +298,24 @@ export const RequestTable = ({ filter, scrollRef }: RequestTableProps) => {
     selectedInnerCall?.requestId === selection ? selectedInnerCall.index : null,
   );
 
+  // An Inner Call hidden by a collapse, a search or a filter is no longer
+  // highlighted, in the table or in the Params
+  useEffect(() => {
+    if (
+      selectedInnerCall &&
+      !lines.some(
+        (line) =>
+          line.id ===
+          getInnerCallLineId(
+            selectedInnerCall.requestId,
+            selectedInnerCall.index,
+          ),
+      )
+    ) {
+      setSelectedInnerCall(null);
+    }
+  }, [lines, selectedInnerCall, setSelectedInnerCall]);
+
   const virtualizer = useVirtualizer({
     count: lines.length,
     getScrollElement: () => scrollRef.current,
@@ -300,7 +327,7 @@ export const RequestTable = ({ filter, scrollRef }: RequestTableProps) => {
     overscan: 20,
   });
 
-  // Follow new rows only while the user has not scrolled up. A sorted table
+  // Follow new RPC Requests (not expanded Inner Calls) only while the user has not scrolled up. A sorted table
   // never follows: new rows land anywhere in it, not at the bottom.
   const stickToBottom = useRef(true);
   const sorted = sorting.length > 0;
@@ -309,7 +336,7 @@ export const RequestTable = ({ filter, scrollRef }: RequestTableProps) => {
     if (scrollElement && stickToBottom.current && !sorted) {
       scrollElement.scrollTop = scrollElement.scrollHeight;
     }
-  }, [lines.length, sorted, scrollRef]);
+  }, [rows.length, sorted, scrollRef]);
 
   // Rows change height as the details open and close; keep the selected one
   // in view through the change
@@ -465,15 +492,7 @@ export const RequestTable = ({ filter, scrollRef }: RequestTableProps) => {
                   onClick={() => openLine(line)}
                 >
                   {collapsed && line.kind === "innerCall" && (
-                    <div
-                      role="gridcell"
-                      className="rpc-table-cell rpc-table-inner-call-cell"
-                      title={formatInnerCallLabel(line.innerCall)}
-                    >
-                      <span className="rpc-table-cell-text">
-                        <InnerCallLabel innerCall={line.innerCall} />
-                      </span>
-                    </div>
+                    <InnerCallCell innerCall={line.innerCall} />
                   )}
                   {collapsed && line.kind === "rpcRequest" && (
                     <div
@@ -505,17 +524,11 @@ export const RequestTable = ({ filter, scrollRef }: RequestTableProps) => {
                       // An Inner Call fills the first column only
                       if (line.kind === "innerCall") {
                         return cell.column.id === "method" ? (
-                          <div
+                          <InnerCallCell
                             key={cell.id}
-                            role="gridcell"
-                            className="rpc-table-cell rpc-table-inner-call-cell"
-                            style={{ width }}
-                            title={formatInnerCallLabel(line.innerCall)}
-                          >
-                            <span className="rpc-table-cell-text">
-                              <InnerCallLabel innerCall={line.innerCall} />
-                            </span>
-                          </div>
+                            innerCall={line.innerCall}
+                            width={width}
+                          />
                         ) : (
                           <div
                             key={cell.id}
