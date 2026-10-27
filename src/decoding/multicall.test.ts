@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   Abi,
   encodeAbiParameters,
+  encodeErrorResult,
   encodeFunctionData,
   encodeFunctionResult,
   getAddress,
@@ -10,7 +11,11 @@ import {
   parseAbiParameters,
   toFunctionSelector,
 } from "viem";
-import { findBuiltInContract, getInnerCalls } from "./multicall.ts";
+import {
+  findBuiltInContract,
+  getInnerCalls,
+  getResultCountMismatch,
+} from "./multicall.ts";
 import { RpcRequest } from "../types/main.ts";
 import { getMethodCategory } from "../capture/getMethodCategory.ts";
 import { Contract } from "../dal/contract.ts";
@@ -30,6 +35,11 @@ const multicall3Abi = parseAbi([
 ]);
 
 const erc20Abi = [
+  {
+    type: "error",
+    name: "InsufficientBalance",
+    inputs: [{ name: "required", type: "uint256" }],
+  },
   {
     type: "function",
     name: "balanceOf",
@@ -345,6 +355,122 @@ describe("getInnerCalls", () => {
   it("calldata that does not decode as the aggregator is not a Multicall", () => {
     expect(
       getInnerCalls(rpcRequest("eth_call", "0x82ad56cb1234"), findContract),
+    ).toBeUndefined();
+  });
+  it("a failed Inner Call carries its revert, decoded with its target's Contract", () => {
+    const data = encodeFunctionData({
+      abi: multicall3Abi,
+      functionName: "aggregate3",
+      args: [
+        [
+          { target: TOKEN, allowFailure: true, callData: balanceOf },
+          { target: OTHER, allowFailure: true, callData: UNKNOWN_CALLDATA },
+          { target: OTHER, allowFailure: true, callData: UNKNOWN_CALLDATA },
+        ],
+      ],
+    });
+    const custom = encodeErrorResult({
+      abi: erc20Abi,
+      errorName: "InsufficientBalance",
+      args: [9n],
+    });
+    const message = encodeErrorResult({
+      abi: parseAbi(["error Error(string)"]),
+      errorName: "Error",
+      args: ["Not allowed"],
+    });
+    const result = encodeResults([
+      { success: false, returnData: custom },
+      { success: false, returnData: message },
+      // Without the Contract that declares it, a custom error stays raw
+      { success: false, returnData: custom },
+    ]);
+
+    expect(
+      getInnerCalls(rpcRequest("eth_call", data, result), findContract),
+    ).toEqual([
+      {
+        ...decodedBalanceOf(),
+        success: false,
+        returnData: custom,
+        revert: {
+          kind: "custom",
+          name: "InsufficientBalance",
+          args: [{ name: "required", type: "uint256", value: 9n }],
+        },
+      },
+      {
+        ...unknownCall,
+        success: false,
+        returnData: message,
+        revert: { kind: "error", message: "Not allowed" },
+      },
+      {
+        ...unknownCall,
+        success: false,
+        returnData: custom,
+        revert: { kind: "raw", data: custom },
+      },
+    ]);
+  });
+
+  it("a result count that differs from the Inner Calls' pairs nothing", () => {
+    const data = encodeFunctionData({
+      abi: multicall3Abi,
+      functionName: "aggregate3",
+      args: [
+        [
+          { target: TOKEN, allowFailure: true, callData: balanceOf },
+          { target: OTHER, allowFailure: true, callData: UNKNOWN_CALLDATA },
+        ],
+      ],
+    });
+    const result = encodeResults([{ success: true, returnData: balance(1n) }]);
+
+    expect(
+      getInnerCalls(rpcRequest("eth_call", data, result), findContract),
+    ).toEqual([decodedBalanceOf(), unknownCall]);
+  });
+});
+
+describe("getResultCountMismatch", () => {
+  const data = encodeFunctionData({
+    abi: multicall3Abi,
+    functionName: "aggregate3",
+    args: [
+      [
+        { target: TOKEN, allowFailure: true, callData: balanceOf },
+        { target: OTHER, allowFailure: true, callData: UNKNOWN_CALLDATA },
+      ],
+    ],
+  });
+
+  it("counts the results and the Inner Calls when they differ", () => {
+    const result = encodeResults([{ success: true, returnData: balance(1n) }]);
+    expect(
+      getResultCountMismatch(rpcRequest("eth_call", data, result)),
+    ).toEqual({ resultCount: 1, innerCallCount: 2 });
+  });
+
+  it("is nothing when the counts match", () => {
+    const result = encodeResults([
+      { success: true, returnData: balance(1n) },
+      { success: false, returnData: "0x" },
+    ]);
+    expect(
+      getResultCountMismatch(rpcRequest("eth_call", data, result)),
+    ).toBeUndefined();
+  });
+
+  it("is nothing without decoded results or for another RPC Request", () => {
+    expect(
+      getResultCountMismatch(rpcRequest("eth_call", data)),
+    ).toBeUndefined();
+    expect(
+      getResultCountMismatch(rpcRequest("eth_call", data, "0x1234")),
+    ).toBeUndefined();
+    expect(
+      getResultCountMismatch(rpcRequest("eth_call", balanceOf, balance(1n))),
     ).toBeUndefined();
   });
 });

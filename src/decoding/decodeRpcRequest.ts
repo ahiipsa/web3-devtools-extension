@@ -24,17 +24,23 @@ export type Decoding =
     }
   | { status: "mismatch" };
 
+// Labels decoded values with their parameters
+export const labelValues = (
+  params: readonly AbiParameter[],
+  values: readonly unknown[],
+): DecodedValue[] =>
+  params.map((param, index) => ({
+    name: param.name || (params.length > 1 ? `[${index}]` : ""),
+    type: param.type,
+    value: values[index],
+  }));
+
 const decodeValues = (
   params: readonly AbiParameter[],
   data: Hex,
 ): DecodedValue[] | undefined => {
   try {
-    const values = decodeAbiParameters(params, data);
-    return params.map((param, index) => ({
-      name: param.name || (params.length > 1 ? `[${index}]` : ""),
-      type: param.type,
-      value: values[index],
-    }));
+    return labelValues(params, decodeAbiParameters(params, data));
   } catch {
     return undefined;
   }

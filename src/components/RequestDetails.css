@@ -191,6 +191,13 @@
   white-space: pre-wrap;
 }
 
+/* One line, cut with an ellipsis; the text stays whole for copying */
+.rpc-details-clipped {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .rpc-details-failed {
   color: var(--rpc-details-failed);
 }

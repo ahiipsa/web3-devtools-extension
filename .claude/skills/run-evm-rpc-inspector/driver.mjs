@@ -22,6 +22,7 @@ import { fileURLToPath } from "node:url";
 import readline from "node:readline";
 import {
   encodeAbiParameters,
+  encodeErrorResult,
   encodeFunctionData,
   parseAbi,
   parseAbiParameters,
@@ -120,7 +121,8 @@ const ANSWERS = {
 };
 
 // A Multicall3 aggregate3 to an address no ABI Source knows: WETH's
-// balanceOf (WETH9 once fetched) succeeds, an unknown call to UNVERIFIED fails
+// balanceOf (WETH9 once fetched) succeeds, an unknown call to UNVERIFIED
+// reverts with Error("Not allowed")
 export const MULTICALL = "0xca11bde05977b3631167028862be2a173976ca11";
 export const UNVERIFIED = "0x2222222222222222222222222222222222222222";
 // An aggregate3 eth_call to MULTICALL: a balanceOf to `token`, then an
@@ -164,16 +166,31 @@ export const MULTICALL_FETCH_CALL = aggregate3Call(
   INNER_TOKEN,
   INNER_UNVERIFIED,
 );
-// What the mock node answers an eth_call to MULTICALL
-const MULTICALL_RESULT = encodeAbiParameters(
-  parseAbiParameters("(bool success, bytes returnData)[]"),
-  [
-    [
-      { success: true, returnData: "0x" + pad("f4240") }, // 1000000
-      { success: false, returnData: "0x" },
-    ],
-  ],
-);
+// What the mock node answers an eth_call to MULTICALL: the balance, then
+// the unknown call's revert
+const encodeResults = (results) =>
+  encodeAbiParameters(
+    parseAbiParameters("(bool success, bytes returnData)[]"),
+    [results],
+  );
+const MULTICALL_RESULT = encodeResults([
+  { success: true, returnData: "0x" + pad("f4240") }, // 1000000
+  {
+    success: false,
+    returnData: encodeErrorResult({
+      abi: parseAbi(["error Error(string)"]),
+      errorName: "Error",
+      args: ["Not allowed"],
+    }),
+  },
+]);
+// The answer to MULTICALL_FETCH_CALL: the unknown call succeeds, so its
+// return data shows raw
+export const INNER_RAW_RESULT = "0x" + pad("2a");
+const MULTICALL_FETCH_RESULT = encodeResults([
+  { success: true, returnData: "0x" + pad("f4240") }, // 1000000
+  { success: true, returnData: INNER_RAW_RESULT },
+]);
 
 // What `traffic` sends: a single request, a batch, a call to TOKEN, a revert
 // and one POST that is not JSON-RPC (the Panel must skip it). Five RPC Requests.
@@ -240,7 +257,12 @@ const startNode = () =>
           id: r.id,
           ...(r.method === "eth_call" &&
           String(r.params?.[0]?.to).toLowerCase() === MULTICALL
-            ? { result: MULTICALL_RESULT }
+            ? {
+                result:
+                  r.id === MULTICALL_FETCH_CALL.id
+                    ? MULTICALL_FETCH_RESULT
+                    : MULTICALL_RESULT,
+              }
             : r.method === "eth_getStorageAt"
               ? {
                   result:
@@ -989,12 +1011,12 @@ async function smoke() {
       `[...document.querySelectorAll(".rpc-details-inner-call")].map((e) => e.innerText)`,
     );
     check(
-      "Params lists the Inner Calls, decoded with a result, the failed one ✗",
+      "Params lists the Inner Calls, decoded with a result, the failed one ✗ with its revert message",
       innerCalls?.length === 2 &&
         /^#1 WETH9 0xC02a\.\.\.6Cc2\s+balanceOf\(account: 0x28C6c06298d514Db089934071355E5743bf21d60\)\s+→ 1000000$/.test(
           innerCalls[0],
         ) &&
-        /^#2 0x2222\.\.\.2222 ✗\s+0x12345678\s+No verified ABI[^\n]*\s+Add ABI$/.test(
+        /^#2 0x2222\.\.\.2222 ✗ Not allowed\s+0x12345678\s+No verified ABI[^\n]*\s+Add ABI$/.test(
           innerCalls[1],
         ),
       JSON.stringify(innerCalls),
@@ -1026,14 +1048,14 @@ async function smoke() {
       `[...document.querySelectorAll(".rpc-details-inner-call")].map((e) => e.innerText)`,
     );
     check(
-      "a fetched Inner Call target decodes in Params; an unverified one shows its state and Add ABI",
+      "a fetched Inner Call target decodes in Params; an unverified one shows its raw result, its state and Add ABI",
       fetchedInner?.length === 2 &&
         /^#1 InnerToken 0x7777\.\.\.7777\s+balanceOf\(account: 0x28C6c06298d514Db089934071355E5743bf21d60\)\s+→ 1000000$/.test(
           fetchedInner[0],
         ) &&
-        /^#2 0x8888\.\.\.8888 ✗\s+0x12345678\s+No verified ABI on Sourcify[^\n]*\s+Add ABI$/.test(
-          fetchedInner[1],
-        ),
+        new RegExp(
+          `^#2 0x8888\\.\\.\\.8888\\s+0x12345678\\s+→ ${INNER_RAW_RESULT}\\s+No verified ABI on Sourcify[^\\n]*\\s+Add ABI$`,
+        ).test(fetchedInner[1]),
       JSON.stringify(fetchedInner),
     );
     await click(".rpc-details-inner-call button", "Add ABI");

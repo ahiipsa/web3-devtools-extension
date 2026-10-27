@@ -4,6 +4,7 @@ import { Contract, FindContract } from "../dal/contract.ts";
 import { getContractCallParams } from "../utils/requestUtils.ts";
 import { findAbiFunction } from "./findAbiFunction.ts";
 import { decodeCall, Decoding, getReturnData } from "./decodeRpcRequest.ts";
+import { decodeRevert, Revert } from "./decodeRevert.ts";
 
 // Multicall3's aggregator functions; Multicall2's are the same functions
 // with the same Selectors
@@ -56,6 +57,8 @@ export interface InnerCall {
   // Inner Call reverts the whole Multicall
   success?: boolean;
   returnData?: Hex;
+  // Why a failed Inner Call reverted; absent for empty revert data
+  revert?: Revert;
 }
 
 // One call as the aggregator's calldata bundles it
@@ -141,20 +144,47 @@ export const getInnerCallTargets = (
   return input && getAggregatorCalls(input).map(({ target }) => target);
 };
 
+// The aggregator function and the per-call results its return data holds
+const getMulticallOutcomes = (request: RpcRequest) => {
+  const input = getAggregatorInput(request);
+  if (!input) {
+    return undefined;
+  }
+  const returnData = getReturnData(request);
+  return {
+    calls: getAggregatorCalls(input),
+    outcomes: returnData && getOutcomes(input, returnData),
+  };
+};
+
+export interface ResultCountMismatch {
+  resultCount: number;
+  innerCallCount: number;
+}
+
+// When a Multicall's return data decodes but holds a different number of
+// results than there are Inner Calls; undefined otherwise
+export const getResultCountMismatch = (
+  request: RpcRequest,
+): ResultCountMismatch | undefined => {
+  const { calls, outcomes } = getMulticallOutcomes(request) ?? {};
+  return calls && outcomes && outcomes.length !== calls.length
+    ? { resultCount: outcomes.length, innerCallCount: calls.length }
+    : undefined;
+};
+
 // The Inner Calls of a Multicall, each decoded with its target's Contract
 // and paired with its result; undefined for any other RPC Request
 export function getInnerCalls(
   request: RpcRequest,
   findContract: FindContract,
 ): InnerCall[] | undefined {
-  const input = getAggregatorInput(request);
-  if (!input) {
+  const multicall = getMulticallOutcomes(request);
+  if (!multicall) {
     return undefined;
   }
 
-  const calls = getAggregatorCalls(input);
-  const returnData = getReturnData(request);
-  const outcomes = returnData && getOutcomes(input, returnData);
+  const { calls, outcomes } = multicall;
   // Outcomes pair with Inner Calls by position, so a count that differs pairs nothing
   const paired = outcomes?.length === calls.length ? outcomes : undefined;
 
@@ -163,6 +193,10 @@ export function getInnerCalls(
     // An Inner Call that is itself a Multicall decodes as a plain aggregator
     // call, without Inner Calls of its own
     const contract = findDecodingContract(findContract, target, callData);
+    const failed = result?.success === false;
+    const revert = failed
+      ? decodeRevert(result.returnData, contract?.abi)
+      : undefined;
     return {
       target,
       callData,
@@ -173,9 +207,10 @@ export function getInnerCalls(
         decodeCall(
           contract.abi,
           callData,
-          result && result.success !== false ? result.returnData : undefined,
+          result && !failed ? result.returnData : undefined,
         ),
       ...result,
+      ...(revert && { revert }),
     };
   });
 }
