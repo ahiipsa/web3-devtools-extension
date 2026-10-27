@@ -107,11 +107,14 @@ export const ContractForm = (props: ContractInfoProps) => {
             <div className="flex flex-row gap-4">
               {/* Discards unsaved edits; disabled while there are none */}
               <Form.Item<FieldType> noStyle shouldUpdate>
-                {({ getFieldValue }) => {
+                {({ getFieldValue, isFieldsTouched }) => {
+                  // Touched alone stays set after typing an edit back out;
+                  // values alone differ for a moment while a Contract loads
                   const edited =
-                    getFieldValue("contractName") !==
+                    isFieldsTouched() &&
+                    (getFieldValue("contractName") !==
                       initialValues.contractName ||
-                    getFieldValue("abi") !== initialValues.abi;
+                      getFieldValue("abi") !== initialValues.abi);
                   return (
                     <Button type="default" htmlType="reset" disabled={!edited}>
                       Reset

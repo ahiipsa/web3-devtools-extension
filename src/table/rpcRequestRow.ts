@@ -118,8 +118,8 @@ export function formatContractCall(
     .join(" / ");
 }
 
-// The second line under the method while the details are open: the Contract
-// call, else the Endpoint's host
+// The second line under the method on a collapsed row (details open): the
+// Contract and its function, else the Endpoint's host
 export function formatCollapsedSubtitle(
   row: Pick<RpcRequestRow, "contractLabel" | "endpoint"> & FunctionFields,
 ) {

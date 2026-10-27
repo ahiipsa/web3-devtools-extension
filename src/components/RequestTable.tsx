@@ -57,8 +57,8 @@ const KEY_MOVES: Partial<Record<string, SelectionMove>> = {
   End: "last",
 };
 
-// Contract / function under the method, with an undecoded selector muted
-// The second line of a collapsed row; see formatCollapsedSubtitle
+// The second line of a collapsed row, as formatCollapsedSubtitle: the Endpoint's
+// host muted, else Contract / function with an undecoded selector muted
 const CollapsedSubtitle = ({ row }: { row: RpcRequestRow }) => {
   if (!row.contractLabel) {
     return <span className="rpc-table-muted">{row.endpoint}</span>;
@@ -67,7 +67,7 @@ const CollapsedSubtitle = ({ row }: { row: RpcRequestRow }) => {
   return (
     <>
       {row.contractLabel}
-      {row.contractLabel && functionLabel && " / "}
+      {functionLabel && " / "}
       {functionLabel && (
         <span className={cx({ "rpc-table-muted": !functionLabel.decoded })}>
           {functionLabel.text}
