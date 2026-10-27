@@ -52,7 +52,7 @@ printf '%s\n' traffic 'click .rpc-table-body [role=row]:nth-child(2)' selected '
 | `rows`, `selected`, `drawer`, `closedrawer`, `errors` | table rows, selected row, DevTools drawer open?, close it, Panel exceptions       |
 | `ss <name>`                                           | screenshot of the DevTools window to `$OUT/<name>.png`                            |
 
-The mock node's answers are `ANSWERS` in the driver (`eth_call` returns 1000000, `eth_estimateGas` reverts). To exercise another build: `EXT=/path/to/build node .claude/skills/run-evm-rpc-inspector/driver.mjs smoke`. `HEADED=1` puts the window on screen.
+The mock node's answers are `ANSWERS` in the driver (`eth_call` returns 1000000, `eth_estimateGas` reverts). To exercise another build: `EXT=/path/to/build node .claude/skills/run-evm-rpc-inspector/driver.mjs smoke`. `HEADED=1` puts the window on screen. DevTools follow the system colour scheme; `LIGHT=1` forces the light theme (`themeName` `default`).
 
 ## Run (human path)
 

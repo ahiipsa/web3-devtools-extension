@@ -12,7 +12,7 @@
 // through chrome.devtools.network like any other traffic.
 //
 // Env: EXT (default build/), OUT (screenshots, default /tmp/evm-rpc-inspector-shots),
-//      HEADED=1 to put the window on screen.
+//      HEADED=1 to put the window on screen, LIGHT=1 for the light DevTools theme.
 import { chromium } from "playwright-core";
 import http from "node:http";
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
@@ -178,6 +178,8 @@ export async function launch() {
       `--load-extension=${EXT}`,
       "--auto-open-devtools-for-tabs",
       "--remote-debugging-port=0",
+      // DevTools follow the system scheme; this forces light (themeName "default")
+      ...(process.env.LIGHT ? ["--blink-settings=preferredColorScheme=1"] : []),
       ...(process.env.HEADED ? [] : ["--window-position=-3000,-3000"]),
     ],
     viewport: { width: 1200, height: 800 },
