@@ -37,7 +37,7 @@ The outcome of an RPC Request: ok, an RPC error from its RPC Response, or, witho
 _Avoid_: Result, state
 
 **Contract**:
-A labelled on-chain address together with the one ABI used to decode RPC Requests sent to it, added by the user or fetched from an ABI Source. Identified by address alone: case-insensitive and independent of Chain. For a proxy, the ABI is the implementation's.
+A labelled on-chain address together with the one ABI used to decode RPC Requests sent to it, added by the user or fetched from an ABI Source. Identified by address alone: case-insensitive and independent of Chain. For a proxy, the ABI is the implementation's. A fetched Contract keeps the ABI Source it came from until the user saves it as their own.
 _Avoid_: Address book entry, account
 
 **ABI Source**:
@@ -49,7 +49,7 @@ Turning an RPC Request's calldata and its RPC Response's return data into a func
 _Avoid_: Parsing, interpreting
 
 **Multicall**:
-An RPC Request that calls an aggregator contract (Multicall3, Multicall2) to bundle several Inner Calls into one, recognised by the aggregator function it calls, at any address.
+An RPC Request that calls an aggregator contract (Multicall3, Multicall2) to bundle several Inner Calls into one, recognised by the aggregator function it calls, at any address. Without a Contract at its address, a Multicall decodes with the built-in aggregator ABI, named Multicall3.
 _Avoid_: Batch (a batch POST is several RPC Requests), aggregate call
 
 **Inner Call**:
