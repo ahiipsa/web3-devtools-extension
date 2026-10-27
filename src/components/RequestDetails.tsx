@@ -6,7 +6,11 @@ import { AppContext } from "./AppContext.tsx";
 import { ContractForm } from "./ContractForm.tsx";
 import { useContractQuery } from "../hooks/useContractQuery.ts";
 import { getContractCallParams, stringifyArgs } from "../utils/requestUtils.ts";
-import { decodeRpcRequest, Decoding } from "../decoding/decodeRpcRequest.ts";
+import {
+  DecodedValue,
+  decodeRpcRequest,
+  Decoding,
+} from "../decoding/decodeRpcRequest.ts";
 import { getRpcRequestStatus } from "../capture/getRpcRequestStatus.ts";
 import { formatDuration } from "../table/rpcRequestRow.ts";
 import { getDetailsTabs, getShownDetailsTab } from "../details/detailsTabs.ts";
@@ -115,6 +119,24 @@ const Code = (props: { value: unknown }) => (
   </pre>
 );
 
+const DecodedValues = (props: { values: DecodedValue[]; empty: string }) =>
+  props.values.length === 0 ? (
+    <div className="rpc-details-muted">{props.empty}</div>
+  ) : (
+    <div className="rpc-details-fields">
+      {props.values.map(({ name, type, value }) => (
+        <Fragment key={name}>
+          <div className="rpc-details-field-name">
+            {name} <span className="rpc-details-muted">{type}</span>
+          </div>
+          <div className="rpc-details-field-value rpc-details-decoded-value">
+            {stringifyArgs(value)}
+          </div>
+        </Fragment>
+      ))}
+    </div>
+  );
+
 const DecodingMismatch = (props: { children: ReactNode }) => (
   <div className="rpc-details-failed">{props.children}</div>
 );
@@ -187,12 +209,10 @@ const Params = (props: {
             <Fields fields={[["Selector", callParams.data.slice(0, 10)]]} />
           )}
           {decoding?.status === "decoded" && (
-            <Fields
-              fields={[
-                ["Function", decoding.signature],
-                ["Arguments", stringifyArgs(decoding.args)],
-              ]}
-            />
+            <>
+              <Fields fields={[["Function", decoding.signature]]} />
+              <DecodedValues values={decoding.args} empty="No arguments" />
+            </>
           )}
           {decoding?.status === "mismatch" && (
             <DecodingMismatch>
@@ -217,6 +237,18 @@ const Params = (props: {
   );
 };
 
+const ReturnValues = ({ values }: { values: DecodedValue[] }) => {
+  // A single unnamed output needs no label
+  if (values.length === 1 && values[0].name === "[0]") {
+    return (
+      <div className="rpc-details-field-value rpc-details-decoded-value">
+        {stringifyArgs(values[0].value)}
+      </div>
+    );
+  }
+  return <DecodedValues values={values} empty="No return value" />;
+};
+
 const Response = (props: {
   request: RpcRequest;
   decoding: Decoding | undefined;
@@ -230,11 +262,9 @@ const Response = (props: {
 
   return (
     <>
-      {decoding?.status === "decoded" && "returnValue" in decoding && (
+      {decoding?.status === "decoded" && decoding.returnValues && (
         <Section title="Decoded return value">
-          <div className="rpc-details-field-value">
-            {stringifyArgs(decoding.returnValue)}
-          </div>
+          <ReturnValues values={decoding.returnValues} />
         </Section>
       )}
       {decoding?.status === "decoded" && decoding.returnValueMismatch && (

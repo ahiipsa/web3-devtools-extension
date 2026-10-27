@@ -1,5 +1,4 @@
 import { ContractCall, RpcRequest } from "../types/main.ts";
-import { Abi, AbiFunction, AbiParameter } from "viem";
 
 const CONTRACT_CALL_METHODS = [
   "eth_call",
@@ -55,27 +54,4 @@ export function stringifyArgs(args: unknown[] | unknown): string {
   }
 
   return String(args);
-}
-
-export function buildFunctionSignatureFromAbi(
-  method: string,
-  argsCount: number,
-  abi: Abi,
-): string {
-  const abiElement = abi.find((item) => {
-    if (
-      item.type === "function" &&
-      item.name === method &&
-      item.inputs.length === argsCount
-    ) {
-      return item;
-    }
-    return false;
-  }) as AbiFunction;
-
-  if (!abiElement) {
-    return method;
-  }
-
-  return `${method}(${abiElement.inputs.map((input: AbiParameter) => `${[input.type, input.name].filter(Boolean).join(" ")}`).join(", ")})`;
 }

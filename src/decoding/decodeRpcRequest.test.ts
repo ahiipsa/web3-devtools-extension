@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { Abi } from "viem";
+import { Abi, encodeFunctionData, encodeFunctionResult } from "viem";
 import { decodeRpcRequest } from "./decodeRpcRequest.ts";
 import { RpcRequest } from "../types/main.ts";
 import { getMethodCategory } from "../capture/getMethodCategory.ts";
@@ -52,8 +52,8 @@ describe("decodeRpcRequest", () => {
       status: "decoded",
       functionName: "balanceOf",
       signature: "balanceOf(address owner)",
-      args: [OWNER],
-      returnValue: 1000n,
+      args: [{ name: "owner", type: "address", value: OWNER }],
+      returnValues: [{ name: "[0]", type: "uint256", value: 1000n }],
     });
   });
 
@@ -73,7 +73,7 @@ describe("decodeRpcRequest", () => {
         status: "decoded",
         functionName: "balanceOf",
         signature: "balanceOf(address owner)",
-        args: [OWNER],
+        args: [{ name: "owner", type: "address", value: OWNER }],
       });
     },
   );
@@ -115,7 +115,7 @@ describe("decodeRpcRequest", () => {
         status: "decoded",
         functionName: "balanceOf",
         signature: "balanceOf(address owner)",
-        args: [OWNER],
+        args: [{ name: "owner", type: "address", value: OWNER }],
       });
     },
   );
@@ -131,7 +131,7 @@ describe("decodeRpcRequest", () => {
       status: "decoded",
       functionName: "balanceOf",
       signature: "balanceOf(address owner)",
-      args: [OWNER],
+      args: [{ name: "owner", type: "address", value: OWNER }],
       returnValueMismatch: true,
     });
   });
@@ -157,6 +157,195 @@ describe("decodeRpcRequest", () => {
     expect(decodeRpcRequest(request, erc20Abi)).toMatchObject({
       status: "decoded",
       functionName: "balanceOf",
+    });
+  });
+
+  describe("pairs every value with its ABI name, or its position, and type", () => {
+    const abi = [
+      {
+        type: "function",
+        name: "transfer",
+        stateMutability: "nonpayable",
+        inputs: [
+          { name: "", type: "address" },
+          { name: "", type: "uint256" },
+        ],
+        outputs: [{ name: "", type: "bool" }],
+      },
+      {
+        type: "function",
+        name: "totalSupply",
+        stateMutability: "view",
+        inputs: [],
+        outputs: [{ name: "supply", type: "uint256" }],
+      },
+      {
+        type: "function",
+        name: "getReserves",
+        stateMutability: "view",
+        inputs: [],
+        outputs: [
+          { name: "reserve0", type: "uint112" },
+          { name: "", type: "uint112" },
+        ],
+      },
+      {
+        type: "function",
+        name: "submit",
+        stateMutability: "nonpayable",
+        inputs: [
+          {
+            name: "order",
+            type: "tuple",
+            components: [
+              { name: "maker", type: "address" },
+              { name: "amount", type: "uint256" },
+            ],
+          },
+          { name: "ids", type: "uint256[]" },
+        ],
+        outputs: [],
+      },
+      {
+        type: "function",
+        name: "safeTransferFrom",
+        stateMutability: "nonpayable",
+        inputs: [
+          { name: "from", type: "address" },
+          { name: "to", type: "address" },
+          { name: "tokenId", type: "uint256" },
+        ],
+        outputs: [],
+      },
+      {
+        type: "function",
+        name: "safeTransferFrom",
+        stateMutability: "nonpayable",
+        inputs: [
+          { name: "from", type: "address" },
+          { name: "recipient", type: "address" },
+          { name: "id", type: "uint256" },
+          { name: "data", type: "bytes" },
+        ],
+        outputs: [],
+      },
+    ] as const satisfies Abi;
+
+    const ethCall = (data: `0x${string}`, result?: `0x${string}`) =>
+      rpcRequest("eth_call", [{ to: TOKEN, data }, "latest"], result);
+
+    it("falls back to the position of unnamed inputs and outputs", () => {
+      const request = ethCall(
+        encodeFunctionData({
+          abi,
+          functionName: "transfer",
+          args: [OWNER, 5n],
+        }),
+        encodeFunctionResult({
+          abi,
+          functionName: "transfer",
+          result: true,
+        }),
+      );
+
+      expect(decodeRpcRequest(request, abi)).toEqual({
+        status: "decoded",
+        functionName: "transfer",
+        signature: "transfer(address, uint256)",
+        args: [
+          { name: "[0]", type: "address", value: OWNER },
+          { name: "[1]", type: "uint256", value: 5n },
+        ],
+        returnValues: [{ name: "[0]", type: "bool", value: true }],
+      });
+    });
+
+    it("decodes a function with no inputs and a named output", () => {
+      const request = ethCall(
+        encodeFunctionData({ abi, functionName: "totalSupply" }),
+        encodeFunctionResult({
+          abi,
+          functionName: "totalSupply",
+          result: 7n,
+        }),
+      );
+
+      expect(decodeRpcRequest(request, abi)).toEqual({
+        status: "decoded",
+        functionName: "totalSupply",
+        signature: "totalSupply()",
+        args: [],
+        returnValues: [{ name: "supply", type: "uint256", value: 7n }],
+      });
+    });
+
+    it("decodes several outputs, named and unnamed", () => {
+      const request = ethCall(
+        encodeFunctionData({ abi, functionName: "getReserves" }),
+        encodeFunctionResult({
+          abi,
+          functionName: "getReserves",
+          result: [1n, 2n],
+        }),
+      );
+
+      expect(decodeRpcRequest(request, abi)).toMatchObject({
+        returnValues: [
+          { name: "reserve0", type: "uint112", value: 1n },
+          { name: "[1]", type: "uint112", value: 2n },
+        ],
+      });
+    });
+
+    it("keeps a tuple and an array as one value each", () => {
+      const request = ethCall(
+        encodeFunctionData({
+          abi,
+          functionName: "submit",
+          args: [{ maker: OWNER, amount: 3n }, [1n, 2n]],
+        }),
+        "0x",
+      );
+
+      expect(decodeRpcRequest(request, abi)).toEqual({
+        status: "decoded",
+        functionName: "submit",
+        signature: "submit(tuple order, uint256[] ids)",
+        args: [
+          {
+            name: "order",
+            type: "tuple",
+            value: { maker: OWNER, amount: 3n },
+          },
+          { name: "ids", type: "uint256[]", value: [1n, 2n] },
+        ],
+        returnValues: [],
+      });
+    });
+
+    it("names the arguments of the overload the calldata was encoded for", () => {
+      const request = rpcRequest("eth_sendTransaction", [
+        {
+          from: OWNER,
+          to: TOKEN,
+          data: encodeFunctionData({
+            abi,
+            functionName: "safeTransferFrom",
+            args: [OWNER, TOKEN, 9n, "0x"],
+          }),
+        },
+      ]);
+
+      expect(decodeRpcRequest(request, abi)).toMatchObject({
+        signature:
+          "safeTransferFrom(address from, address recipient, uint256 id, bytes data)",
+        args: [
+          { name: "from" },
+          { name: "recipient" },
+          { name: "id" },
+          { name: "data" },
+        ],
+      });
     });
   });
 });

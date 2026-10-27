@@ -1,28 +1,64 @@
-import { Abi, decodeFunctionData, decodeFunctionResult } from "viem";
-import { RpcRequest } from "../types/main.ts";
 import {
-  buildFunctionSignatureFromAbi,
-  getContractCallParams,
-} from "../utils/requestUtils.ts";
+  Abi,
+  AbiFunction,
+  AbiParameter,
+  decodeAbiParameters,
+  Hex,
+  toFunctionSelector,
+} from "viem";
+import { RpcRequest } from "../types/main.ts";
+import { getContractCallParams } from "../utils/requestUtils.ts";
+
+// One decoded argument or return value, labelled by its ABI name or, when
+// the ABI leaves it unnamed, by its position (`[0]`, `[1]`, …)
+export interface DecodedValue {
+  name: string;
+  type: string;
+  value: unknown;
+}
 
 export type Decoding =
   | {
       status: "decoded";
       functionName: string;
       signature: string;
-      args: readonly unknown[];
-      returnValue?: unknown;
+      args: DecodedValue[];
+      returnValues?: DecodedValue[];
       returnValueMismatch?: true;
     }
   | { status: "mismatch" };
 
-const decodeCalldata = (abi: Abi, data: `0x${string}`) => {
+const findFunction = (abi: Abi, data: Hex): AbiFunction | undefined => {
+  if (data.length < 10) {
+    return undefined;
+  }
+  const selector = data.slice(0, 10).toLowerCase();
+  return abi.find(
+    (item): item is AbiFunction =>
+      item.type === "function" && toFunctionSelector(item) === selector,
+  );
+};
+
+const decodeValues = (
+  params: readonly AbiParameter[],
+  data: Hex,
+): DecodedValue[] | undefined => {
   try {
-    return decodeFunctionData({ abi, data });
+    const values = decodeAbiParameters(params, data);
+    return params.map((param, index) => ({
+      name: param.name || `[${index}]`,
+      type: param.type,
+      value: values[index],
+    }));
   } catch {
     return undefined;
   }
 };
+
+const buildSignature = (fn: AbiFunction) =>
+  `${fn.name}(${fn.inputs
+    .map((input) => [input.type, input.name].filter(Boolean).join(" "))
+    .join(", ")})`;
 
 export function decodeRpcRequest(
   request: RpcRequest,
@@ -33,16 +69,16 @@ export function decodeRpcRequest(
     return undefined;
   }
 
-  const calldata = decodeCalldata(abi, callParams.data);
-  if (!calldata) {
+  const fn = findFunction(abi, callParams.data);
+  const args = fn && decodeValues(fn.inputs, `0x${callParams.data.slice(10)}`);
+  if (!fn || !args) {
     return { status: "mismatch" };
   }
-  const { functionName, args = [] } = calldata;
 
   const decoding: Extract<Decoding, { status: "decoded" }> = {
     status: "decoded",
-    functionName,
-    signature: buildFunctionSignatureFromAbi(functionName, args.length, abi),
+    functionName: fn.name,
+    signature: buildSignature(fn),
     args,
   };
 
@@ -52,13 +88,10 @@ export function decodeRpcRequest(
     request.requestBody.method === "eth_call" &&
     typeof returnData === "string"
   ) {
-    try {
-      decoding.returnValue = decodeFunctionResult({
-        abi,
-        functionName,
-        data: returnData as `0x${string}`,
-      });
-    } catch {
+    const returnValues = decodeValues(fn.outputs, returnData as Hex);
+    if (returnValues) {
+      decoding.returnValues = returnValues;
+    } else {
       decoding.returnValueMismatch = true;
     }
   }
