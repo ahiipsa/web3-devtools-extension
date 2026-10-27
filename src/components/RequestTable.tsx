@@ -30,7 +30,7 @@ import {
   RpcRequestFilter,
 } from "../table/rpcRequestFilter.ts";
 import {
-  formatContractCall,
+  formatCollapsedSubtitle,
   getFunctionLabel,
   RpcRequestRow,
 } from "../table/rpcRequestRow.ts";
@@ -58,7 +58,11 @@ const KEY_MOVES: Partial<Record<string, SelectionMove>> = {
 };
 
 // Contract / function under the method, with an undecoded selector muted
-const ContractCall = ({ row }: { row: RpcRequestRow }) => {
+// The second line of a collapsed row; see formatCollapsedSubtitle
+const CollapsedSubtitle = ({ row }: { row: RpcRequestRow }) => {
+  if (!row.contractLabel) {
+    return <span className="rpc-table-muted">{row.endpoint}</span>;
+  }
   const functionLabel = getFunctionLabel(row);
   return (
     <>
@@ -301,7 +305,7 @@ export const RequestTable = ({ filter }: RequestTableProps) => {
                       className="rpc-table-cell"
                       title={[
                         row.original.method,
-                        formatContractCall(row.original),
+                        formatCollapsedSubtitle(row.original),
                       ]
                         .filter(Boolean)
                         .join("\n")}
@@ -310,7 +314,7 @@ export const RequestTable = ({ filter }: RequestTableProps) => {
                         {row.original.method}
                       </span>
                       <span className="rpc-table-cell-text rpc-table-cell-subtitle">
-                        <ContractCall row={row.original} />
+                        <CollapsedSubtitle row={row.original} />
                       </span>
                     </div>
                   )}

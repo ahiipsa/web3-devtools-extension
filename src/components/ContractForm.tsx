@@ -33,6 +33,11 @@ export const ContractForm = (props: ContractInfoProps) => {
 
   const [messageApi, messageContextHolder] = message.useMessage();
 
+  const initialValues: FieldType = {
+    contractName: contract?.name || "",
+    abi: contract ? JSON.stringify(contract.abi, null, 2) : "",
+  };
+
   const onFinish: FormProps<FieldType>["onFinish"] = async (values) => {
     try {
       await saveContract({
@@ -68,10 +73,7 @@ export const ContractForm = (props: ContractInfoProps) => {
         form={form}
         name="contract"
         layout="vertical"
-        initialValues={{
-          contractName: contract?.name || "",
-          abi: contract ? JSON.stringify(contract.abi, null, 2) : "",
-        }}
+        initialValues={initialValues}
         onFinish={onFinish}
         autoComplete="off"
       >
@@ -103,10 +105,20 @@ export const ContractForm = (props: ContractInfoProps) => {
           </Form.Item>
           <Form.Item label={null}>
             <div className="flex flex-row gap-4">
-              {/* Discards unsaved edits */}
-              <Button type="default" htmlType="reset">
-                Cancel
-              </Button>
+              {/* Discards unsaved edits; disabled while there are none */}
+              <Form.Item<FieldType> noStyle shouldUpdate>
+                {({ getFieldValue }) => {
+                  const edited =
+                    getFieldValue("contractName") !==
+                      initialValues.contractName ||
+                    getFieldValue("abi") !== initialValues.abi;
+                  return (
+                    <Button type="default" htmlType="reset" disabled={!edited}>
+                      Reset
+                    </Button>
+                  );
+                }}
+              </Form.Item>
               <Button type="primary" htmlType="submit">
                 Save
               </Button>

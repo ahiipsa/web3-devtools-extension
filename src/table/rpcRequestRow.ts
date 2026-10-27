@@ -109,11 +109,19 @@ export function getFunctionLabel({
   return undefined;
 }
 
-// The second line under the method while the details are open
+// The Contract and its function, joined
 export function formatContractCall(
   row: Pick<RpcRequestRow, "contractLabel"> & FunctionFields,
 ) {
   return [row.contractLabel, getFunctionLabel(row)?.text]
     .filter(Boolean)
     .join(" / ");
+}
+
+// The second line under the method while the details are open: the Contract
+// call, else the Endpoint's host
+export function formatCollapsedSubtitle(
+  row: Pick<RpcRequestRow, "contractLabel" | "endpoint"> & FunctionFields,
+) {
+  return row.contractLabel ? formatContractCall(row) : row.endpoint;
 }

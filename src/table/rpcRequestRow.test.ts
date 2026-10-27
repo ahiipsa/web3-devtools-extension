@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { Abi } from "viem";
 import {
   buildRpcRequestRow,
+  formatCollapsedSubtitle,
   formatContractCall,
   formatDuration,
   getFunctionLabel,
@@ -254,5 +255,31 @@ describe("formatContractCall", () => {
     );
 
     expect(formatContractCall(row)).toBe("");
+  });
+});
+
+describe("formatCollapsedSubtitle", () => {
+  it("shows the Contract call for an RPC Request that calls a Contract", () => {
+    const row = buildRpcRequestRow(rpcRequest(), () => token);
+
+    expect(formatCollapsedSubtitle(row)).toBe("USDC / balanceOf");
+  });
+
+  it("keeps the selector rule for an undecoded Contract call", () => {
+    const row = buildRpcRequestRow(rpcRequest(), noContracts);
+
+    expect(formatCollapsedSubtitle(row)).toBe("0x0000...00aa / 0x70a08231");
+  });
+
+  it("shows the Endpoint's host for an RPC Request that calls no Contract", () => {
+    const row = buildRpcRequestRow(
+      rpcRequest({
+        url: "https://eth.llamarpc.com/",
+        requestBody: { jsonrpc: "2.0", id: 1, method: "eth_chainId" },
+      }),
+      noContracts,
+    );
+
+    expect(formatCollapsedSubtitle(row)).toBe("eth.llamarpc.com");
   });
 });
