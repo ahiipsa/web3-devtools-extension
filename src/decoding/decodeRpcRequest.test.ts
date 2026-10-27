@@ -349,3 +349,25 @@ describe("decodeRpcRequest", () => {
     });
   });
 });
+
+describe("decodeRpcRequest with a loosely written ABI", () => {
+  it("skips a function it cannot hash and treats missing outputs as none", () => {
+    const abi = [
+      { type: "function", name: "broken" },
+      { type: "function", name: "totalSupply", inputs: [] },
+    ] as unknown as Abi;
+    const request = rpcRequest(
+      "eth_call",
+      [{ to: TOKEN, data: "0x18160ddd" }, "latest"],
+      "0x",
+    );
+
+    expect(decodeRpcRequest(request, abi)).toEqual({
+      status: "decoded",
+      functionName: "totalSupply",
+      signature: "totalSupply()",
+      args: [],
+      returnValues: [],
+    });
+  });
+});

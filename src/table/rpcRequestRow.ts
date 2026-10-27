@@ -1,9 +1,10 @@
-import { Abi, AbiFunction, decodeFunctionData, toFunctionSelector } from "viem";
+import { Abi, decodeFunctionData } from "viem";
 import { RpcRequest, RpcRequestStatus } from "../types/main.ts";
 import { Contract } from "../dal/contract.ts";
 import { getContractCallParams } from "../utils/requestUtils.ts";
 import { getRpcRequestStatus } from "../capture/getRpcRequestStatus.ts";
 import { trimContractAddress } from "../utils/text.ts";
+import { findAbiFunction } from "../decoding/findAbiFunction.ts";
 
 // What one line of the RPC Request table shows, derived once per RPC Request
 export interface RpcRequestRow {
@@ -26,27 +27,9 @@ export interface RpcRequestRow {
 
 export type FindContract = (address: `0x${string}`) => Contract | undefined;
 
-// Selector lookups are built once per ABI: decoding thousands of rows with
-// viem's whole-ABI search would hash every function signature per row
-const selectorsByAbi = new WeakMap<Abi, Map<string, AbiFunction>>();
-
-const getSelectors = (abi: Abi) => {
-  let selectors = selectorsByAbi.get(abi);
-  if (!selectors) {
-    selectors = new Map();
-    for (const item of abi) {
-      if (item.type === "function") {
-        selectors.set(toFunctionSelector(item), item);
-      }
-    }
-    selectorsByAbi.set(abi, selectors);
-  }
-  return selectors;
-};
-
 // Same outcome as Decoding the calldata: no name unless it fully decodes
 const getFunctionName = (abi: Abi, data: `0x${string}`) => {
-  const abiFunction = getSelectors(abi).get(data.slice(0, 10).toLowerCase());
+  const abiFunction = findAbiFunction(abi, data);
   if (!abiFunction) {
     return undefined;
   }

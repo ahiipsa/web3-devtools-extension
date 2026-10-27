@@ -1,11 +1,5 @@
-import {
-  Abi,
-  AbiFunction,
-  AbiParameter,
-  decodeAbiParameters,
-  Hex,
-  toFunctionSelector,
-} from "viem";
+import { Abi, AbiFunction, AbiParameter, decodeAbiParameters, Hex } from "viem";
+import { findAbiFunction } from "./findAbiFunction.ts";
 import { RpcRequest } from "../types/main.ts";
 import { getContractCallParams } from "../utils/requestUtils.ts";
 
@@ -27,17 +21,6 @@ export type Decoding =
       returnValueMismatch?: true;
     }
   | { status: "mismatch" };
-
-const findFunction = (abi: Abi, data: Hex): AbiFunction | undefined => {
-  if (data.length < 10) {
-    return undefined;
-  }
-  const selector = data.slice(0, 10).toLowerCase();
-  return abi.find(
-    (item): item is AbiFunction =>
-      item.type === "function" && toFunctionSelector(item) === selector,
-  );
-};
 
 const decodeValues = (
   params: readonly AbiParameter[],
@@ -69,7 +52,7 @@ export function decodeRpcRequest(
     return undefined;
   }
 
-  const fn = findFunction(abi, callParams.data);
+  const fn = findAbiFunction(abi, callParams.data);
   const args = fn && decodeValues(fn.inputs, `0x${callParams.data.slice(10)}`);
   if (!fn || !args) {
     return { status: "mismatch" };
@@ -88,7 +71,7 @@ export function decodeRpcRequest(
     request.requestBody.method === "eth_call" &&
     typeof returnData === "string"
   ) {
-    const returnValues = decodeValues(fn.outputs, returnData as Hex);
+    const returnValues = decodeValues(fn.outputs ?? [], returnData as Hex);
     if (returnValues) {
       decoding.returnValues = returnValues;
     } else {

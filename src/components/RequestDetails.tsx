@@ -124,8 +124,8 @@ const DecodedValues = (props: { values: DecodedValue[]; empty: string }) =>
     <div className="rpc-details-muted">{props.empty}</div>
   ) : (
     <div className="rpc-details-fields">
-      {props.values.map(({ name, type, value }) => (
-        <Fragment key={name}>
+      {props.values.map(({ name, type, value }, index) => (
+        <Fragment key={index}>
           <div className="rpc-details-field-name">
             {name} <span className="rpc-details-muted">{type}</span>
           </div>
