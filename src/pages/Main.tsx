@@ -51,24 +51,24 @@ export const Main = () => {
     });
   }, [rpcRequest, setRequestId]);
 
-  const panelRef = useRef<HTMLDivElement>(null);
+  const splitRef = useRef<HTMLDivElement>(null);
   const [tableWidth, setTableWidth] = useState(() =>
     loadTableWidth(localStorage),
   );
 
   const startDrag = (event: React.PointerEvent<HTMLDivElement>) => {
-    const panel = panelRef.current;
-    if (!panel) {
+    const split = splitRef.current;
+    if (!split) {
       return;
     }
     event.preventDefault();
     const divider = event.currentTarget;
     divider.setPointerCapture(event.pointerId);
 
-    const panelLeft = panel.getBoundingClientRect().left;
+    const splitLeft = split.getBoundingClientRect().left;
     let width = tableWidth;
     const onMove = (moveEvent: PointerEvent) => {
-      width = clampTableWidth(moveEvent.clientX - panelLeft, panel.clientWidth);
+      width = clampTableWidth(moveEvent.clientX - splitLeft, split.clientWidth);
       setTableWidth(width);
     };
     // Save once the drag ends rather than on every pointer move
@@ -94,7 +94,7 @@ export const Main = () => {
         onFilterChange={setFilter}
         onClear={clearRpcRequestList}
       />
-      <div ref={panelRef} className="flex flex-1 min-h-0">
+      <div ref={splitRef} className="flex flex-1 min-h-0">
         {/* The table spans the Panel until an RPC Request is selected */}
         <div
           className={cx(
