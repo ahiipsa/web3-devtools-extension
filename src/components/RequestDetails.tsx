@@ -189,16 +189,13 @@ const DecodingMismatch = (props: { children: ReactNode }) => (
 const StatusLabel = ({ request }: { request: RpcRequest }) => {
   const status = getRpcRequestStatus(request);
   const label = formatRpcRequestStatus(status);
-  if (!label) {
-    return <span className="rpc-details-muted">No result or error</span>;
-  }
   return (
     <span
       className={
         isFailedRpcRequestStatus(status) ? "rpc-details-failed" : undefined
       }
     >
-      {status?.kind === "error" ? `${label}: ${status.message}` : label}
+      {status.kind === "error" ? `${label}: ${status.message}` : label}
     </span>
   );
 };
@@ -287,6 +284,17 @@ const Response = (props: {
         {request.hasRpcResponseBody && (
           <div className="rpc-details-muted">No RPC Response with this id</div>
         )}
+      </>
+    );
+  }
+
+  if (getRpcRequestStatus(request).kind === "invalid-response") {
+    return (
+      <>
+        <StatusLabel request={request} />
+        <Section title="Raw response">
+          <Code value={response} />
+        </Section>
       </>
     );
   }

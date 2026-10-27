@@ -14,6 +14,7 @@ const row = (
 ): RpcRequestRow => ({
   request: { id } as RpcRequest,
   method: "eth_call",
+  status: "ok",
   failed: false,
   endpoint: "rpc.example",
   time: 10,

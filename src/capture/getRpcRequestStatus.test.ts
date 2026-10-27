@@ -74,13 +74,13 @@ describe("getRpcRequestStatus", () => {
     });
   });
 
-  it("is none when the RPC Response has neither a result nor an error", () => {
+  it("is an invalid response when the RPC Response has neither a result nor an error", () => {
     expect(
       getRpcRequestStatus({
         httpStatus: 200,
         response: { jsonrpc: "2.0", id: 1 },
       }),
-    ).toBeUndefined();
+    ).toEqual({ kind: "invalid-response" });
   });
 });
 
@@ -94,12 +94,9 @@ describe("formatRpcRequestStatus", () => {
     [{ kind: "http", code: 500 } as const, "HTTP 500"],
     [{ kind: "http", code: 0 } as const, "failed"],
     [{ kind: "no-response" } as const, "no response"],
+    [{ kind: "invalid-response" } as const, "invalid response"],
   ])("labels %o as %s", (status, label) => {
     expect(formatRpcRequestStatus(status)).toBe(label);
-  });
-
-  it("labels no status as nothing", () => {
-    expect(formatRpcRequestStatus(undefined)).toBeUndefined();
   });
 });
 
@@ -111,6 +108,7 @@ describe("isFailedRpcRequestStatus", () => {
       { kind: "http", code: 500 },
       { kind: "http", code: 0 },
       { kind: "no-response" },
+      { kind: "invalid-response" },
     ];
     expect(statuses.map(isFailedRpcRequestStatus)).toEqual([
       false,
@@ -118,10 +116,7 @@ describe("isFailedRpcRequestStatus", () => {
       true,
       true,
       true,
+      true,
     ]);
-  });
-
-  it("is not failed without a status", () => {
-    expect(isFailedRpcRequestStatus(undefined)).toBe(false);
   });
 });

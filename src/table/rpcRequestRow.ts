@@ -23,7 +23,7 @@ export interface RpcRequestRow {
   functionName?: string;
   // The first 4 bytes of the calldata, lowercase; set whenever there are any
   functionSelector?: `0x${string}`;
-  status?: string;
+  status: string;
   // Any status other than ok
   failed: boolean;
   // The Endpoint's host

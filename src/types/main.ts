@@ -38,7 +38,9 @@ export type RpcRequestStatus =
   // HTTP status outside 2xx; 0 when the request never got an HTTP response
   | { kind: "http"; code: number }
   // HTTP succeeded, but the body holds no RPC Response for this RPC Request
-  | { kind: "no-response" };
+  | { kind: "no-response" }
+  // An RPC Response paired by id, but with neither result nor error
+  | { kind: "invalid-response" };
 
 export interface RpcRequest {
   id: string;

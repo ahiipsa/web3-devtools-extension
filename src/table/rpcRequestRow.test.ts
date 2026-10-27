@@ -218,6 +218,15 @@ describe("buildRpcRequestRow", () => {
       expect([row.status, row.failed]).toEqual([status, true]);
     },
   );
+
+  it("flags an RPC Response with neither a result nor an error as an invalid response", () => {
+    const row = buildRpcRequestRow(
+      rpcRequest({ response: { jsonrpc: "2.0", id: 1 } }),
+      noContracts,
+    );
+
+    expect([row.status, row.failed]).toEqual(["invalid response", true]);
+  });
 });
 
 describe("formatDuration", () => {

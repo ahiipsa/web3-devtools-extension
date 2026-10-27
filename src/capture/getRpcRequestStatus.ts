@@ -6,7 +6,7 @@ const isHttpSuccess = (httpStatus: number) =>
 export function getRpcRequestStatus({
   response,
   httpStatus,
-}: Pick<RpcRequest, "response" | "httpStatus">): RpcRequestStatus | undefined {
+}: Pick<RpcRequest, "response" | "httpStatus">): RpcRequestStatus {
   if (response?.error) {
     const { code, message } = response.error;
     return { kind: "error", code, message };
@@ -22,12 +22,12 @@ export function getRpcRequestStatus({
       : { kind: "http", code: httpStatus };
   }
 
-  return undefined;
+  return { kind: "invalid-response" };
 }
 
 // The one label for a status, shown in the table and the details
-export function formatRpcRequestStatus(status: RpcRequestStatus | undefined) {
-  switch (status?.kind) {
+export function formatRpcRequestStatus(status: RpcRequestStatus) {
+  switch (status.kind) {
     case "ok":
       return "ok";
     case "error":
@@ -37,11 +37,10 @@ export function formatRpcRequestStatus(status: RpcRequestStatus | undefined) {
       return status.code === 0 ? "failed" : `HTTP ${status.code}`;
     case "no-response":
       return "no response";
-    default:
-      return undefined;
+    case "invalid-response":
+      return "invalid response";
   }
 }
 
-export const isFailedRpcRequestStatus = (
-  status: RpcRequestStatus | undefined,
-) => status !== undefined && status.kind !== "ok";
+export const isFailedRpcRequestStatus = (status: RpcRequestStatus) =>
+  status.kind !== "ok";
