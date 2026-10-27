@@ -21,7 +21,7 @@ import {
 import { getRpcRequestStatus } from "../capture/getRpcRequestStatus.ts";
 import { formatDuration } from "../table/rpcRequestRow.ts";
 import { getDetailsTabs, getShownDetailsTab } from "../details/detailsTabs.ts";
-import { getTabBarScrollDelta } from "../details/tabBarWheel.ts";
+import { getTabListScrollDelta } from "../details/tabListWheel.ts";
 
 interface RequestDetailsProps {
   request: RpcRequest;
@@ -46,7 +46,7 @@ export const RequestDetails = ({ request, onClose }: RequestDetailsProps) => {
   const tabListRef = useRef<HTMLDivElement>(null);
   const shownTabRef = useRef<HTMLButtonElement>(null);
 
-  // A narrow Panel scrolls the tab bar; keep the shown tab, also a remembered one, in view
+  // A narrow Panel scrolls the tab list; keep the shown tab in view, including one restored from the remembered selection
   useEffect(() => {
     shownTabRef.current?.scrollIntoView({
       block: "nearest",
@@ -61,7 +61,7 @@ export const RequestDetails = ({ request, onClose }: RequestDetailsProps) => {
       return;
     }
     const onWheel = (event: WheelEvent) => {
-      const delta = getTabBarScrollDelta(event, tabList.clientWidth);
+      const delta = getTabListScrollDelta(event, tabList.clientWidth);
       if (delta !== null && tabList.scrollWidth > tabList.clientWidth) {
         event.preventDefault();
         tabList.scrollLeft += delta;
