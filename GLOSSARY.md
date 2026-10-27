@@ -28,6 +28,10 @@ _Avoid_: Active request, current row
 The JSON-RPC result or error that answers one RPC Request.
 _Avoid_: Reply, result
 
+**Status**:
+The outcome of an RPC Request: ok, an RPC error from its RPC Response, or, without a valid RPC Response, an HTTP failure, no response, an invalid response or failed (no HTTP response at all). Every Status but ok counts as failed.
+_Avoid_: Result, state
+
 **Contract**:
 A user-labelled on-chain address together with the one ABI used to decode RPC Requests sent to it. Identified by address alone: case-insensitive and independent of chain. For a proxy, the ABI is the implementation's.
 _Avoid_: Address book entry, account
@@ -35,3 +39,7 @@ _Avoid_: Address book entry, account
 **Decoding**:
 Turning an RPC Request's calldata and its RPC Response's return data into a function name and named arguments, using the target Contract's ABI.
 _Avoid_: Parsing, interpreting
+
+**Selector**:
+The first 4 bytes of an RPC Request's calldata, naming the function it calls.
+_Avoid_: Function id, signature hash, method id
