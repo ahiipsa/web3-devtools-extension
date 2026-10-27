@@ -342,70 +342,73 @@ const InnerCalls = (props: {
     highlightedRef.current?.scrollIntoView({ block: "nearest" });
   }, [highlighted]);
 
-  return innerCalls.length === 0 ? (
-    <div className="rpc-details-muted">No Inner Calls</div>
-  ) : (
+  return (
     <>
       {resultCountMismatch && (
         <DecodingMismatch>
           {formatResultCountMismatch(resultCountMismatch)}
         </DecodingMismatch>
       )}
-      <ol className="rpc-details-inner-calls">
-        {innerCalls.map((innerCall, index) => {
-          const result = formatInnerCallResult(innerCall);
-          const rawResult = formatInnerCallRawResult(innerCall);
-          const revert = formatInnerCallRevert(innerCall);
-          return (
-            <li
-              key={index}
-              ref={index === highlighted ? highlightedRef : undefined}
-              className={cx("rpc-details-inner-call", {
-                "rpc-details-inner-call-highlighted": index === highlighted,
-              })}
-            >
-              <div className="rpc-details-clipped">
-                <span className="rpc-details-muted">#{index + 1}</span>{" "}
-                <span title={innerCall.target}>
-                  {formatInnerCallTarget(innerCall)}
-                </span>
-                {innerCall.success === false && (
-                  <span
-                    className="rpc-details-failed"
-                    title={revert ?? "Failed"}
-                  >
-                    {" "}
-                    ✗{revert !== undefined && ` ${revert}`}
-                  </span>
-                )}
-              </div>
-              <div
-                className={cx("rpc-details-decoded-value", {
-                  "rpc-details-muted": innerCall.decoding?.status !== "decoded",
+      {innerCalls.length === 0 ? (
+        <div className="rpc-details-muted">No Inner Calls</div>
+      ) : (
+        <ol className="rpc-details-inner-calls">
+          {innerCalls.map((innerCall, index) => {
+            const result = formatInnerCallResult(innerCall);
+            const rawResult = formatInnerCallRawResult(innerCall);
+            const revert = formatInnerCallRevert(innerCall);
+            return (
+              <li
+                key={index}
+                ref={index === highlighted ? highlightedRef : undefined}
+                className={cx("rpc-details-inner-call", {
+                  "rpc-details-inner-call-highlighted": index === highlighted,
                 })}
               >
-                {formatInnerCallFunction(innerCall)}
-              </div>
-              {result !== undefined && (
-                <div className="rpc-details-decoded-value">→ {result}</div>
-              )}
-              {/* Clipped to one line; the full value is in the tooltip and copies whole */}
-              {rawResult !== undefined && (
-                <div className="rpc-details-clipped" title={rawResult}>
-                  → {rawResult}
+                <div>
+                  <span className="rpc-details-muted">#{index + 1}</span>{" "}
+                  <span title={innerCall.target}>
+                    {formatInnerCallTarget(innerCall)}
+                  </span>
+                  {innerCall.success === false && (
+                    <span
+                      className="rpc-details-failed"
+                      title={revert ?? "Failed"}
+                    >
+                      {" "}
+                      ✗{revert !== undefined && ` ${revert}`}
+                    </span>
+                  )}
                 </div>
-              )}
-              {!findContract(innerCall.target) && (
-                <InnerCallAbiFetch
-                  endpoint={endpoint}
-                  target={innerCall.target}
-                  onAddAbi={onAddAbi}
-                />
-              )}
-            </li>
-          );
-        })}
-      </ol>
+                <div
+                  className={cx("rpc-details-decoded-value", {
+                    "rpc-details-muted":
+                      innerCall.decoding?.status !== "decoded",
+                  })}
+                >
+                  {formatInnerCallFunction(innerCall)}
+                </div>
+                {result !== undefined && (
+                  <div className="rpc-details-decoded-value">→ {result}</div>
+                )}
+                {/* Clipped to one line; the full value is in the tooltip and copies whole */}
+                {rawResult !== undefined && (
+                  <div className="rpc-details-clipped" title={rawResult}>
+                    → {rawResult}
+                  </div>
+                )}
+                {!findContract(innerCall.target) && (
+                  <InnerCallAbiFetch
+                    endpoint={endpoint}
+                    target={innerCall.target}
+                    onAddAbi={onAddAbi}
+                  />
+                )}
+              </li>
+            );
+          })}
+        </ol>
+      )}
     </>
   );
 };
@@ -430,6 +433,11 @@ const Params = (props: {
     findContract,
     onAddAbi,
   } = props;
+
+  const resultCountMismatch = useMemo(
+    () => getResultCountMismatch(request),
+    [request],
+  );
 
   const decodedInput = callParams && (
     <>
@@ -466,7 +474,7 @@ const Params = (props: {
           <Section title="Inner Calls">
             <InnerCalls
               innerCalls={innerCalls}
-              resultCountMismatch={getResultCountMismatch(request)}
+              resultCountMismatch={resultCountMismatch}
               highlighted={highlightedInnerCall}
               endpoint={request.url}
               findContract={findContract}

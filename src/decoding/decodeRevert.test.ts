@@ -90,6 +90,20 @@ describe("decodeRevert", () => {
     });
   });
 
+  it("decodes an ABI's own error named Panic as a custom error", () => {
+    const abi = parseAbi(["error Panic(string reason)"]);
+    expect(
+      decodeRevert(
+        encodeErrorResult({ abi, errorName: "Panic", args: ["oops"] }),
+        abi,
+      ),
+    ).toEqual({
+      kind: "custom",
+      name: "Panic",
+      args: [{ name: "reason", type: "string", value: "oops" }],
+    });
+  });
+
   it("keeps revert data nothing decodes raw", () => {
     const custom = encodeErrorResult({
       abi: tokenAbi,

@@ -9,6 +9,10 @@ export type Revert =
   // Revert data nothing decodes
   | { kind: "raw"; data: Hex };
 
+// Error(string) and Panic(uint256)
+const ERROR_SELECTOR = "0x08c379a0";
+const PANIC_SELECTOR = "0x4e487b71";
+
 // Decodes revert data as Error(string), Panic(uint256) or a custom error the
 // ABI declares; nothing for empty revert data
 export function decodeRevert(data: Hex, abi?: Abi): Revert | undefined {
@@ -17,10 +21,12 @@ export function decodeRevert(data: Hex, abi?: Abi): Revert | undefined {
   }
   try {
     const { abiItem, errorName, args = [] } = decodeErrorResult({ abi, data });
-    if (errorName === "Error") {
+    // By Selector: an ABI's own error may also be named Error or Panic
+    const selector = data.slice(0, 10).toLowerCase();
+    if (selector === ERROR_SELECTOR) {
       return { kind: "error", message: String(args[0]) };
     }
-    if (errorName === "Panic") {
+    if (selector === PANIC_SELECTOR) {
       return { kind: "panic", code: args[0] as bigint };
     }
     return {
