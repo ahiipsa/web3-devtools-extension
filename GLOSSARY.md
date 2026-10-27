@@ -16,6 +16,10 @@ _Avoid_: HTTP request, call, log
 The URL an RPC Request was sent to. One page can talk to several Endpoints.
 _Avoid_: RPC URL, node, provider
 
+**Chain**:
+The EVM network an Endpoint serves, identified by its chain id.
+_Avoid_: Network, chainId
+
 **Method Category**:
 The group an RPC Request falls into by its `method`: Calls, Transactions, Logs, Chain or Other. Every method belongs to exactly one Method Category. Wallet actions (accounts, signing) are Other.
 _Avoid_: Request type, kind
@@ -33,8 +37,12 @@ The outcome of an RPC Request: ok, an RPC error from its RPC Response, or, witho
 _Avoid_: Result, state
 
 **Contract**:
-A user-labelled on-chain address together with the one ABI used to decode RPC Requests sent to it. Identified by address alone: case-insensitive and independent of chain. For a proxy, the ABI is the implementation's.
+A labelled on-chain address together with the one ABI used to decode RPC Requests sent to it, added by the user or fetched from an ABI Source. Identified by address alone: case-insensitive and independent of Chain. For a proxy, the ABI is the implementation's.
 _Avoid_: Address book entry, account
+
+**ABI Source**:
+A public registry of verified contracts (Sourcify, Etherscan) the extension fetches a Contract's ABI from, by Chain and address.
+_Avoid_: Explorer, verifier
 
 **Decoding**:
 Turning an RPC Request's calldata and its RPC Response's return data into a function name and named arguments, using the target Contract's ABI.
