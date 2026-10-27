@@ -4,7 +4,6 @@
   --rpc-details-bg: #ffffff;
   --rpc-details-text: #1f1f1f;
   --rpc-details-muted: #5f6368;
-  --rpc-details-header-bg: #f1f3f4;
   --rpc-details-separator: #dadce0;
   --rpc-details-hover: #eef3fd;
   --rpc-details-accent: #1a73e8;
@@ -28,7 +27,6 @@
   --rpc-details-bg: #202124;
   --rpc-details-text: #e3e3e3;
   --rpc-details-muted: #9aa0a6;
-  --rpc-details-header-bg: #292a2d;
   --rpc-details-separator: #3c4043;
   --rpc-details-hover: #2c3339;
   --rpc-details-accent: #8ab4f8;
@@ -60,13 +58,15 @@
   touch-action: none;
 }
 
+/* Lines up with the table header; both take their height and background from
+   RequestTable.css */
 .rpc-details-tab-bar {
   display: flex;
   align-items: stretch;
   flex: none;
-  height: 26px;
+  height: var(--rpc-table-header-height);
   border-bottom: 1px solid var(--rpc-details-separator);
-  background: var(--rpc-details-header-bg);
+  background: var(--rpc-table-header-bg);
   white-space: nowrap;
 }
 

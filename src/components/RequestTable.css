@@ -5,7 +5,6 @@
   --rpc-table-row-height: 21px;
   --rpc-table-bg: #ffffff;
   --rpc-table-text: #1f1f1f;
-  --rpc-table-header-bg: #f1f3f4;
   --rpc-table-separator: #dadce0;
   --rpc-table-stripe: #f8f9fa;
   --rpc-table-hover: #eef3fd;
@@ -15,6 +14,21 @@
   --rpc-table-muted: #5f6368;
   --rpc-table-resizer: #1a73e8;
   --rpc-table-chip-pressed: #d3e3fd;
+}
+
+/* The table header and the details tab bar (RequestDetails.css) sit side by
+   side and read as one strip across the split, with the details closed too */
+.rpc-table,
+.rpc-table-toolbar,
+.rpc-details {
+  --rpc-table-header-height: 26px;
+  --rpc-table-header-bg: #f1f3f4;
+}
+
+.dark .rpc-table,
+.dark .rpc-table-toolbar,
+.dark .rpc-details {
+  --rpc-table-header-bg: #292a2d;
 }
 
 .rpc-table,
@@ -37,7 +51,6 @@
 .dark .rpc-table-toolbar {
   --rpc-table-bg: #202124;
   --rpc-table-text: #e3e3e3;
-  --rpc-table-header-bg: #292a2d;
   --rpc-table-separator: #3c4043;
   --rpc-table-stripe: #242528;
   --rpc-table-hover: #2c3339;
@@ -143,7 +156,7 @@
   top: 0;
   z-index: 1;
   display: flex;
-  height: var(--rpc-table-row-height);
+  height: var(--rpc-table-header-height);
   background: var(--rpc-table-header-bg);
   border-bottom: 1px solid var(--rpc-table-separator);
   box-sizing: border-box;

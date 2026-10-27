@@ -49,8 +49,10 @@ import {
   RpcRequestRow,
 } from "../table/rpcRequestRow.ts";
 
-// Matches --rpc-table-row-height in RequestTable.css, with or without the details
+// Match --rpc-table-row-height and --rpc-table-header-height in
+// RequestTable.css, with or without the details
 const ROW_HEIGHT = 21;
+const HEADER_HEIGHT = 26;
 
 // With the details open Method, the only column left, takes the table's whole
 // side of the split; closed, every column has the user's width
@@ -306,9 +308,9 @@ export const RequestTable = ({ filter, scrollRef }: RequestTableProps) => {
     getScrollElement: () => scrollRef.current,
     estimateSize: () => ROW_HEIGHT,
     // The sticky header sits above the first row inside the scroll element
-    scrollMargin: ROW_HEIGHT,
+    scrollMargin: HEADER_HEIGHT,
     // Keep rows scrolled into view from under the sticky header
-    scrollPaddingStart: ROW_HEIGHT,
+    scrollPaddingStart: HEADER_HEIGHT,
     overscan: 20,
   });
 
