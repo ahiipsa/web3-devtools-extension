@@ -99,6 +99,21 @@
   font-size: inherit;
 }
 
+/* At the right end of the toolbar, also when it wraps */
+.rpc-table-settings-button {
+  margin-left: auto;
+}
+
+.rpc-table-settings {
+  max-width: 260px;
+  font-size: 12px;
+}
+
+.rpc-table-settings-note {
+  margin-top: 4px;
+  opacity: 0.7;
+}
+
 .rpc-table-scroll {
   flex: 1;
   overflow: auto;

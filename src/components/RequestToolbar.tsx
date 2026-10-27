@@ -1,8 +1,9 @@
 import "./RequestTable.css";
 import cx from "classnames";
-import { useEffect, useRef } from "react";
-import { Button, Checkbox, Input, InputRef } from "antd";
-import { ClearOutlined } from "@ant-design/icons";
+import { useContext, useEffect, useRef } from "react";
+import { Button, Checkbox, Input, InputRef, Popover } from "antd";
+import { ClearOutlined, SettingOutlined } from "@ant-design/icons";
+import { AppContext } from "./AppContext.tsx";
 import { METHOD_CATEGORIES } from "../types/main.ts";
 import {
   MethodCategoryChip,
@@ -118,6 +119,42 @@ export const RequestToolbar = ({
       >
         Errors
       </Checkbox>
+      <SettingsButton />
     </div>
+  );
+};
+
+const SettingsButton = () => {
+  const { settings, updateSettings } = useContext(AppContext);
+
+  return (
+    <Popover
+      trigger="click"
+      placement="bottomRight"
+      content={
+        <div className="rpc-table-settings">
+          <Checkbox
+            checked={settings.fetchAbisAutomatically}
+            onChange={(event) =>
+              updateSettings({ fetchAbisAutomatically: event.target.checked })
+            }
+          >
+            Fetch ABIs automatically
+          </Checkbox>
+          <div className="rpc-table-settings-note">
+            Addresses of called contracts and the chain id are sent to Sourcify.
+          </div>
+        </div>
+      }
+    >
+      <Button
+        size="small"
+        type="text"
+        className="rpc-table-settings-button"
+        title="Settings"
+        aria-label="Settings"
+        icon={<SettingOutlined />}
+      />
+    </Popover>
   );
 };

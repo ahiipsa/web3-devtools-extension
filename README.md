@@ -3,8 +3,9 @@
 A Chrome DevTools extension that lets web3 developers inspect and decode the EVM JSON-RPC traffic of the page they are debugging.
 
 - Lists every JSON-RPC request the page sends as an RPC Request, one per entry of a batch, paired with its RPC Response
-- Decodes `eth_call`, `eth_estimateGas` and `eth_sendTransaction` into a function name and named arguments using an ABI you provide
-- Needs only the `storage` permission; nothing leaves your device (see [PRIVACY.md](PRIVACY.md))
+- Decodes `eth_call`, `eth_estimateGas` and `eth_sendTransaction` into a function name and named arguments
+- Fetches the verified ABI of a called contract from [Sourcify](https://sourcify.dev) automatically, or uses an ABI you provide
+- Needs only the `storage` permission; only contract addresses and the chain id are sent, to Sourcify, and this can be turned off (see [PRIVACY.md](PRIVACY.md))
 
 ## Install
 
@@ -19,8 +20,10 @@ Build `release/evm-rpc-inspector-<version>.zip` (see [Release](#release)), then:
 1. Open DevTools on the page you want to debug and switch to the **EVM RPC** tab (the Panel).
 2. Use the dApp. RPC Requests appear in the list as they finish. Traffic sent before the Panel was first opened is not captured, so reload the page if needed.
 3. Select an RPC Request to see its params and RPC Response.
-4. For an RPC Request to a contract, open its **Contract** tab to add the Contract: give it a name and paste its ABI (for a proxy, the implementation's ABI). RPC Requests to that address are then decoded.
-5. To remove a Contract, open its **Contract** tab again, press "Delete" and confirm. RPC Requests to that address are no longer decoded.
+4. RPC Requests to a contract verified on Sourcify are decoded on their own: the Panel fetches its ABI and saves it as a Contract named after it, shown as "From Sourcify" in the **Contract** tab. The chain id comes from the page's own `eth_chainId` call, or the Panel asks the RPC endpoint once.
+5. Otherwise open the RPC Request's **Contract** tab: it says whether the ABI is being fetched, is not verified on Sourcify or failed to fetch, and "Fetch ABI" tries again. Or add the Contract yourself: give it a name and paste its ABI (for a proxy, the implementation's ABI). Saving it there makes it yours; a fetched Contract never replaces one you saved.
+6. To remove a Contract, open its **Contract** tab again, press "Delete" and confirm. RPC Requests to that address are no longer decoded.
+7. To stop fetching ABIs automatically, click the gear at the right end of the filter toolbar and uncheck "Fetch ABIs automatically". "Fetch ABI" still works.
 
 The list is cleared when the page navigates or reloads, or with the "Clear" button. Contracts are kept until you delete them or remove the extension.
 
@@ -44,7 +47,7 @@ npm run icons   # regenerate public/icons/*.png from assets/icon.svg (needs rsvg
 
 Project layout:
 
-- `src/`: the Panel (React), RPC capture, Decoding and Contract storage
+- `src/`: the Panel (React), RPC capture, Decoding, Contract storage and fetching ABIs from ABI Sources (`src/abiSources/`)
 - `manifest.ts`: source of the generated `manifest.json`; the version comes from `package.json`
 - `public/`: popup and icons, copied into the build as-is
 - `assets/icon.svg`: source of the PNG icons in `public/icons/`, regenerated with `npm run icons`

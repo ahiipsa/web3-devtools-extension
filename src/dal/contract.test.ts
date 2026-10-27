@@ -6,6 +6,7 @@ import {
   getContracts,
   parseAbiJson,
   saveContract,
+  saveFetchedContract,
 } from "./contract.ts";
 
 const erc20Abi = [
@@ -114,6 +115,60 @@ describe("Contract data layer", () => {
 
   it("does nothing when deleting an address without a Contract", async () => {
     await expect(deleteContract(LOWER_CASE)).resolves.toBeUndefined();
+  });
+});
+
+describe("saveFetchedContract", () => {
+  beforeEach(() => {
+    stubChromeStorage();
+  });
+
+  it("saves a fetched Contract with its ABI Source mark", async () => {
+    const saved = await saveFetchedContract({
+      address: MIXED_CASE,
+      name: "WETH9",
+      abi: erc20Abi,
+      source: "sourcify",
+    });
+
+    expect(saved).toBe(true);
+    expect(await getContract(LOWER_CASE)).toEqual({
+      address: LOWER_CASE,
+      name: "WETH9",
+      abi: erc20Abi,
+      source: "sourcify",
+    });
+  });
+
+  it("never overwrites a Contract that is already stored", async () => {
+    await saveContract({ address: LOWER_CASE, name: "Mine", abi: erc20Abi });
+
+    const saved = await saveFetchedContract({
+      address: MIXED_CASE,
+      name: "WETH9",
+      abi: [],
+      source: "sourcify",
+    });
+
+    expect(saved).toBe(false);
+    expect(await getContract(LOWER_CASE)).toEqual({
+      address: LOWER_CASE,
+      name: "Mine",
+      abi: erc20Abi,
+    });
+  });
+
+  it("drops the mark once the Contract is saved through the form", async () => {
+    await saveFetchedContract({
+      address: LOWER_CASE,
+      name: "WETH9",
+      abi: erc20Abi,
+      source: "sourcify",
+    });
+
+    await saveContract({ address: LOWER_CASE, name: "WETH9", abi: erc20Abi });
+
+    expect(await getContract(LOWER_CASE)).not.toHaveProperty("source");
   });
 });
 

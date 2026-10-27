@@ -4,6 +4,8 @@ export interface Contract {
   address: `0x${string}`;
   name: string;
   abi: Abi;
+  // The ABI Source it was fetched from; none once the user saves it
+  source?: "sourcify";
 }
 
 type ContractStore = Record<string, Contract>;
@@ -63,6 +65,22 @@ export async function saveContract(contract: Contract): Promise<Contract> {
   await chrome.storage.local.set({ contracts });
 
   return saved;
+}
+
+// Saves a Contract fetched from an ABI Source unless the address already has
+// one; resolves to whether it was saved
+export async function saveFetchedContract(
+  contract: Contract & { source: "sourcify" },
+): Promise<boolean> {
+  const saved = { ...contract, address: normalizeAddress(contract.address) };
+  const contracts = await getContracts();
+  if (contracts[saved.address]) {
+    return false;
+  }
+
+  contracts[saved.address] = saved;
+  await chrome.storage.local.set({ contracts });
+  return true;
 }
 
 export async function getContract(

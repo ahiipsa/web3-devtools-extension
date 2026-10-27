@@ -2,10 +2,27 @@ import { deleteContract, parseAbiJson, saveContract } from "../dal/contract.ts";
 import { useEffect, useState } from "react";
 import { useContractQuery } from "../hooks/useContractQuery.ts";
 import { Button, Form, FormProps, Input, message } from "antd";
+import { useAbiFetchState } from "../hooks/useAbiFetchState.ts";
+import { AbiFetchState } from "../abiSources/abiFetcher.ts";
 
 interface ContractInfoProps {
   contractAddress: `0x${string}`;
+  // The Endpoint of the RPC Request, whose Chain the ABI is fetched for
+  endpoint: string;
 }
+
+const formatAbiFetchState = (state: AbiFetchState) => {
+  switch (state.kind) {
+    case "fetching":
+      return "Fetching ABI…";
+    case "not-found":
+      return "No verified ABI on Sourcify";
+    case "failed":
+      return `Fetch failed: ${state.reason}`;
+    case "idle":
+      return undefined;
+  }
+};
 
 type FieldType = {
   contractName: string;
@@ -13,13 +30,15 @@ type FieldType = {
 };
 
 export const ContractForm = (props: ContractInfoProps) => {
-  const { contractAddress } = props;
+  const { contractAddress, endpoint } = props;
 
   const contractQuery = useContractQuery({
     contractAddress,
   });
 
   const contract = contractQuery.data;
+  const abiFetch = useAbiFetchState(endpoint, contractAddress);
+  const abiFetchLabel = formatAbiFetchState(abiFetch.state);
 
   const [form] = Form.useForm();
 
@@ -69,6 +88,32 @@ export const ContractForm = (props: ContractInfoProps) => {
   return (
     <>
       {messageContextHolder}
+      {contract?.source === "sourcify" && (
+        <div className="rpc-details-muted mb-2">From Sourcify</div>
+      )}
+      {/* Only for an address without a Contract; the form stays usable */}
+      {contractQuery.isSuccess && !contract && (
+        <div className="flex flex-row items-center gap-4 mb-4">
+          {abiFetchLabel && (
+            <span
+              className={
+                abiFetch.state.kind === "failed"
+                  ? "rpc-details-failed"
+                  : "rpc-details-muted"
+              }
+            >
+              {abiFetchLabel}
+            </span>
+          )}
+          <Button
+            size="small"
+            disabled={abiFetch.state.kind === "fetching"}
+            onClick={() => void abiFetch.fetchAbi()}
+          >
+            Fetch ABI
+          </Button>
+        </div>
+      )}
       <Form
         form={form}
         name="contract"

@@ -39,6 +39,12 @@ export const BALANCE_OF_ABI = [
   },
 ];
 
+// Verified on the fake Sourcify; any other address answers 404
+export const WETH = "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2";
+export const SOURCIFY = {
+  [WETH]: { abi: BALANCE_OF_ABI, compilation: { name: "WETH9" } },
+};
+
 // The mock node's answer per method; anything else gets `result: null`
 const ANSWERS = {
   eth_chainId: { result: "0x1" },
@@ -77,13 +83,21 @@ export const TRAFFIC = [
 ];
 
 const DAPP = `<!doctype html><title>dApp</title><h1>dApp</h1><script>
-window.rpc = async (body) => (await fetch("/rpc", { method: "POST", headers: { "content-type": "application/json" },
+window.rpc = async (body, path = "/rpc") => (await fetch(path, { method: "POST", headers: { "content-type": "application/json" },
   body: typeof body === "string" ? body : JSON.stringify(body) })).text();
 </script>`;
+
+// Every RPC Request the node got, with its Origin: the Panel's own
+// eth_chainId comes from chrome-extension://
+const nodeLog = [];
 
 const startNode = () =>
   new Promise((ready) => {
     const server = http.createServer((req, res) => {
+      // Open CORS, like public RPC nodes, so the Panel can ask for eth_chainId
+      res.setHeader("access-control-allow-origin", "*");
+      res.setHeader("access-control-allow-headers", "content-type");
+      if (req.method === "OPTIONS") return res.writeHead(204).end();
       if (req.method === "GET") return res.end(DAPP);
       let body = "";
       req.on("data", (chunk) => (body += chunk));
@@ -94,6 +108,12 @@ const startNode = () =>
         } catch {
           return res.end("ok");
         }
+        for (const r of [parsed].flat())
+          nodeLog.push({
+            origin: req.headers.origin ?? "",
+            path: req.url,
+            method: r?.method,
+          });
         const one = (r) => ({
           jsonrpc: "2.0",
           id: r.id,
@@ -121,12 +141,16 @@ const connectTarget = async (cdpPort, match) => {
       let id = 0;
       const pending = new Map();
       const events = [];
+      const handlers = new Map();
       ws.onmessage = (m) => {
         const d = JSON.parse(m.data);
         if (d.id && pending.has(d.id)) {
           pending.get(d.id)(d);
           pending.delete(d.id);
-        } else if (d.method) events.push(d);
+        } else if (d.method) {
+          events.push(d);
+          handlers.get(d.method)?.(d.params);
+        }
       };
       const send = (method, params = {}) =>
         new Promise((ok) => {
@@ -144,7 +168,9 @@ const connectTarget = async (cdpPort, match) => {
         if (ex) throw new Error(ex.exception?.description ?? ex.text);
         return d.result?.result?.value;
       };
-      return { send, evaluate, events, close: () => ws.close() };
+      // One handler per CDP event
+      const on = (method, handler) => handlers.set(method, handler);
+      return { send, evaluate, events, on, close: () => ws.close() };
     }
     await new Promise((r) => setTimeout(r, 200));
   }
@@ -164,6 +190,36 @@ const KEY_CODES = {
   End: 35,
 };
 const MODIFIERS = { alt: 1, ctrl: 2, meta: 4, shift: 8 };
+// Answers the Panel's requests to https://sourcify.dev/* from SOURCIFY, so
+// nothing reaches the real Sourcify; returns the URLs it was asked for
+const interceptSourcify = async (panel) => {
+  const urls = [];
+  panel.on("Fetch.requestPaused", ({ requestId, request }) => {
+    urls.push(request.url);
+    const address = /\/contract\/\d+\/(0x[0-9a-fA-F]{40})/
+      .exec(request.url)?.[1]
+      ?.toLowerCase();
+    const fixture = SOURCIFY[address];
+    const body = fixture ?? {
+      error: "Contract not found",
+      customCode: "not_found",
+    };
+    panel.send("Fetch.fulfillRequest", {
+      requestId,
+      responseCode: fixture ? 200 : 404,
+      responseHeaders: [
+        { name: "content-type", value: "application/json" },
+        { name: "access-control-allow-origin", value: "*" },
+      ],
+      body: Buffer.from(JSON.stringify(body)).toString("base64"),
+    });
+  });
+  await panel.send("Fetch.enable", {
+    patterns: [{ urlPattern: "https://sourcify.dev/*" }],
+  });
+  return urls;
+};
+
 const LEGACY = `(async () => (await import("./ui/legacy/legacy.js")).InspectorView.InspectorView.instance())()`;
 
 export async function launch() {
@@ -214,6 +270,7 @@ export async function launch() {
     /^chrome-extension:\/\/[a-z]+\/index\.html/.test(u),
   );
   await panel.send("Runtime.enable");
+  const sourcifyUrls = await interceptSourcify(panel);
   for (
     let i = 0;
     i < 50 && !(await panel.evaluate(`!!document.querySelector(".rpc-table")`));
@@ -234,9 +291,16 @@ export async function launch() {
     panel,
     ev,
     sleep,
-    // Sends one request body (object, batch array or raw string) from the dApp page
-    rpc: async (body) => {
-      const response = await page.evaluate((b) => window.rpc(b), body);
+    // Requests the Panel sent to the fake Sourcify, and that the node got
+    sourcifyUrls,
+    nodeLog,
+    // Sends one request body (object, batch array or raw string) from the dApp
+    // page; another `path` is another Endpoint
+    rpc: async (body, path = "/rpc") => {
+      const response = await page.evaluate(
+        ([b, p]) => window.rpc(b, p),
+        [body, path],
+      );
       await sleep(400); // the Panel gets the entry asynchronously
       return response;
     },
@@ -376,6 +440,19 @@ async function smoke() {
       (await app.detailsOpen()) && (await app.selected()) === "eth_call",
     );
     await click(".rpc-details-tab", "Contract");
+    await app.sleep(300);
+    const contractTab = await app.text();
+    check(
+      "a 404 from Sourcify shows no verified ABI and Fetch ABI",
+      /No verified ABI on Sourcify/.test(contractTab) &&
+        /Fetch ABI/.test(contractTab),
+    );
+    check(
+      "Sourcify asked once for the called address on the captured Chain",
+      app.sourcifyUrls.join() ===
+        "https://sourcify.dev/server/v2/contract/1/0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48?fields=abi,compilation",
+      app.sourcifyUrls.join(", "),
+    );
     await click(".rpc-details input");
     await type("USDC");
     await click(".rpc-details textarea");
@@ -500,7 +577,73 @@ async function smoke() {
       "a legacy Contract in storage does not crash the Panel",
       (await app.rows()).length === 5,
     );
-    await shot("05-end");
+
+    // Fetched from the fake Sourcify, without touching the Contract tab
+    const callTo = (id, to) => ({
+      jsonrpc: "2.0",
+      id,
+      method: "eth_call",
+      params: [{ to, data: "0x70a08231" + pad(HOLDER) }, "latest"],
+    });
+    await app.rpc(callTo(6, WETH));
+    await app.sleep(600);
+    check(
+      "an eth_call to a verified address decodes as <name> / <function>",
+      /WETH9 \/ balanceOf|WETH9\s+balanceOf/.test(await app.text()),
+    );
+    await click(".rpc-table-body [role=row]:nth-child(6)");
+    await click(".rpc-details-tab", "Contract");
+    check(
+      "the Contract tab says From Sourcify",
+      /From Sourcify/.test(await app.text()),
+    );
+    await shot("05-from-sourcify");
+    check(
+      "one Sourcify request per Chain and address",
+      app.sourcifyUrls.length === 2,
+      app.sourcifyUrls.join(", "),
+    );
+
+    // An Endpoint without a captured eth_chainId is asked by the Panel itself
+    const DAI = "0x6b175474e89094c44da98b954eedeac495271d0f";
+    await app.rpc(callTo(7, DAI), "/rpc2");
+    await app.sleep(600);
+    check(
+      "the Panel asks an Endpoint for its chain id once",
+      app.nodeLog.filter(
+        (r) => r.origin.startsWith("chrome-extension://") && r.path === "/rpc2",
+      ).length === 1 &&
+        app.sourcifyUrls.some((url) => url.toLowerCase().includes(DAI)),
+      JSON.stringify(app.nodeLog.filter((r) => r.path === "/rpc2")),
+    );
+
+    // Settings: off means no Sourcify request and no eth_chainId of its own
+    await click(".rpc-table-settings-button");
+    await shot("06-settings");
+    await click(".rpc-table-settings .ant-checkbox-wrapper");
+    const stored = await ev(
+      `chrome.storage.local.get("settings").then((s) => s.settings)`,
+    );
+    check(
+      "the setting is stored off",
+      stored?.fetchAbisAutomatically === false,
+      JSON.stringify(stored),
+    );
+    const USDT = "0xdac17f958d2ee523a2206206994597c13d831ec7";
+    const before = app.sourcifyUrls.length;
+    await app.rpc(callTo(8, USDT), "/rpc3");
+    await app.rpc(callTo(9, "0x1111111111111111111111111111111111111111"));
+    await app.sleep(600);
+    check(
+      "with the setting off no Sourcify request is made",
+      app.sourcifyUrls.length === before &&
+        !app.nodeLog.some(
+          (r) =>
+            r.origin.startsWith("chrome-extension://") && r.path === "/rpc3",
+        ),
+      app.sourcifyUrls.slice(before).join(", "),
+    );
+    await shot("07-end");
   } catch (e) {
     check("scenario ran to the end", false, e.message.split("\n")[0]);
     await shot("99-crash").catch(() => {});

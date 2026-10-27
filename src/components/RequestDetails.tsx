@@ -130,6 +130,7 @@ export const RequestDetails = ({ request, onClose }: RequestDetailsProps) => {
           <ContractForm
             key={callParams.to.toLowerCase()}
             contractAddress={callParams.to}
+            endpoint={request.url}
           />
         )}
       </div>
