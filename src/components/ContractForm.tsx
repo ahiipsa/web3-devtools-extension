@@ -99,7 +99,7 @@ export const ContractForm = (props: ContractInfoProps) => {
   return (
     <>
       {messageContextHolder}
-      {contract?.source && (
+      {contract?.source && ABI_SOURCE_NAMES[contract.source] && (
         <div className="rpc-details-muted mb-2">
           From {ABI_SOURCE_NAMES[contract.source]}
         </div>

@@ -1,7 +1,9 @@
 import { Abi } from "viem";
 import { AbiSourceResult } from "./sourcify.ts";
 
-export type AbiSourceName = "sourcify" | "etherscan";
+import { AbiSourceName } from "../dal/contract.ts";
+
+export type { AbiSourceName };
 
 // The outcome of asking the ABI Sources in turn; a miss lists those asked
 export type FetchedAbi =

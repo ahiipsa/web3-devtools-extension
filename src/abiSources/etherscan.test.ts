@@ -32,6 +32,7 @@ describe("fetchFromEtherscan", () => {
 
     expect(fetchFn).toHaveBeenCalledWith(
       `https://api.etherscan.io/v2/api?chainid=1&module=contract&action=getsourcecode&address=${ADDRESS}&apikey=${KEY}`,
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
   });
 
@@ -99,6 +100,28 @@ describe("fetchFromEtherscan", () => {
 
     await expect(fetchFromEtherscan(1, ADDRESS, KEY, fetchFn)).rejects.toThrow(
       "Etherscan returned no ABI",
+    );
+  });
+
+  it("fails when Etherscan does not answer in time", async () => {
+    const fetchFn = vi.fn(async () => {
+      throw new DOMException("signal timed out", "TimeoutError");
+    });
+
+    await expect(fetchFromEtherscan(1, ADDRESS, KEY, fetchFn)).rejects.toThrow(
+      "Etherscan did not answer in 10 s",
+    );
+  });
+
+  it("never puts the URL-encoded key in an error message", async () => {
+    const key = "a+b/c";
+    const fetchFn = respond({
+      status: "0",
+      message: `bad key ${encodeURIComponent(key)}`,
+    });
+
+    await expect(fetchFromEtherscan(1, ADDRESS, key, fetchFn)).rejects.toThrow(
+      /^bad key …$/,
     );
   });
 

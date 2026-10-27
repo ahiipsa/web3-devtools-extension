@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { getSettings, saveSettings } from "./settings.ts";
+import {
+  createSettingsWriteTracker,
+  getSettings,
+  saveSettings,
+} from "./settings.ts";
 
 describe("Panel settings", () => {
   beforeEach(() => {
@@ -63,5 +67,36 @@ describe("Panel settings", () => {
       fetchAbisAutomatically: true,
       etherscanApiKey: "",
     });
+  });
+});
+
+describe("createSettingsWriteTracker", () => {
+  const key = (etherscanApiKey: string) => ({
+    fetchAbisAutomatically: true,
+    etherscanApiKey,
+  });
+
+  it("ignores the echoes of the Panel's own writes, however late", () => {
+    const tracker = createSettingsWriteTracker();
+    tracker.wrote(key("a"));
+    tracker.wrote(key("ab"));
+
+    expect(tracker.shouldApply(key("a"))).toBe(false);
+    expect(tracker.shouldApply(key("ab"))).toBe(false);
+  });
+
+  it("applies a change made elsewhere", () => {
+    const tracker = createSettingsWriteTracker();
+    tracker.wrote(key("a"));
+
+    expect(tracker.shouldApply(key("other"))).toBe(true);
+  });
+
+  it("applies a value written again elsewhere once its echo has passed", () => {
+    const tracker = createSettingsWriteTracker();
+    tracker.wrote(key("a"));
+    tracker.shouldApply(key("a"));
+
+    expect(tracker.shouldApply(key("a"))).toBe(true);
   });
 });

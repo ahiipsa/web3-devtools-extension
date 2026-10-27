@@ -1,5 +1,7 @@
-import { AbiSourceName } from "../abiSources/abiSources.ts";
 import { Abi } from "viem";
+
+// A public registry of verified contracts an ABI can be fetched from
+export type AbiSourceName = "sourcify" | "etherscan";
 
 export interface Contract {
   address: `0x${string}`;

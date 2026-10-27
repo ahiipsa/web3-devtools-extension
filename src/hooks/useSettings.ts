@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  createSettingsWriteTracker,
   DEFAULT_SETTINGS,
   getSettings,
   parseSettings,
@@ -16,6 +17,15 @@ export const useSettings = () => {
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   // Nothing is fetched automatically before the stored value is known
   const [loaded, setLoaded] = useState(false);
+  // The latest value, so quick successive changes (typing the key) build on
+  // each other rather than on a stale render
+  const latest = useRef(settings);
+  const [tracker] = useState(createSettingsWriteTracker);
+
+  const apply = useCallback((next: Settings) => {
+    latest.current = next;
+    setSettings(next);
+  }, []);
 
   useEffect(() => {
     if (!hasStorage()) {
@@ -23,26 +33,31 @@ export const useSettings = () => {
     }
     // Unreadable storage leaves the defaults
     getSettings()
-      .then(setSettings, () => {})
+      .then(apply, () => {})
       .finally(() => setLoaded(true));
     const handler = (changes: Record<string, chrome.storage.StorageChange>) => {
-      if (changes[SETTINGS_KEY]) {
-        setSettings(parseSettings(changes[SETTINGS_KEY].newValue));
+      if (!changes[SETTINGS_KEY]) {
+        return;
+      }
+      const stored = parseSettings(changes[SETTINGS_KEY].newValue);
+      if (tracker.shouldApply(stored)) {
+        apply(stored);
       }
     };
     chrome.storage.local.onChanged.addListener(handler);
     return () => chrome.storage.local.onChanged.removeListener(handler);
-  }, []);
+  }, [apply, tracker]);
 
   const updateSettings = useCallback(
     (changes: Partial<Settings>) => {
-      const next = { ...settings, ...changes };
-      setSettings(next);
+      const next = { ...latest.current, ...changes };
+      apply(next);
       if (hasStorage()) {
+        tracker.wrote(next);
         void saveSettings(next);
       }
     },
-    [settings],
+    [apply, tracker],
   );
 
   return { settings, loaded, updateSettings };

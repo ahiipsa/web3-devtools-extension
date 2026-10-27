@@ -6,6 +6,9 @@ const ETHERSCAN_API = "https://api.etherscan.io/v2/api";
 // Free API keys allow 5 requests per second
 export const ETHERSCAN_REQUEST_INTERVAL = 250;
 
+// Requests run one at a time, so a stalled one must not block the rest
+export const ETHERSCAN_TIMEOUT = 10_000;
+
 const NOT_VERIFIED = "Contract source code not verified";
 
 // Throws an Error whose message is fit to show the user; it never contains
@@ -16,12 +19,29 @@ export async function fetchFromEtherscan(
   apiKey: string,
   fetchFn: typeof fetch = fetch,
 ): Promise<AbiSourceResult> {
+  const encodedKey = encodeURIComponent(apiKey);
   const fail = (message: string) =>
-    new Error(apiKey ? message.split(apiKey).join("…") : message);
+    new Error(
+      apiKey
+        ? message.split(apiKey).join("…").split(encodedKey).join("…")
+        : message,
+    );
 
-  const response = await fetchFn(
-    `${ETHERSCAN_API}?chainid=${chainId}&module=contract&action=getsourcecode&address=${address}&apikey=${encodeURIComponent(apiKey)}`,
-  );
+  let response: Response;
+  try {
+    response = await fetchFn(
+      `${ETHERSCAN_API}?chainid=${chainId}&module=contract&action=getsourcecode&address=${address}&apikey=${encodedKey}`,
+      { signal: AbortSignal.timeout(ETHERSCAN_TIMEOUT) },
+    );
+  } catch (error) {
+    throw fail(
+      error instanceof Error && error.name === "TimeoutError"
+        ? `Etherscan did not answer in ${ETHERSCAN_TIMEOUT / 1000} s`
+        : error instanceof Error
+          ? error.message
+          : String(error),
+    );
+  }
   if (!response.ok) {
     throw fail(`HTTP ${response.status}`);
   }

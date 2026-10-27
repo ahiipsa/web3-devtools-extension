@@ -38,3 +38,25 @@ export const getSettings = async (): Promise<Settings> => {
 
 export const saveSettings = (settings: Settings) =>
   chrome.storage.local.set({ [SETTINGS_KEY]: settings });
+
+// Tells the Panel's own writes, echoed back by storage.onChanged in order,
+// from changes made elsewhere. While own writes are still in flight, an
+// echo of an earlier one must not roll back what the user typed since.
+export const createSettingsWriteTracker = () => {
+  const pending: string[] = [];
+  const serialize = (settings: Settings) => JSON.stringify(settings);
+  return {
+    wrote: (settings: Settings) => {
+      pending.push(serialize(settings));
+    },
+    // Whether a stored value should replace the Panel's settings
+    shouldApply: (stored: Settings) => {
+      const index = pending.indexOf(serialize(stored));
+      if (index === -1) {
+        return true;
+      }
+      pending.splice(0, index + 1);
+      return false;
+    },
+  };
+};
