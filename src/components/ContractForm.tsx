@@ -46,8 +46,12 @@ export const ContractForm = (props: ContractInfoProps) => {
   const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   useEffect(() => {
-    form.resetFields();
     setConfirmingDelete(false);
+    // A fetched Contract that lands while the user types keeps their edits
+    if (contract?.source === "sourcify" && form.isFieldsTouched()) {
+      return;
+    }
+    form.resetFields();
   }, [contract, form]);
 
   const [messageApi, messageContextHolder] = message.useMessage();

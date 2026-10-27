@@ -22,6 +22,9 @@ export interface AbiFetcherDeps {
     address: `0x${string}`,
   ) => Promise<AbiSourceResult>;
   requestChainId: (endpoint: string) => Promise<number>;
+  // How long to wait for the page's own eth_chainId, which often finishes
+  // after its first calls, before asking the Endpoint; 1 s by default
+  chainLookupDelay?: number;
 }
 
 export type AbiFetcher = ReturnType<typeof createAbiFetcher>;
@@ -43,7 +46,9 @@ export function createAbiFetcher(deps: AbiFetcherDeps) {
   const waiting = new Map<string, Set<`0x${string}`>>();
   // By `${chainId}:${address}`; present once an attempt was made
   const attempts = new Map<string, AbiFetchState>();
-  const seen = new WeakSet<RpcRequest>();
+  const seenForChain = new WeakSet<RpcRequest>();
+  const seenForFetch = new WeakSet<RpcRequest>();
+  const chainLookupDelay = deps.chainLookupDelay ?? 1000;
   let automatic = false;
 
   const listeners = new Set<() => void>();
@@ -92,8 +97,13 @@ export function createAbiFetcher(deps: AbiFetcherDeps) {
     }
   };
 
-  const setChainId = (endpoint: string, chainId: number) => {
-    if (chainIds.has(endpoint)) {
+  // A captured eth_chainId always wins: the Endpoint may now serve another
+  // Chain, e.g. a restarted local fork
+  const setChainId = (endpoint: string, chainId: number, captured: boolean) => {
+    if (
+      chainIds.get(endpoint) === chainId ||
+      (!captured && chainIds.has(endpoint))
+    ) {
       return;
     }
     chainIds.set(endpoint, chainId);
@@ -106,16 +116,24 @@ export function createAbiFetcher(deps: AbiFetcherDeps) {
     notify();
   };
 
-  const lookUpChainId = (endpoint: string) => {
-    const lookup = deps.requestChainId(endpoint).then(
-      (chainId) => {
-        setChainId(endpoint, chainId);
-        return chainId;
-      },
-      (error) => {
-        chainErrors.set(endpoint, errorMessage(error));
-        notify();
-        return undefined;
+  const lookUpChainId = (endpoint: string, delay: number) => {
+    const lookup = new Promise((resolve) => setTimeout(resolve, delay)).then(
+      () => {
+        const captured = chainIds.get(endpoint);
+        if (captured !== undefined) {
+          return captured;
+        }
+        return deps.requestChainId(endpoint).then(
+          (chainId) => {
+            setChainId(endpoint, chainId, false);
+            return chainIds.get(endpoint);
+          },
+          (error) => {
+            chainErrors.set(endpoint, errorMessage(error));
+            notify();
+            return undefined;
+          },
+        );
       },
     );
     chainLookups.set(endpoint, lookup);
@@ -135,9 +153,13 @@ export function createAbiFetcher(deps: AbiFetcherDeps) {
   const observe = (requests: RpcRequest[], automaticFetch: boolean) => {
     automatic = automaticFetch;
     for (const request of requests) {
+      if (seenForChain.has(request)) {
+        continue;
+      }
+      seenForChain.add(request);
       const chainId = getCapturedChainId(request);
       if (chainId !== undefined) {
-        setChainId(request.url, chainId);
+        setChainId(request.url, chainId, true);
       }
     }
     if (!automatic) {
@@ -145,10 +167,10 @@ export function createAbiFetcher(deps: AbiFetcherDeps) {
     }
 
     for (const request of requests) {
-      if (seen.has(request)) {
+      if (seenForFetch.has(request)) {
         continue;
       }
-      seen.add(request);
+      seenForFetch.add(request);
       const to = getContractCallParams(request)?.to;
       if (!to) {
         continue;
@@ -161,7 +183,7 @@ export function createAbiFetcher(deps: AbiFetcherDeps) {
       }
       addWaiting(request.url, address);
       if (!chainLookups.has(request.url)) {
-        void lookUpChainId(request.url);
+        void lookUpChainId(request.url, chainLookupDelay);
       }
     }
   };
@@ -174,7 +196,7 @@ export function createAbiFetcher(deps: AbiFetcherDeps) {
     if (chainId === undefined) {
       addWaiting(endpoint, address);
       chainId = await (chainErrors.has(endpoint) || !chainLookups.has(endpoint)
-        ? lookUpChainId(endpoint)
+        ? lookUpChainId(endpoint, 0)
         : chainLookups.get(endpoint));
       if (chainId === undefined) {
         return;

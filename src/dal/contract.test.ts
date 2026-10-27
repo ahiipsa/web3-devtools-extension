@@ -158,6 +158,29 @@ describe("saveFetchedContract", () => {
     });
   });
 
+  it("keeps every Contract when several are saved at once", async () => {
+    await Promise.all([
+      saveFetchedContract({
+        address: LOWER_CASE,
+        name: "A",
+        abi: erc20Abi,
+        source: "sourcify",
+      }),
+      saveFetchedContract({
+        address: OTHER,
+        name: "B",
+        abi: erc20Abi,
+        source: "sourcify",
+      }),
+      deleteContract("0x3333333333333333333333333333333333333333"),
+    ]);
+
+    expect(Object.keys(await getContracts()).sort()).toEqual([
+      OTHER,
+      LOWER_CASE,
+    ]);
+  });
+
   it("drops the mark once the Contract is saved through the form", async () => {
     await saveFetchedContract({
       address: LOWER_CASE,

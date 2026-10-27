@@ -51,6 +51,7 @@ const setup = (
     contracts?: Record<string, Contract>;
     fetchAbi?: (chainId: number, address: string) => Promise<AbiSourceResult>;
     requestChainId?: (endpoint: string) => Promise<number>;
+    chainLookupDelay?: number;
   } = {},
 ) => {
   const contracts: Record<string, Contract> = { ...options.contracts };
@@ -76,6 +77,7 @@ const setup = (
         })),
     ),
     requestChainId: vi.fn(options.requestChainId ?? (async () => 137)),
+    chainLookupDelay: options.chainLookupDelay ?? 0,
   };
   return { fetcher: createAbiFetcher(deps), deps, contracts };
 };
@@ -102,6 +104,36 @@ describe("Chain of an Endpoint", () => {
 
     expect(deps.requestChainId).toHaveBeenCalledWith(OTHER_ENDPOINT);
     expect(deps.fetchAbi).toHaveBeenCalledWith(137, WETH);
+  });
+
+  it("waits a moment for the page's own eth_chainId before asking the Endpoint", async () => {
+    const { fetcher, deps } = setup({ chainLookupDelay: 20 });
+    const call = callOn(ENDPOINT, WETH);
+
+    fetcher.observe([call], true);
+    fetcher.observe([call, chainIdOn(ENDPOINT, "0x1")], true);
+    await new Promise((resolve) => setTimeout(resolve, 40));
+
+    expect(deps.requestChainId).not.toHaveBeenCalled();
+    expect(deps.fetchAbi).toHaveBeenCalledWith(1, WETH);
+  });
+
+  it("follows a later eth_chainId of the Endpoint that names another Chain", async () => {
+    const { fetcher, deps } = setup();
+    const first = [chainIdOn(ENDPOINT, "0x1"), callOn(ENDPOINT, WETH)];
+
+    fetcher.observe(first, true);
+    await flush();
+    fetcher.observe(
+      [...first, chainIdOn(ENDPOINT, "0x2105"), callOn(ENDPOINT, DAI)],
+      true,
+    );
+    await flush();
+
+    expect(deps.fetchAbi.mock.calls).toEqual([
+      [1, WETH],
+      [8453, DAI],
+    ]);
   });
 
   it("is asked of an Endpoint at most once, even when that fails", async () => {

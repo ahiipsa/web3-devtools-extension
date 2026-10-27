@@ -18,7 +18,7 @@ From the moment its "EVM RPC" Panel is first opened in DevTools until DevTools i
 By default, when the inspected page calls a contract (`eth_call`, `eth_estimateGas` or `eth_sendTransaction`) at an address that has no saved Contract, the extension sends:
 
 - **To Sourcify** (`https://sourcify.dev`, a public registry of verified contracts): the contract address and the chain id, to fetch the contract's verified ABI. Once per address and chain while DevTools stays open, and again when you press "Fetch ABI".
-- **To the RPC endpoint the page itself used**: one `eth_chainId` request, to learn the chain id, if the page has not already asked for it. Once per endpoint while DevTools stays open.
+- **To the RPC endpoint the page itself used**: one `eth_chainId` request, to learn the chain id, if the page has not asked for it itself within a second. Once per endpoint while DevTools stays open.
 
 Nothing else is sent: no calldata, no responses, no page URLs and no information about you. The contract addresses and chain ids are already public on chain. Sourcify's own privacy policy applies to the requests it receives.
 

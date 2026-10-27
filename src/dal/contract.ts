@@ -57,13 +57,30 @@ export function parseAbiJson(json: string): Abi {
   return parsed as Abi;
 }
 
+// Each change reads and writes the whole store, so changes run one at a time:
+// automatic fetches save while the user edits, and none may lose another
+let lastChange: Promise<unknown> = Promise.resolve();
+const changeContracts = <T>(
+  change: (contracts: ContractStore) => T | undefined,
+): Promise<T | undefined> => {
+  const run = lastChange.then(async () => {
+    const contracts = await getContracts();
+    const result = change(contracts);
+    if (result !== undefined) {
+      await chrome.storage.local.set({ contracts });
+    }
+    return result;
+  });
+  lastChange = run.catch(() => {});
+  return run;
+};
+
 export async function saveContract(contract: Contract): Promise<Contract> {
   const saved = { ...contract, address: normalizeAddress(contract.address) };
-  const contracts = await getContracts();
-
-  contracts[saved.address] = saved;
-  await chrome.storage.local.set({ contracts });
-
+  await changeContracts((contracts) => {
+    contracts[saved.address] = saved;
+    return true;
+  });
   return saved;
 }
 
@@ -73,14 +90,14 @@ export async function saveFetchedContract(
   contract: Contract & { source: "sourcify" },
 ): Promise<boolean> {
   const saved = { ...contract, address: normalizeAddress(contract.address) };
-  const contracts = await getContracts();
-  if (contracts[saved.address]) {
-    return false;
-  }
-
-  contracts[saved.address] = saved;
-  await chrome.storage.local.set({ contracts });
-  return true;
+  const result = await changeContracts((contracts) => {
+    if (contracts[saved.address]) {
+      return undefined;
+    }
+    contracts[saved.address] = saved;
+    return true;
+  });
+  return result === true;
 }
 
 export async function getContract(
@@ -91,8 +108,8 @@ export async function getContract(
 }
 
 export async function deleteContract(address: `0x${string}`): Promise<void> {
-  const contracts = await getContracts();
-
-  delete contracts[normalizeAddress(address)];
-  await chrome.storage.local.set({ contracts });
+  await changeContracts((contracts) => {
+    delete contracts[normalizeAddress(address)];
+    return true;
+  });
 }

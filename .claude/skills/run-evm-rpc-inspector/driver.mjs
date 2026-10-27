@@ -607,7 +607,8 @@ async function smoke() {
     // An Endpoint without a captured eth_chainId is asked by the Panel itself
     const DAI = "0x6b175474e89094c44da98b954eedeac495271d0f";
     await app.rpc(callTo(7, DAI), "/rpc2");
-    await app.sleep(600);
+    // The Panel first waits 1 s for the page's own eth_chainId
+    await app.sleep(1600);
     check(
       "the Panel asks an Endpoint for its chain id once",
       app.nodeLog.filter(
@@ -633,7 +634,7 @@ async function smoke() {
     const before = app.sourcifyUrls.length;
     await app.rpc(callTo(8, USDT), "/rpc3");
     await app.rpc(callTo(9, "0x1111111111111111111111111111111111111111"));
-    await app.sleep(600);
+    await app.sleep(1600);
     check(
       "with the setting off no Sourcify request is made",
       app.sourcifyUrls.length === before &&
