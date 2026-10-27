@@ -7,10 +7,10 @@ import {
 import {
   formatHiddenWithDetails,
   getColumnVisibility,
-  getShrinkWithDetails,
+  formatInnerCallHiddenWithDetails,
   rpcRequestTableOptions,
 } from "./rpcRequestTable.ts";
-import { RpcRequestRow } from "./rpcRequestRow.ts";
+import { InnerCallRow, RpcRequestRow } from "./rpcRequestRow.ts";
 import { RpcRequest } from "../types/main.ts";
 
 const row = (
@@ -151,33 +151,86 @@ describe("RPC Request table", () => {
     ]);
   });
 
-  it("keeps Method, Contract and Function with the details open", () => {
+  it("keeps only Method with the details open", () => {
     const table = buildTable([]);
     table.setColumnVisibility(getColumnVisibility(true));
 
-    expect(visibleColumns(table)).toEqual(["method", "contract", "function"]);
-  });
-
-  it("lets every column left with the details open give way, the last first", () => {
-    const table = buildTable([]);
-    table.setColumnVisibility(getColumnVisibility(true));
-
-    const factors = visibleColumns(table).map(getShrinkWithDetails);
-    expect(factors.every((factor) => factor > 0)).toBe(true);
-    expect([...factors].sort((a, b) => a - b)).toEqual(factors);
+    expect(visibleColumns(table)).toEqual(["method"]);
   });
 });
 
 describe("formatHiddenWithDetails", () => {
-  it("lists the Status, Endpoint and Time the open details hide", () => {
+  it("lists the Contract, Function, Status, Endpoint and Time the open details hide", () => {
     expect(
       formatHiddenWithDetails(
         row("1", {
+          contractLabel: "USDC",
+          functionName: "balanceOf",
+          functionSelector: "0x70a08231",
           status: "error 3",
           endpoint: "eth.llamarpc.com",
           time: 1534,
         }),
       ),
-    ).toBe("Status: error 3\nEndpoint: eth.llamarpc.com\nTime: 1.53 s");
+    ).toBe(
+      "Contract: USDC\nFunction: balanceOf\nStatus: error 3\nEndpoint: eth.llamarpc.com\nTime: 1.53 s",
+    );
+  });
+
+  it("gives the selector as the Function when the name is not decoded", () => {
+    expect(
+      formatHiddenWithDetails(
+        row("1", {
+          contractLabel: "0x1234...5678",
+          functionSelector: "0x12345678",
+        }),
+      ),
+    ).toBe(
+      "Contract: 0x1234...5678\nFunction: 0x12345678\nStatus: ok\nEndpoint: rpc.example\nTime: 10 ms",
+    );
+  });
+
+  it("leaves out the Contract and Function a row has none of", () => {
+    expect(formatHiddenWithDetails(row("1", { method: "eth_chainId" }))).toBe(
+      "Status: ok\nEndpoint: rpc.example\nTime: 10 ms",
+    );
+  });
+});
+
+const innerCall = (fields: Partial<InnerCallRow>): InnerCallRow => ({
+  index: 0,
+  contractLabel: "WETH9",
+  contractAddress: "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+  failed: false,
+  ...fields,
+});
+
+describe("formatInnerCallHiddenWithDetails", () => {
+  it("lists the Contract and Function the open details hide", () => {
+    expect(
+      formatInnerCallHiddenWithDetails(
+        innerCall({
+          functionName: "balanceOf",
+          functionSelector: "0x70a08231",
+        }),
+      ),
+    ).toBe("Contract: WETH9\nFunction: balanceOf");
+  });
+
+  it("gives the selector as the Function when the name is not decoded", () => {
+    expect(
+      formatInnerCallHiddenWithDetails(
+        innerCall({
+          contractLabel: "0x2222...2222",
+          functionSelector: "0x12345678",
+        }),
+      ),
+    ).toBe("Contract: 0x2222...2222\nFunction: 0x12345678");
+  });
+
+  it("leaves out a Function the Inner Call has none of", () => {
+    expect(formatInnerCallHiddenWithDetails(innerCall({}))).toBe(
+      "Contract: WETH9",
+    );
   });
 });

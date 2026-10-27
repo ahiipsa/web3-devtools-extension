@@ -19,8 +19,8 @@ import { AppContext } from "./AppContext.tsx";
 import { useRpcRequestRows } from "../hooks/useRpcRequestRows.ts";
 import {
   formatHiddenWithDetails,
+  formatInnerCallHiddenWithDetails,
   getColumnVisibility,
-  getShrinkWithDetails,
   rpcRequestTableOptions,
 } from "../table/rpcRequestTable.ts";
 import {
@@ -52,17 +52,13 @@ import {
 // Matches --rpc-table-row-height in RequestTable.css, with or without the details
 const ROW_HEIGHT = 21;
 
+// With the details open Method, the only column left, takes the table's whole
+// side of the split; closed, every column has the user's width
 const getCellStyle = (
-  column: { id: string; getSize: () => number },
+  column: { getSize: () => number },
   detailsOpen: boolean,
 ): React.CSSProperties =>
-  detailsOpen
-    ? {
-        width: column.getSize(),
-        flexShrink: getShrinkWithDetails(column.id),
-        minWidth: 0,
-      }
-    : { width: column.getSize() };
+  detailsOpen ? { flex: "1 1 0", minWidth: 0 } : { width: column.getSize() };
 
 const SORT_ARROWS = { asc: "▲", desc: "▼" } as const;
 const ARIA_SORT = { asc: "ascending", desc: "descending" } as const;
@@ -125,12 +121,13 @@ const MethodLabel = (props: {
 };
 
 // What an Inner Call line shows in a column, and its full text: an indented
-// `#n`, ✗ when it failed, in Method; its Contract and function in theirs;
-// nothing elsewhere
+// `#n`, ✗ when it failed, in Method, and what the open details hide; its
+// Contract and function in theirs; nothing elsewhere
 const getInnerCallCell = (
   cells: ReturnType<typeof getInnerCallCells>,
   failed: boolean,
   columnId: string,
+  hidden: string | undefined,
 ): { content: React.ReactNode; title?: string } => {
   if (columnId === "method") {
     const mark = failed ? " ✗" : "";
@@ -141,7 +138,7 @@ const getInnerCallCell = (
           {mark && <span className="rpc-table-failed-mark">{mark}</span>}
         </>
       ),
-      title: cells.method + mark,
+      title: [cells.method + mark, hidden].filter(Boolean).join("\n"),
     };
   }
   if (columnId === "contract") {
@@ -238,7 +235,7 @@ export const RequestTable = ({ filter, scrollRef }: RequestTableProps) => {
   }, [filteredData, selection, setRequestId]);
 
   // Rows keep their single line and height with the details open, so the
-  // Selected RPC Request stays where it was; only some columns hide
+  // Selected RPC Request stays where it was; every column but Method hides
   const detailsOpen = requestId !== null;
 
   const [sorting, setSorting] = useState<SortingState>([]);
@@ -368,7 +365,7 @@ export const RequestTable = ({ filter, scrollRef }: RequestTableProps) => {
 
   const pressedResizer = useRef(false);
 
-  // With the details open the columns give way rather than the table
+  // With the details open Method fits the table's side rather than the table
   // scrolling sideways
   const totalWidth = detailsOpen ? 0 : table.getTotalSize();
 
@@ -425,8 +422,8 @@ export const RequestTable = ({ filter, scrollRef }: RequestTableProps) => {
                         {SORT_ARROWS[sorted]}
                       </span>
                     )}
-                    {/* Widths change with the details closed only: open, the
-                        columns give way and a drag would set a width unseen */}
+                    {/* Widths change with the details closed only: open, Method
+                        fills the side and a drag would set a width unseen */}
                     {!detailsOpen && (
                       <div
                         className={cx("rpc-table-resizer", {
@@ -441,7 +438,7 @@ export const RequestTable = ({ filter, scrollRef }: RequestTableProps) => {
                   </div>
                 );
               })}
-              <div className="rpc-table-filler" />
+              {!detailsOpen && <div className="rpc-table-filler" />}
             </div>
           ))}
 
@@ -457,10 +454,11 @@ export const RequestTable = ({ filter, scrollRef }: RequestTableProps) => {
               }
               const selected = selectedLineId === line.id;
               // What the details hide, for the row's and its cells' tooltips
-              const hidden =
-                detailsOpen && line.kind === "rpcRequest"
+              const hidden = !detailsOpen
+                ? undefined
+                : line.kind === "rpcRequest"
                   ? formatHiddenWithDetails(line.row)
-                  : undefined;
+                  : formatInnerCallHiddenWithDetails(line.innerCall);
               const innerCallCells =
                 line.kind === "innerCall"
                   ? getInnerCallCells(line.innerCall)
@@ -505,6 +503,7 @@ export const RequestTable = ({ filter, scrollRef }: RequestTableProps) => {
                         innerCallCells!,
                         line.innerCall.failed,
                         columnId,
+                        hidden,
                       );
                       return (
                         <div
@@ -564,7 +563,7 @@ export const RequestTable = ({ filter, scrollRef }: RequestTableProps) => {
                       </div>
                     );
                   })}
-                  <div className="rpc-table-filler" />
+                  {!detailsOpen && <div className="rpc-table-filler" />}
                 </div>
               );
             })}

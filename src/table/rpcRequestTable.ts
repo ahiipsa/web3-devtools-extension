@@ -8,6 +8,7 @@ import {
 import {
   formatDuration,
   getFunctionLabel,
+  InnerCallRow,
   RpcRequestRow,
 } from "./rpcRequestRow.ts";
 
@@ -58,9 +59,12 @@ export const rpcRequestTableOptions = {
   defaultColumn: { minSize: 40 },
 } satisfies Omit<TableOptions<RpcRequestRow>, "data">;
 
-// With the details open the table keeps Method, Contract and Function, the
-// same single-line rows; a row's tooltip tells what is hidden
+// With the details open the table keeps only Method, at the full width of its
+// side of the split, in the same single-line rows; a row's tooltip tells what
+// is hidden
 const HIDDEN_WITH_DETAILS: VisibilityState = {
+  contract: false,
+  function: false,
   status: false,
   endpoint: false,
   time: false,
@@ -71,23 +75,36 @@ const ALL_VISIBLE: VisibilityState = {};
 export const getColumnVisibility = (detailsOpen: boolean): VisibilityState =>
   detailsOpen ? HIDDEN_WITH_DETAILS : ALL_VISIBLE;
 
-// With the details open, columns that do not fit the table's side of the split
-// give way from the last: Function first, then Contract, then Method. Flex
-// shrinks by factor × width, so factors this far apart act as an order.
-const SHRINK_WITH_DETAILS: Record<string, number> = {
-  method: 1,
-  contract: 1e3,
-  function: 1e6,
+// The Contract and Function lines, leaving out what the row has none of
+const formatContractCall = (
+  contractLabel: string | undefined,
+  functionFields: Parameters<typeof getFunctionLabel>[0],
+) => {
+  const functionLabel = getFunctionLabel(functionFields);
+  return [
+    contractLabel && `Contract: ${contractLabel}`,
+    functionLabel && `Function: ${functionLabel.text}`,
+  ].filter((line): line is string => !!line);
 };
 
-export const getShrinkWithDetails = (columnId: string) =>
-  SHRINK_WITH_DETAILS[columnId] ?? 0;
-
 export const formatHiddenWithDetails = (
-  row: Pick<RpcRequestRow, "status" | "endpoint" | "time">,
+  row: Pick<
+    RpcRequestRow,
+    | "contractLabel"
+    | "functionName"
+    | "functionSelector"
+    | "status"
+    | "endpoint"
+    | "time"
+  >,
 ) =>
   [
+    ...formatContractCall(row.contractLabel, row),
     `Status: ${row.status}`,
     `Endpoint: ${row.endpoint}`,
     `Time: ${formatDuration(row.time)}`,
   ].join("\n");
+
+// An Inner Call has no Status, Endpoint or Time of its own
+export const formatInnerCallHiddenWithDetails = (innerCall: InnerCallRow) =>
+  formatContractCall(innerCall.contractLabel, innerCall).join("\n");

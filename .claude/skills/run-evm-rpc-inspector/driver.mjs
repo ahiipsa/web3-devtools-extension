@@ -581,6 +581,11 @@ export async function launch() {
       ev(
         `[...(document.querySelector("[role=row][aria-selected=true]")?.querySelectorAll("[role=gridcell]") ?? [])].map((c) => c.innerText.trim())`,
       ),
+    // Each row's tooltip, which with the details open tells the hidden columns
+    rowTitles: () =>
+      ev(
+        `[...document.querySelectorAll(".rpc-table-body [role=row]")].map((r) => r.title)`,
+      ),
     headers: () =>
       ev(
         `[...document.querySelectorAll(".rpc-table-header [role=columnheader]")].map((h) => h.innerText.trim())`,
@@ -629,9 +634,14 @@ async function smoke() {
     console.log(results.at(-1));
   };
   const { click, key, type, shot, ev } = app;
+  // In the Contract and Function columns, or with the details open in a
+  // row's tooltip
   const callsContract = async (contract, fn) =>
     (await app.rowCells()).some(
       (cells) => cells[1] === contract && cells[2] === fn,
+    ) ||
+    (await app.rowTitles()).some((title) =>
+      title.startsWith(`Contract: ${contract}\nFunction: ${fn}\n`),
     );
   const json = (value) => JSON.stringify(value);
   try {
@@ -688,22 +698,26 @@ async function smoke() {
       await callsContract("USDC", "balanceOf"),
       json(await app.rowCells()),
     );
-    // The details hide Status, Endpoint and Time, not the rows' one line
+    // The details hide every column but Method, not the rows' one line
     const host = new URL(app.page.url()).host;
     check(
-      "with the details open the header shows Method, Contract and Function only",
-      json(await app.headers()) === json(["Method", "Contract", "Function"]),
+      "with the details open the header shows Method only",
+      json(await app.headers()) === json(["Method"]),
       json(await app.headers()),
     );
     check(
-      "with the details open no row shows the Endpoint host",
-      !(await app.rowCells()).some((cells) =>
-        cells.some((text) => text.includes(host)),
-      ),
+      "with the details open no row shows a Contract or the Endpoint host",
+      (await app.rowCells()).every((cells) => cells.length === 1) &&
+        !(await app.rowCells()).some((cells) =>
+          cells.some((text) => text.includes(host) || text.includes("USDC")),
+        ),
+      json(await app.rowCells()),
     );
     check(
-      "with the details open a row's tooltip tells its Status, Endpoint and Time",
-      new RegExp(`^Status: ok\\nEndpoint: ${host}\\nTime: \\d+ ms$`).test(
+      "with the details open a row's tooltip tells its Contract, Function, Status, Endpoint and Time",
+      new RegExp(
+        `^Contract: USDC\\nFunction: balanceOf\\nStatus: ok\\nEndpoint: ${host}\\nTime: \\d+ ms$`,
+      ).test(
         await ev(
           `document.querySelector("[role=row][aria-selected=true]")?.title`,
         ),
@@ -713,22 +727,15 @@ async function smoke() {
       ),
     );
     check(
-      "with the details open the columns fit the table's side, giving way from the last",
+      "with the details open Method takes the table's whole side",
       await ev(`(() => {
         const scroll = document.querySelector(".rpc-table-scroll");
-        const widths = [...document.querySelectorAll(".rpc-table-header [role=columnheader]")]
-          .map((h) => Math.round(h.getBoundingClientRect().width));
-        // Default widths 160 + 140 + 140; Method keeps its own while Function
-        // gives way to fit, down to its padding, before Contract does
-        const fits = scroll.scrollWidth <= scroll.clientWidth;
-        const room = scroll.clientWidth;
-        return fits && (room >= 440
-          ? widths.join() === "160,140,140"
-          : widths[0] === Math.min(160, room) &&
-            (room >= 300 ? widths[1] === 140 : widths[2] <= 9));
+        const method = document.querySelector(".rpc-table-header [role=columnheader]");
+        return scroll.scrollWidth <= scroll.clientWidth &&
+          Math.round(method.getBoundingClientRect().width) === scroll.clientWidth;
       })()`),
       await ev(
-        `[...document.querySelectorAll(".rpc-table-header [role=columnheader]")].map((h) => Math.round(h.getBoundingClientRect().width)).join() + " in " + document.querySelector(".rpc-table-scroll").clientWidth`,
+        `Math.round(document.querySelector(".rpc-table-header [role=columnheader]").getBoundingClientRect().width) + " in " + document.querySelector(".rpc-table-scroll").clientWidth`,
       ),
     );
 
@@ -1086,6 +1093,10 @@ async function smoke() {
       ev(
         `[...document.querySelectorAll(".rpc-table-body [role=row][aria-level='2']")].map((r) => [...r.querySelectorAll("[role=gridcell]")].map((c) => c.innerText.trim()))`,
       );
+    const innerCallTitles = () =>
+      ev(
+        `[...document.querySelectorAll(".rpc-table-body [role=row][aria-level='2']")].map((r) => r.title)`,
+      );
     await key("Escape");
     check(
       "a Multicall row shows its Inner Call count, the failed ones', and a collapsed chevron",
@@ -1149,18 +1160,19 @@ async function smoke() {
             `document.querySelector(".rpc-details-inner-call-highlighted")?.innerText`,
           )) ?? "",
         ) &&
-        json(await app.selectedCells()) ===
-          json(["#2 ✗", "0x2222...2222", "0x12345678"]),
+        json(await app.selectedCells()) === json(["#2 ✗"]),
     );
     const openInner = await innerCallRows();
+    const openInnerTitles = await innerCallTitles();
     check(
-      "with the details open Inner Call rows keep #n and ✗ in Method, Contract and function in theirs",
-      json(openInner) ===
-        json([
-          ["#1", "WETH9", "balanceOf"],
-          ["#2 ✗", "0x2222...2222", "0x12345678"],
-        ]),
-      json(openInner),
+      "with the details open Inner Call rows keep #n and ✗ in Method, their tooltip their Contract and Function",
+      json(openInner) === json([["#1"], ["#2 ✗"]]) &&
+        json(openInnerTitles) ===
+          json([
+            "Contract: WETH9\nFunction: balanceOf",
+            "Contract: 0x2222...2222\nFunction: 0x12345678",
+          ]),
+      `${json(openInner)} ${json(openInnerTitles)}`,
     );
     await shot("12-inner-call-params");
     await key("ArrowLeft");
@@ -1168,13 +1180,14 @@ async function smoke() {
     const collapsedAgain = !(await multicallExpanded());
     await key("f", "meta");
     await type("balanceOf");
-    const searchedInner = await innerCallRows();
+    // The details are still open, so the Inner Calls' Contracts are in their tooltips
+    const searchedInner = await innerCallTitles();
     check(
       "a search for an Inner Call's function shows the Multicall expanded with only it",
       collapsedAgain &&
         (await multicallExpanded()) &&
-        searchedInner.some((cells) => cells[1] === "WETH9") &&
-        !searchedInner.some((cells) => cells[1].includes("0x2222")),
+        searchedInner.some((title) => title.startsWith("Contract: WETH9\n")) &&
+        !searchedInner.some((title) => title.includes("0x2222")),
       JSON.stringify(searchedInner),
     );
     await shot("13-inner-call-search");
