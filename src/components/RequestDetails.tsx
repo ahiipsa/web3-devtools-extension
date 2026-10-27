@@ -294,11 +294,9 @@ const Response = (props: {
     return (
       <>
         <StatusLabel request={request} />
-        <div className="rpc-details-muted">
-          {request.hasRpcResponseBody
-            ? "No RPC Response with this id"
-            : "No RPC Response"}
-        </div>
+        {request.hasRpcResponseBody && (
+          <div className="rpc-details-muted">No RPC Response with this id</div>
+        )}
       </>
     );
   }

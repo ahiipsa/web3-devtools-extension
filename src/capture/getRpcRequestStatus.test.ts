@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { RpcRequestStatus } from "../types/main.ts";
 import {
   formatRpcRequestStatus,
   getRpcRequestStatus,
@@ -104,19 +105,20 @@ describe("formatRpcRequestStatus", () => {
 
 describe("isFailedRpcRequestStatus", () => {
   it("is failed for every status but ok", () => {
-    expect(
-      [
-        { kind: "ok" },
-        { kind: "error", code: 3, message: "execution reverted" },
-        { kind: "http", code: 500 },
-        { kind: "http", code: 0 },
-        { kind: "no-response" },
-      ].map((status) =>
-        isFailedRpcRequestStatus(
-          status as Parameters<typeof isFailedRpcRequestStatus>[0],
-        ),
-      ),
-    ).toEqual([false, true, true, true, true]);
+    const statuses: RpcRequestStatus[] = [
+      { kind: "ok" },
+      { kind: "error", code: 3, message: "execution reverted" },
+      { kind: "http", code: 500 },
+      { kind: "http", code: 0 },
+      { kind: "no-response" },
+    ];
+    expect(statuses.map(isFailedRpcRequestStatus)).toEqual([
+      false,
+      true,
+      true,
+      true,
+      true,
+    ]);
   });
 
   it("is not failed without a status", () => {
