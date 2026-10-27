@@ -9,7 +9,7 @@ import {
 } from "../capture/getRpcRequestStatus.ts";
 import { trimContractAddress } from "../utils/text.ts";
 import { findAbiFunction } from "../decoding/findAbiFunction.ts";
-import { findBuiltInContract } from "../decoding/multicall.ts";
+import { findDecodingContract } from "../decoding/multicall.ts";
 
 // What one line of the RPC Request table shows, derived once per RPC Request
 export interface RpcRequestRow {
@@ -64,10 +64,9 @@ export function buildRpcRequestRow(
   findContract: FindContract,
 ): RpcRequestRow {
   const callParams = getContractCallParams(request);
-  // Without a Contract, a Multicall still decodes with the built-in aggregator ABI
   const contract =
     callParams &&
-    (findContract(callParams.to) ?? findBuiltInContract(callParams.data));
+    findDecodingContract(findContract, callParams.to, callParams.data);
   const status = getRpcRequestStatus(request);
 
   return {

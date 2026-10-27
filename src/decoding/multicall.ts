@@ -31,13 +31,23 @@ export const findBuiltInContract = (
 ): BuiltInContract | undefined =>
   data && findAbiFunction(MULTICALL3.abi, data) ? MULTICALL3 : undefined;
 
+// The ABI that decodes calldata to an address: its Contract's, else the
+// built-in aggregator's for a Multicall
+export const findDecodingContract = (
+  findContract: FindContract,
+  address: `0x${string}`,
+  data: Hex | undefined,
+): BuiltInContract | undefined =>
+  findContract(address) ?? findBuiltInContract(data);
+
 // One call bundled in a Multicall
 export interface InnerCall {
   target: `0x${string}`;
   callData: Hex;
   // aggregate3Value only
   value?: bigint;
-  // The target's Contract, else the built-in aggregator for a nested Multicall
+  // The target's Contract, else the built-in aggregator for an Inner Call
+  // that is itself a Multicall
   contractName?: string;
   // Undefined when nothing decodes the target's calldata
   decoding?: Decoding;
@@ -48,22 +58,27 @@ export interface InnerCall {
   returnData?: Hex;
 }
 
-interface Bundled {
+// One call as the aggregator's calldata bundles it
+interface AggregatorCall {
   target: `0x${string}`;
   callData: Hex;
   value?: bigint;
 }
 
-interface Returned {
+// One call's outcome as the aggregator returns it
+interface AggregatorCallOutcome {
   success?: boolean;
   returnData: Hex;
 }
 
-type Aggregated = { functionName: string; args: readonly unknown[] };
+// The aggregator function and its decoded arguments
+type AggregatorInput = { functionName: string; args: readonly unknown[] };
 
 // The bundled calls are always the last argument
-const getBundled = ({ args }: Aggregated) => args.at(-1) as readonly Bundled[];
+const getAggregatorCalls = ({ args }: AggregatorInput) =>
+  args.at(-1) as readonly AggregatorCall[];
 
+// The aggregator functions with more than one return value
 const RETURNS_SEVERAL = new Set([
   "aggregate",
   "tryBlockAndAggregate",
@@ -73,10 +88,10 @@ const RETURNS_SEVERAL = new Set([
 // The per-call results are always the last return value: aggregate's are
 // bare bytes, the others' carry a success flag, which blockAndAggregate
 // always sets
-const getReturned = (
-  { functionName }: Aggregated,
+const getOutcomes = (
+  { functionName }: AggregatorInput,
   returnData: Hex,
-): Returned[] | undefined => {
+): AggregatorCallOutcome[] | undefined => {
   try {
     const decoded: unknown = decodeFunctionResult({
       abi: MULTICALL3_ABI,
@@ -108,28 +123,28 @@ export function getInnerCalls(
   findContract: FindContract,
 ): InnerCall[] | undefined {
   const data = getContractCallParams(request)?.data;
-  if (!findBuiltInContract(data)) {
+  if (!data || !findBuiltInContract(data)) {
     return undefined;
   }
 
-  let aggregated: Aggregated;
+  let input: AggregatorInput;
   try {
-    aggregated = decodeFunctionData({ abi: MULTICALL3_ABI, data: data! });
+    input = decodeFunctionData({ abi: MULTICALL3_ABI, data });
   } catch {
     return undefined;
   }
 
-  const bundled = getBundled(aggregated);
-  const requestReturnData = getReturnData(request);
-  const returned =
-    requestReturnData && getReturned(aggregated, requestReturnData);
-  // Results pair with Inner Calls by position, so a count that differs pairs nothing
-  const results = returned?.length === bundled.length ? returned : undefined;
+  const calls = getAggregatorCalls(input);
+  const returnData = getReturnData(request);
+  const outcomes = returnData && getOutcomes(input, returnData);
+  // Outcomes pair with Inner Calls by position, so a count that differs pairs nothing
+  const paired = outcomes?.length === calls.length ? outcomes : undefined;
 
-  return bundled.map(({ target, callData, value }, index) => {
-    const result = results?.[index];
-    // A nested Multicall decodes as a plain aggregator call
-    const contract = findContract(target) ?? findBuiltInContract(callData);
+  return calls.map(({ target, callData, value }, index) => {
+    const result = paired?.[index];
+    // An Inner Call that is itself a Multicall decodes as a plain aggregator
+    // call, without Inner Calls of its own
+    const contract = findDecodingContract(findContract, target, callData);
     return {
       target,
       callData,
