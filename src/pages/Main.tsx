@@ -37,15 +37,17 @@ export const Main = () => {
       ? undefined
       : rpcRequestList.find((request) => request.id === requestId);
 
-  const gridRef = useRef<HTMLDivElement>(null);
+  const tableScrollRef = useRef<HTMLDivElement>(null);
   const detailsRef = useRef<HTMLDivElement>(null);
 
   // Closing unmounts the details, so focus inside them would fall to <body>
   // and leave the keyboard dead; hand it to the grid instead, Network-style.
-  // Focus elsewhere stays where it is.
+  // So does focus already on <body>, e.g. after a click on plain text in the
+  // details. Focus elsewhere stays where it is.
   const closeDetails = useCallback(() => {
-    if (detailsRef.current?.contains(document.activeElement)) {
-      gridRef.current?.focus({ preventScroll: true });
+    const focused = document.activeElement;
+    if (focused === document.body || detailsRef.current?.contains(focused)) {
+      tableScrollRef.current?.focus({ preventScroll: true });
     }
     setRequestId(null);
   }, [setRequestId]);
@@ -116,7 +118,7 @@ export const Main = () => {
           )}
           style={rpcRequest ? { width: tableWidth ?? "40%" } : undefined}
         >
-          <RequestTable filter={filter} scrollRef={gridRef} />
+          <RequestTable filter={filter} scrollRef={tableScrollRef} />
         </div>
         {rpcRequest && (
           <>

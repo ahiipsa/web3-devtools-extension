@@ -169,7 +169,7 @@ export const RequestTable = ({ filter, scrollRef }: RequestTableProps) => {
 
   // Rows change height as the details open and close; keep the selected one
   // in view through the change
-  const selectedIndex = rows.findIndex((row) => row.id === requestId);
+  const selectedIndex = rows.findIndex((row) => row.id === selection);
   const selectedIndexRef = useRef(selectedIndex);
   selectedIndexRef.current = selectedIndex;
   useLayoutEffect(() => {
