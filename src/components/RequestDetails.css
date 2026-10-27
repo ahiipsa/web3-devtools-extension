@@ -141,7 +141,7 @@
   user-select: text;
 }
 
-/* formatDecodedValue indents tuples and structs as JSON */
+/* formatDecodedValue indents structs as JSON */
 .rpc-details-decoded-value {
   white-space: pre-wrap;
 }

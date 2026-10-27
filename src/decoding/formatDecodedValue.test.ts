@@ -50,13 +50,24 @@ describe("formatDecodedValue", () => {
     );
   });
 
-  it("prints an array of structs with bare integers", () => {
-    expect(formatDecodedValue([{ to: MAKER, value: 10n ** 30n }])).toBe(
+  it("prints an array of structs as an indented JSON array with bare integers", () => {
+    expect(
+      formatDecodedValue([
+        { to: MAKER, value: 10n ** 30n },
+        { to: MAKER, value: 1n },
+      ]),
+    ).toBe(
       [
-        "[{",
-        `    "to": "${MAKER}",`,
-        '    "value": 1000000000000000000000000000000',
-        "}]",
+        "[",
+        "    {",
+        `        "to": "${MAKER}",`,
+        '        "value": 1000000000000000000000000000000',
+        "    },",
+        "    {",
+        `        "to": "${MAKER}",`,
+        '        "value": 1',
+        "    }",
+        "]",
       ].join("\n"),
     );
   });

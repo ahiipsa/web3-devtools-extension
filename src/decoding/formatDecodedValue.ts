@@ -23,14 +23,18 @@ const toJson = (value: unknown, indent: string): string => {
   return `${open}\n${entries.map((entry) => indent + INDENT + entry).join(",\n")}\n${indent}${close}`;
 };
 
-// A decoded argument or return value as the details show it: structs as
-// indented JSON, arrays inline, anything else as its plain string
+const isStruct = (value: unknown) =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+// A decoded argument or return value as the details show it: a struct
+// (named components), and an array holding one, as indented JSON; any
+// other array inline; anything else as its plain string
 export function formatDecodedValue(value: unknown): string {
+  if (isStruct(value) || (Array.isArray(value) && value.some(isStruct))) {
+    return toJson(value, "");
+  }
   if (Array.isArray(value)) {
     return `[${value.map(formatDecodedValue).join(", ")}]`;
-  }
-  if (typeof value === "object" && value !== null) {
-    return toJson(value, "");
   }
   return String(value);
 }

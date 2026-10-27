@@ -27,11 +27,13 @@ export type Decoding =
 const decodeValues = (
   params: readonly AbiParameter[],
   data: Hex,
+  { positionLone }: { positionLone: boolean },
 ): DecodedValue[] | undefined => {
   try {
     const values = decodeAbiParameters(params, data);
     return params.map((param, index) => ({
-      name: param.name || `[${index}]`,
+      name:
+        param.name || (positionLone || params.length > 1 ? `[${index}]` : ""),
       type: param.type,
       value: values[index],
     }));
@@ -63,7 +65,11 @@ export function decodeRpcRequest(
   }
 
   const fn = findAbiFunction(abi, callParams.data);
-  const args = fn && decodeValues(fn.inputs, `0x${callParams.data.slice(10)}`);
+  const args =
+    fn &&
+    decodeValues(fn.inputs, `0x${callParams.data.slice(10)}`, {
+      positionLone: true,
+    });
   if (!fn || !args) {
     return { status: "mismatch" };
   }
@@ -81,12 +87,11 @@ export function decodeRpcRequest(
     request.requestBody.method === "eth_call" &&
     typeof returnData === "string"
   ) {
-    const returnValues = decodeValues(fn.outputs ?? [], returnData as Hex);
+    const returnValues = decodeValues(fn.outputs ?? [], returnData as Hex, {
+      positionLone: false,
+    });
     if (returnValues) {
-      decoding.returnValues =
-        returnValues.length === 1 && !fn.outputs[0].name
-          ? [{ ...returnValues[0], name: "" }]
-          : returnValues;
+      decoding.returnValues = returnValues;
     } else {
       decoding.returnValueMismatch = true;
     }
