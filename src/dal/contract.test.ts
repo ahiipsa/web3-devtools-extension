@@ -3,6 +3,7 @@ import { Abi } from "viem";
 import {
   deleteContract,
   getContract,
+  getContracts,
   parseAbiJson,
   saveContract,
 } from "./contract.ts";
@@ -19,6 +20,7 @@ const erc20Abi = [
 
 const MIXED_CASE = "0xAbCdEf000000000000000000000000000000AbCd";
 const LOWER_CASE = "0xabcdef000000000000000000000000000000abcd";
+const OTHER = "0x2222222222222222222222222222222222222222";
 
 // In-memory stand-in for chrome.storage.local
 const stubChromeStorage = () => {
@@ -65,6 +67,27 @@ describe("Contract data layer", () => {
     await saveContract({ address: MIXED_CASE, name: "New", abi: erc20Abi });
 
     expect(await getContract(LOWER_CASE)).toMatchObject({ name: "New" });
+  });
+
+  // Contracts saved before the ABI moved into the Contract have no `abi`
+  it("ignores a Contract stored without an ABI", async () => {
+    await chrome.storage.local.set({
+      contracts: {
+        [LOWER_CASE]: { contractAddress: LOWER_CASE, name: "Old", abiId: "x" },
+      },
+    });
+
+    expect(await getContract(LOWER_CASE)).toBeNull();
+    expect(await getContracts()).toEqual({});
+  });
+
+  it("keeps valid Contracts next to one stored without an ABI", async () => {
+    await chrome.storage.local.set({
+      contracts: { [LOWER_CASE]: { name: "Old", abiId: "x" } },
+    });
+    await saveContract({ address: OTHER, name: "Token", abi: erc20Abi });
+
+    expect(Object.keys(await getContracts())).toEqual([OTHER]);
   });
 
   it("returns null for an address without a Contract", async () => {

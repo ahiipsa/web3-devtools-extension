@@ -12,10 +12,21 @@ type ContractStore = Record<string, Contract>;
 export const normalizeAddress = (address: `0x${string}`) =>
   address.toLowerCase() as `0x${string}`;
 
+// Contracts saved before the ABI moved into the Contract have no `abi` and
+// would crash decoding, so they are dropped
+const isContract = (value: unknown): value is Contract =>
+  typeof value === "object" &&
+  value !== null &&
+  Array.isArray((value as Contract).abi);
+
 // Keyed by normalized address
 export const getContracts = async (): Promise<ContractStore> => {
   const { contracts } = await chrome.storage.local.get({ contracts: {} });
-  return contracts;
+  return Object.fromEntries(
+    Object.entries(contracts ?? {}).filter(([, contract]) =>
+      isContract(contract),
+    ),
+  ) as ContractStore;
 };
 
 // Throws an Error whose message is fit to show the user
