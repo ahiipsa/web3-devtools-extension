@@ -1,9 +1,9 @@
 import { RpcRequest } from "../types/main.ts";
 import { getCapturedChainId } from "./chainId.ts";
 
-// The Chain of one RPC Request, as the table shows it
 type FailedChain = { kind: "failed"; reason: string };
 
+// The Chain of one RPC Request, as the table shows it
 export type RpcRequestChain =
   | { kind: "looking-up" }
   | { kind: "known"; chainId: number }
@@ -19,7 +19,7 @@ export interface EndpointChainsDeps {
 
 export type EndpointChains = ReturnType<typeof createEndpointChains>;
 
-const LOOKING_UP: RpcRequestChain = { kind: "looking-up" };
+export const LOOKING_UP: RpcRequestChain = { kind: "looking-up" };
 
 const errorMessage = (error: unknown) =>
   error instanceof Error ? error.message : String(error);
@@ -36,7 +36,7 @@ export function createEndpointChains(deps: EndpointChainsDeps) {
   // Each RPC Request keeps the Chain its Endpoint had when it arrived
   const requestChains = new WeakMap<RpcRequest, RpcRequestChain>();
   // RPC Requests that arrived before their Endpoint's Chain was known
-  const unknown = new Map<string, RpcRequest[]>();
+  const awaitingChain = new Map<string, RpcRequest[]>();
   const seen = new WeakSet<RpcRequest>();
   const lookupDelay = deps.lookupDelay ?? 1000;
 
@@ -60,14 +60,14 @@ export function createEndpointChains(deps: EndpointChainsDeps) {
     failures.delete(endpoint);
     // The first Chain learnt is the one they were sent to
     const known: RpcRequestChain = { kind: "known", chainId };
-    unknown.get(endpoint)?.forEach((request) => {
+    awaitingChain.get(endpoint)?.forEach((request) => {
       requestChains.set(request, known);
     });
-    unknown.delete(endpoint);
+    awaitingChain.delete(endpoint);
     notify(endpoint);
   };
 
-  const lookUp = (endpoint: string, delay: number) => {
+  const startLookup = (endpoint: string, delay: number) => {
     const lookup = new Promise((resolve) => setTimeout(resolve, delay)).then(
       () => {
         const captured = chainIds.get(endpoint);
@@ -97,10 +97,13 @@ export function createEndpointChains(deps: EndpointChainsDeps) {
     return lookup;
   };
 
-  // Takes in the captured RPC Requests, in the order they arrived
+  // Takes in the captured RPC Requests, in the order they arrived. That is
+  // the order they finished in, the closest the Panel knows to when they
+  // were sent
   const observe = (requests: RpcRequest[]) => {
-    // The table may already show them, without a Chain
-    const given = new Set<string>();
+    // Endpoints with RPC Requests given a known Chain here: the table may
+    // already show them without one
+    const assigned = new Set<string>();
     for (const request of requests) {
       if (seen.has(request)) {
         continue;
@@ -114,15 +117,18 @@ export function createEndpointChains(deps: EndpointChainsDeps) {
       const chainId = chainIds.get(endpoint);
       if (chainId !== undefined) {
         requestChains.set(request, { kind: "known", chainId });
-        given.add(endpoint);
+        assigned.add(endpoint);
         continue;
       }
-      unknown.set(endpoint, [...(unknown.get(endpoint) ?? []), request]);
+      awaitingChain.set(endpoint, [
+        ...(awaitingChain.get(endpoint) ?? []),
+        request,
+      ]);
       if (!lookups.has(endpoint)) {
-        void lookUp(endpoint, lookupDelay);
+        void startLookup(endpoint, lookupDelay);
       }
     }
-    given.forEach(notify);
+    assigned.forEach(notify);
   };
 
   return {
@@ -140,7 +146,7 @@ export function createEndpointChains(deps: EndpointChainsDeps) {
       chainIds.has(endpoint)
         ? Promise.resolve(chainIds.get(endpoint))
         : failures.has(endpoint) || !lookups.has(endpoint)
-          ? lookUp(endpoint, 0)
+          ? startLookup(endpoint, 0)
           : lookups.get(endpoint)!,
     // The same object until the RPC Request's Chain changes
     getRequestChain: (request: RpcRequest): RpcRequestChain =>

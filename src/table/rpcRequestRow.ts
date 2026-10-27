@@ -14,7 +14,7 @@ import {
   getInnerCalls,
   InnerCall,
 } from "../decoding/multicall.ts";
-import { RpcRequestChain } from "../chains/endpointChains.ts";
+import { LOOKING_UP, RpcRequestChain } from "../chains/endpointChains.ts";
 import { getChainName } from "../chains/chainNames.ts";
 
 // What the table knows of one Inner Call of a Multicall: what a search
@@ -124,8 +124,6 @@ const getChainFields = (chain: RpcRequestChain): ChainFields => {
       return {};
   }
 };
-
-const LOOKING_UP: RpcRequestChain = { kind: "looking-up" };
 
 export function buildRpcRequestRow(
   request: RpcRequest,

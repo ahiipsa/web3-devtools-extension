@@ -881,7 +881,7 @@ async function smoke() {
       chains.every((chain) => chain?.[0] === "Ethereum"),
     );
     check(
-      "every row of the standard traffic shows the node's Chain by name, its id in the tooltip",
+      "every row of the standard traffic shows the Endpoint's Chain by name, its id in the tooltip",
       chains.length === 5 &&
         chains.every(
           (chain) => chain[0] === "Ethereum" && chain[1] === "Chain 1",
@@ -1144,6 +1144,17 @@ async function smoke() {
       await key("Escape");
       await until(app.rows, (rows) => rows.length === 5);
     }
+    // "1" also matches the host, so another Chain's name must drop every
+    // row; an id could match the node's random port
+    await key("f", "meta");
+    await type("polygon");
+    check(
+      "a search for another Chain's name keeps no row",
+      (await until(app.rows, (rows) => rows.length === 0)).length === 0,
+      json(await app.rows()),
+    );
+    await key("Escape");
+    await until(app.rows, (rows) => rows.length === 5);
 
     // Narrow Panel: the default side-docked DevTools is about 550 px wide
     if (!(await app.detailsOpen())) await clickRow({ method: "eth_call" });

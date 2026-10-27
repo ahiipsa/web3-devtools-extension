@@ -25,7 +25,8 @@ export interface AbiFetcherDeps {
     address: `0x${string}`,
     endpoint: string,
   ) => Promise<ContractAbi>;
-  // Observed by the Panel apart, as the table shows them too
+  // The Endpoints' Chains, shared with the table; the Panel observes the RPC
+  // Requests there before it calls `observe` here
   chains: EndpointChains;
 }
 
