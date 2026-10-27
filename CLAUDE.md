@@ -19,3 +19,7 @@ Single-context: `GLOSSARY.md` + `docs/adr/` at the repo root. See `docs/agents/d
 ### Agent queue
 
 `scripts/agent-queue.sh` implements `ready-for-agent` issues unattended, one fresh Claude session per issue. See `docs/agents/agent-queue.md`.
+
+### Running the extension
+
+`/run-evm-rpc-inspector` loads `build/` into real DevTools and drives the Panel (`smoke` scenario or a REPL). Use it to check UI and keyboard changes; a stubbed `chrome.devtools` misses DevTools' own key handling. See `.claude/skills/run-evm-rpc-inspector/SKILL.md`.
