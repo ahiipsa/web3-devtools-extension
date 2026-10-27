@@ -59,7 +59,7 @@
 }
 
 /* Lines up with the table header; both take their height and background from
-   RequestTable.css */
+   index.css */
 .rpc-details-tab-bar {
   display: flex;
   align-items: stretch;

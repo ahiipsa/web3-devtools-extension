@@ -2,3 +2,14 @@ body {
   min-width: 320px;
   min-height: 100vh;
 }
+
+/* The table header and the details tab bar sit side by side and read as one
+   strip across the split, with the details closed too */
+:root {
+  --rpc-table-header-height: 26px;
+  --rpc-table-header-bg: #f1f3f4;
+}
+
+.dark {
+  --rpc-table-header-bg: #292a2d;
+}

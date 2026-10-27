@@ -1,5 +1,6 @@
 /* Modelled on the DevTools Network tab; the toolbar sits outside the table,
-   above the split with the details */
+   above the split with the details. --rpc-table-header-height and
+   --rpc-table-header-bg come from index.css */
 .rpc-table,
 .rpc-table-toolbar {
   --rpc-table-row-height: 21px;
@@ -14,21 +15,6 @@
   --rpc-table-muted: #5f6368;
   --rpc-table-resizer: #1a73e8;
   --rpc-table-chip-pressed: #d3e3fd;
-}
-
-/* The table header and the details tab bar (RequestDetails.css) sit side by
-   side and read as one strip across the split, with the details closed too */
-.rpc-table,
-.rpc-table-toolbar,
-.rpc-details {
-  --rpc-table-header-height: 26px;
-  --rpc-table-header-bg: #f1f3f4;
-}
-
-.dark .rpc-table,
-.dark .rpc-table-toolbar,
-.dark .rpc-details {
-  --rpc-table-header-bg: #292a2d;
 }
 
 .rpc-table,

@@ -671,14 +671,15 @@ export async function launch() {
         const r = document.querySelector("[role=row][aria-selected=true]")?.getBoundingClientRect();
         return r ? [r.height, r.top] : null;
       })()`),
-    // The table header's and the details tab bar's top, height and
-    // background, which line up as one strip across the split
+    // The table header's and the details tab bar's top, height, background
+    // and bottom border, which line up as one strip across the split
     headerBars: () =>
       ev(`[".rpc-table-header", ".rpc-details-tab-bar"].map((selector) => {
         const e = document.querySelector(selector);
         if (!e) return null;
         const r = e.getBoundingClientRect();
-        return [r.top, r.height, getComputedStyle(e).backgroundColor];
+        const style = getComputedStyle(e);
+        return [Math.round(r.top), Math.round(r.height), style.backgroundColor, style.borderBottom];
       })`),
     detailsOpen: () =>
       ev(`document.querySelectorAll(".rpc-details-tab").length > 0`),
@@ -884,7 +885,7 @@ async function smoke() {
     const openBox = await app.selectedBox();
     const [openHeader, tabBar] = await app.headerBars();
     check(
-      "the table header and the details tab bar share top, height and background",
+      "the table header and the details tab bar share top, height, background and bottom border",
       openHeader?.[1] === 26 && json(openHeader) === json(tabBar),
       `${json(openHeader)} vs ${json(tabBar)}`,
     );
