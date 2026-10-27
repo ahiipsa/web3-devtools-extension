@@ -9,6 +9,8 @@
   --rpc-details-hover: #eef3fd;
   --rpc-details-accent: #1a73e8;
   --rpc-details-failed: #d93025;
+  /* Matches --rpc-table-selected in RequestTable.css */
+  --rpc-details-highlight: #d3e3fd;
 }
 
 .rpc-details {
@@ -31,6 +33,7 @@
   --rpc-details-hover: #2c3339;
   --rpc-details-accent: #8ab4f8;
   --rpc-details-failed: #f28b82;
+  --rpc-details-highlight: #1f3760;
 }
 
 /* The table's side of the split while the details are open; the limits
@@ -127,9 +130,14 @@
 }
 
 .rpc-details-inner-call {
-  padding: 3px 0;
+  padding: 3px 4px;
   overflow-wrap: anywhere;
   user-select: text;
+}
+
+/* The Inner Call picked in the table */
+.rpc-details-inner-call-highlighted {
+  background: var(--rpc-details-highlight);
 }
 
 /* Fetch state and Add ABI, for a target without a Contract */

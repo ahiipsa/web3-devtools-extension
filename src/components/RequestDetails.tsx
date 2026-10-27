@@ -50,8 +50,13 @@ interface RequestDetailsProps {
 }
 
 export const RequestDetails = ({ request, onClose }: RequestDetailsProps) => {
-  const { detailsTab, setDetailsTab, contractTabTarget, showContractTab } =
-    useContext(AppContext);
+  const {
+    detailsTab,
+    setDetailsTab,
+    contractTabTarget,
+    showContractTab,
+    selectedInnerCall,
+  } = useContext(AppContext);
 
   const callParams = getContractCallParams(request);
   const callsContract = callParams !== undefined;
@@ -153,6 +158,11 @@ export const RequestDetails = ({ request, onClose }: RequestDetailsProps) => {
             hasContract={!!contract}
             decoding={decoding}
             innerCalls={innerCalls}
+            highlightedInnerCall={
+              selectedInnerCall?.requestId === request.id
+                ? selectedInnerCall.index
+                : null
+            }
             findContract={findContract}
             onAddAbi={showInnerCallContract}
           />
@@ -306,11 +316,19 @@ const InnerCallAbiFetch = (props: {
 
 const InnerCalls = (props: {
   innerCalls: InnerCall[];
+  // The one picked in the table
+  highlighted: number | null;
   endpoint: string;
   findContract: FindContract;
   onAddAbi: (address: `0x${string}`) => void;
 }) => {
-  const { innerCalls, endpoint, findContract, onAddAbi } = props;
+  const { innerCalls, highlighted, endpoint, findContract, onAddAbi } = props;
+
+  const highlightedRef = useRef<HTMLLIElement>(null);
+  useEffect(() => {
+    highlightedRef.current?.scrollIntoView({ block: "nearest" });
+  }, [highlighted]);
+
   return innerCalls.length === 0 ? (
     <div className="rpc-details-muted">No Inner Calls</div>
   ) : (
@@ -318,7 +336,13 @@ const InnerCalls = (props: {
       {innerCalls.map((innerCall, index) => {
         const result = formatInnerCallResult(innerCall);
         return (
-          <li key={index} className="rpc-details-inner-call">
+          <li
+            key={index}
+            ref={index === highlighted ? highlightedRef : undefined}
+            className={cx("rpc-details-inner-call", {
+              "rpc-details-inner-call-highlighted": index === highlighted,
+            })}
+          >
             <div>
               <span className="rpc-details-muted">#{index + 1}</span>{" "}
               <span title={innerCall.target}>
@@ -361,6 +385,7 @@ const Params = (props: {
   hasContract: boolean;
   decoding: Decoding | undefined;
   innerCalls: InnerCall[] | undefined;
+  highlightedInnerCall: number | null;
   findContract: FindContract;
   onAddAbi: (address: `0x${string}`) => void;
 }) => {
@@ -370,6 +395,7 @@ const Params = (props: {
     hasContract,
     decoding,
     innerCalls,
+    highlightedInnerCall,
     findContract,
     onAddAbi,
   } = props;
@@ -409,6 +435,7 @@ const Params = (props: {
           <Section title="Inner Calls">
             <InnerCalls
               innerCalls={innerCalls}
+              highlighted={highlightedInnerCall}
               endpoint={request.url}
               findContract={findContract}
               onAddAbi={onAddAbi}

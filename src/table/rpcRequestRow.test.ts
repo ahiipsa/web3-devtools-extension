@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { Abi, encodeFunctionData, parseAbi } from "viem";
+import {
+  Abi,
+  encodeAbiParameters,
+  encodeFunctionData,
+  encodeFunctionResult,
+  parseAbi,
+  parseAbiParameters,
+} from "viem";
 import {
   buildRpcRequestRow,
   formatCollapsedSubtitle,
@@ -200,6 +207,85 @@ describe("buildRpcRequestRow", () => {
     expect(formatContractCall(buildRpcRequestRow(request, () => token))).toBe(
       "USDC / 0x82ad56cb",
     );
+  });
+
+  it("lists a Multicall's Inner Calls by Contract and function, else short target and Selector, flagging failed ones", () => {
+    const UNKNOWN = "0x2222222222222222222222222222222222222222";
+    const UNKNOWN_CALLDATA = `0x12345678${"0".repeat(64)}` as const;
+    const data = encodeFunctionData({
+      abi: parseAbi([
+        "function aggregate3((address target, bool allowFailure, bytes callData)[] calls) payable returns ((bool success, bytes returnData)[] returnData)",
+      ]),
+      functionName: "aggregate3",
+      args: [
+        [
+          { target: TOKEN, allowFailure: true, callData: BALANCE_OF_CALLDATA },
+          { target: UNKNOWN, allowFailure: true, callData: UNKNOWN_CALLDATA },
+        ],
+      ],
+    });
+    const result = encodeAbiParameters(
+      parseAbiParameters("(bool success, bytes returnData)[]"),
+      [
+        [
+          {
+            success: true,
+            returnData: encodeFunctionResult({
+              abi: erc20Abi,
+              functionName: "balanceOf",
+              result: 5n,
+            }),
+          },
+          { success: false, returnData: "0x" },
+        ],
+      ],
+    );
+    const request = rpcRequest({
+      requestBody: {
+        jsonrpc: "2.0",
+        id: 1,
+        method: "eth_call",
+        params: [{ to: "0xca11bde05977b3631167028862be2a173976ca11", data }],
+      },
+      response: { jsonrpc: "2.0", id: 1, result },
+    });
+
+    const row = buildRpcRequestRow(request, (address) =>
+      address.toLowerCase() === TOKEN ? token : undefined,
+    );
+
+    expect(row.innerCalls).toEqual([
+      {
+        index: 0,
+        contractLabel: "USDC",
+        contractAddress: expect.stringMatching(new RegExp(TOKEN, "i")),
+        contractName: "USDC",
+        functionName: "balanceOf",
+        functionSelector: "0x70a08231",
+        failed: false,
+      },
+      {
+        index: 1,
+        contractLabel: "0x2222...2222",
+        contractAddress: expect.stringMatching(new RegExp(UNKNOWN, "i")),
+        contractName: undefined,
+        functionName: undefined,
+        functionSelector: "0x12345678",
+        failed: true,
+      },
+    ]);
+    expect(row.innerCalls!.map(formatContractCall)).toEqual([
+      "USDC / balanceOf",
+      "0x2222...2222 / 0x12345678",
+    ]);
+    // A Multicall with failed Inner Calls is still ok
+    expect(row.failed).toBe(false);
+  });
+
+  it("has no Inner Calls for an RPC Request that is no Multicall", () => {
+    expect(
+      buildRpcRequestRow(rpcRequest(), () => token).innerCalls,
+    ).toBeUndefined();
   });
 
   it("labels the status and flags anything but ok as failed", () => {

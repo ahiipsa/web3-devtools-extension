@@ -47,6 +47,12 @@ export interface ContractTabTarget {
   address: `0x${string}`;
 }
 
+// An Inner Call picked in the table, highlighted in its Multicall's Params
+export interface SelectedInnerCall {
+  requestId: string;
+  index: number;
+}
+
 interface AppContext {
   requestId: string | null;
   setRequestId: (requestId: string | null) => void;
@@ -58,6 +64,8 @@ interface AppContext {
   contractTabTarget: ContractTabTarget | null;
   // Add ABI on an Inner Call: the Contract tab for its target
   showContractTab: (target: ContractTabTarget) => void;
+  selectedInnerCall: SelectedInnerCall | null;
+  setSelectedInnerCall: (innerCall: SelectedInnerCall | null) => void;
   rpcRequestList: RpcRequest[];
   clearRpcRequestList: () => void;
   settings: Settings;
@@ -75,6 +83,9 @@ export const AppContext = React.createContext<AppContext>({
   contractTabTarget: null,
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   showContractTab: (_target: ContractTabTarget) => {},
+  selectedInnerCall: null,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  setSelectedInnerCall: (_innerCall: SelectedInnerCall | null) => {},
   rpcRequestList: [],
   clearRpcRequestList: () => {},
   settings: DEFAULT_SETTINGS,
@@ -92,6 +103,8 @@ export const AppContextProvider = ({
   const [detailsTab, setDetailsTab] = useState<DetailsTab>("Overview");
   const [contractTabTarget, setContractTabTarget] =
     useState<ContractTabTarget | null>(null);
+  const [selectedInnerCall, setSelectedInnerCall] =
+    useState<SelectedInnerCall | null>(null);
 
   // Selecting another RPC Request resets the Contract tab to its `to`;
   // closing and reopening the same one keeps the chosen address
@@ -124,6 +137,7 @@ export const AppContextProvider = ({
     if (rpcRequestList.length === 0) {
       setRequestId(null);
       setContractTabTarget(null);
+      setSelectedInnerCall(null);
     }
   }, [rpcRequestList.length, setRequestId]);
 
@@ -136,6 +150,8 @@ export const AppContextProvider = ({
         setDetailsTab,
         contractTabTarget,
         showContractTab,
+        selectedInnerCall,
+        setSelectedInnerCall,
         rpcRequestList,
         clearRpcRequestList,
         settings,

@@ -962,6 +962,100 @@ async function smoke() {
       !/Inner Call target/.test(await app.text()),
     );
 
+    // Expanding a Multicall into its Inner Call rows. MULTICALL_CALL is the
+    // first Multicall row, so its chevron is the first one
+    const MULTICALL_ROW = `document.querySelector(".rpc-table-body [role=row][aria-expanded]")`;
+    const multicallExpanded = () =>
+      ev(`${MULTICALL_ROW}?.getAttribute("aria-expanded") === "true"`);
+    const innerCallRows = () =>
+      ev(
+        `[...document.querySelectorAll(".rpc-table-body [role=row][aria-level='2']")].map((r) => r.innerText.trim())`,
+      );
+    await key("Escape");
+    check(
+      "a Multicall row shows its Inner Call count, the failed ones', and a collapsed chevron",
+      /^▸\s*eth_call · 2 · 1 ✗/.test(
+        await ev(`${MULTICALL_ROW}?.innerText.split("\\n")[0]`),
+      ) &&
+        !(await multicallExpanded()) &&
+        (await innerCallRows()).length === 0,
+      await ev(`${MULTICALL_ROW}?.innerText.split("\\n")[0]`),
+    );
+    await click(".rpc-table-chevron");
+    const expandedInner = await innerCallRows();
+    check(
+      "a click on the chevron lists the Inner Calls below it, the failed one ✗",
+      (await multicallExpanded()) &&
+        expandedInner.length === 2 &&
+        expandedInner[0] === "WETH9 / balanceOf" &&
+        expandedInner[1] === "0x2222...2222 / 0x12345678 ✗" &&
+        !(await app.detailsOpen()),
+      JSON.stringify(expandedInner),
+    );
+    await shot("11-multicall-expanded");
+    await click(".rpc-table-chevron");
+    check(
+      "a second click on the chevron collapses it",
+      !(await multicallExpanded()) && (await innerCallRows()).length === 0,
+    );
+    // The Multicall row is still the selected one
+    await key("ArrowRight");
+    const rightExpands = await multicallExpanded();
+    await key("ArrowLeft");
+    check(
+      "→ expands the selected Multicall and ← collapses it",
+      rightExpands && !(await multicallExpanded()),
+    );
+    await key("ArrowRight");
+    await key("ArrowDown");
+    const intoInner = await app.selected();
+    await key("ArrowLeft");
+    const backToMulticall = await app.selected();
+    check(
+      "↓ walks into the Inner Calls and ← goes back to the Multicall",
+      intoInner === "WETH9 / balanceOf" &&
+        /^▸?▾?\s*eth_call · 2 · 1 ✗/.test(backToMulticall ?? "") &&
+        (await multicallExpanded()),
+      `${intoInner} | ${backToMulticall}`,
+    );
+    await key("ArrowDown");
+    await key("ArrowDown");
+    await key("Enter");
+    check(
+      "Enter on an Inner Call opens its Multicall's Params with it highlighted",
+      (await app.detailsOpen()) &&
+        (await ev(
+          `document.querySelector(".rpc-details-tab-selected")?.innerText`,
+        )) === "Params" &&
+        /^#2 0x2222\.\.\.2222 ✗/.test(
+          (await ev(
+            `document.querySelector(".rpc-details-inner-call-highlighted")?.innerText`,
+          )) ?? "",
+        ) &&
+        (await app.selected()) === "0x2222...2222 / 0x12345678 ✗",
+    );
+    await shot("12-inner-call-params");
+    await key("ArrowLeft");
+    await key("ArrowLeft");
+    const collapsedAgain = !(await multicallExpanded());
+    await key("f", "meta");
+    await type("balanceOf");
+    const searchedInner = await innerCallRows();
+    check(
+      "a search for an Inner Call's function shows the Multicall expanded with only it",
+      collapsedAgain &&
+        (await multicallExpanded()) &&
+        searchedInner.includes("WETH9 / balanceOf") &&
+        !searchedInner.some((text) => text.includes("0x2222")),
+      JSON.stringify(searchedInner),
+    );
+    await shot("13-inner-call-search");
+    await key("Escape");
+    check(
+      "clearing the search restores the Multicall collapsed",
+      !(await multicallExpanded()) && (await innerCallRows()).length === 0,
+    );
+
     // Settings: off means no Sourcify request and no eth_chainId of its own
     await click(".rpc-table-settings-button");
     await click(".rpc-table-settings .ant-checkbox-wrapper");
@@ -987,7 +1081,7 @@ async function smoke() {
         ),
       app.sourcifyUrls.slice(before).join(", "),
     );
-    await shot("11-end");
+    await shot("14-end");
   } catch (e) {
     check("scenario ran to the end", false, e.message.split("\n")[0]);
     await shot("99-crash").catch(() => {});

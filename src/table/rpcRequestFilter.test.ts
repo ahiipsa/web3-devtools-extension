@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { Abi } from "viem";
-import { buildRpcRequestRow } from "./rpcRequestRow.ts";
+import { buildRpcRequestRow, RpcRequestRow } from "./rpcRequestRow.ts";
 import {
   emptyRpcRequestFilter,
+  getMatchingInnerCalls,
   matchesRpcRequestFilter,
   RpcRequestFilter,
   selectMethodCategory,
@@ -97,6 +98,55 @@ describe("matchesRpcRequestFilter", () => {
     expect(matchesRpcRequestFilter(undecodedRow, search("a9059cbb"))).toBe(
       false,
     );
+  });
+});
+
+describe("matchesRpcRequestFilter on a Multicall", () => {
+  const multicallRow = {
+    ...blockNumberRow,
+    method: "eth_call",
+    innerCalls: [
+      {
+        index: 0,
+        contractLabel: "WETH9",
+        contractAddress: "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+        contractName: "WETH9",
+        functionName: "balanceOf",
+        functionSelector: "0x70a08231",
+        failed: false,
+      },
+      {
+        index: 1,
+        contractLabel: "0x2222...2222",
+        contractAddress: "0x2222222222222222222222222222222222222222",
+        functionSelector: "0x12345678",
+        failed: true,
+      },
+    ],
+  } satisfies RpcRequestRow;
+
+  it("searches its Inner Calls' Contract name, function and target address", () => {
+    for (const text of ["weth9", "BALANCEOF", "0xc02aaa39", "0x12345678"]) {
+      expect(matchesRpcRequestFilter(multicallRow, search(text))).toBe(true);
+    }
+    expect(matchesRpcRequestFilter(multicallRow, search("transfer"))).toBe(
+      false,
+    );
+  });
+
+  it("lists only the matching Inner Calls, and none without a search", () => {
+    expect(
+      getMatchingInnerCalls(multicallRow, "weth")?.map(({ index }) => index),
+    ).toEqual([0]);
+    expect(getMatchingInnerCalls(multicallRow, "transfer")).toEqual([]);
+    expect(getMatchingInnerCalls(multicallRow, "  ")).toBeUndefined();
+    expect(getMatchingInnerCalls(blockNumberRow, "weth")).toBeUndefined();
+  });
+
+  it("is not failed for failed Inner Calls under Errors", () => {
+    expect(
+      matchesRpcRequestFilter(multicallRow, { ...noFilter, errorsOnly: true }),
+    ).toBe(false);
   });
 });
 

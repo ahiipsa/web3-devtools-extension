@@ -1,5 +1,5 @@
 import { METHOD_CATEGORIES, MethodCategory } from "../types/main.ts";
-import { RpcRequestRow } from "./rpcRequestRow.ts";
+import { InnerCallRow, RpcRequestRow } from "./rpcRequestRow.ts";
 
 // What the toolbar above the RPC Request table narrows the list down to
 export interface RpcRequestFilter {
@@ -16,19 +16,57 @@ export const emptyRpcRequestFilter = (): RpcRequestFilter => ({
   search: "",
 });
 
+// What a search compares, ignoring case and surrounding spaces; empty
+// matches everything
+export const normalizeSearch = (search: string) => search.trim().toLowerCase();
+
+const includesNeedle = (texts: (string | undefined)[], needle: string) =>
+  texts.some((text) => text?.toLowerCase().includes(needle));
+
+const innerCallMatches = (innerCall: InnerCallRow, needle: string) =>
+  includesNeedle(
+    [
+      innerCall.contractAddress,
+      innerCall.contractName,
+      innerCall.functionName,
+      innerCall.functionSelector,
+    ],
+    needle,
+  );
+
+// The Inner Calls of a Multicall a search matches; undefined without a
+// search, an empty list when none matches
+export const getMatchingInnerCalls = (
+  row: RpcRequestRow,
+  search: string,
+): InnerCallRow[] | undefined => {
+  const needle = normalizeSearch(search);
+  if (!needle || !row.innerCalls) {
+    return undefined;
+  }
+  return row.innerCalls.filter((innerCall) =>
+    innerCallMatches(innerCall, needle),
+  );
+};
+
 const matchesSearch = (row: RpcRequestRow, search: string) => {
-  const needle = search.trim().toLowerCase();
+  const needle = normalizeSearch(search);
   if (!needle) {
     return true;
   }
-  return [
-    row.method,
-    row.request.url,
-    row.contractAddress,
-    row.contractName,
-    row.functionName,
-    row.functionSelector,
-  ].some((text) => text?.toLowerCase().includes(needle));
+  return (
+    includesNeedle(
+      [
+        row.method,
+        row.request.url,
+        row.contractAddress,
+        row.contractName,
+        row.functionName,
+        row.functionSelector,
+      ],
+      needle,
+    ) || !!getMatchingInnerCalls(row, needle)?.length
+  );
 };
 
 export function matchesRpcRequestFilter(

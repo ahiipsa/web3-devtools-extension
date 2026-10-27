@@ -9,7 +9,26 @@ import {
 } from "../capture/getRpcRequestStatus.ts";
 import { trimContractAddress } from "../utils/text.ts";
 import { findAbiFunction } from "../decoding/findAbiFunction.ts";
-import { findDecodingContract } from "../decoding/multicall.ts";
+import {
+  findDecodingContract,
+  getInnerCalls,
+  InnerCall,
+} from "../decoding/multicall.ts";
+
+// What one Inner Call row of an expanded Multicall shows
+export interface InnerCallRow {
+  // Its position in the Multicall, from 0
+  index: number;
+  // The Contract's name, else the short target address
+  contractLabel: string;
+  // For search: the full target address, and the Contract's name if any
+  contractAddress: `0x${string}`;
+  contractName?: string;
+  functionName?: string;
+  functionSelector?: `0x${string}`;
+  // Its own success flag says it failed
+  failed: boolean;
+}
 
 // What one line of the RPC Request table shows, derived once per RPC Request
 export interface RpcRequestRow {
@@ -31,6 +50,8 @@ export interface RpcRequestRow {
   endpoint: string;
   // Duration in milliseconds
   time: number;
+  // Set for a Multicall only
+  innerCalls?: InnerCallRow[];
 }
 
 // Same outcome as Decoding the calldata: no name unless it fully decodes
@@ -59,6 +80,20 @@ const getHost = (url: string) => {
   }
 };
 
+const buildInnerCallRow = (
+  { target, callData, contractName, decoding, success }: InnerCall,
+  index: number,
+): InnerCallRow => ({
+  index,
+  contractLabel: contractName || trimContractAddress(target),
+  contractAddress: target,
+  contractName,
+  functionName:
+    decoding?.status === "decoded" ? decoding.functionName : undefined,
+  functionSelector: getFunctionSelector(callData),
+  failed: success === false,
+});
+
 export function buildRpcRequestRow(
   request: RpcRequest,
   findContract: FindContract,
@@ -85,6 +120,7 @@ export function buildRpcRequestRow(
     failed: isFailedRpcRequestStatus(status),
     endpoint: getHost(request.url),
     time: request.time,
+    innerCalls: getInnerCalls(request, findContract)?.map(buildInnerCallRow),
   };
 }
 
