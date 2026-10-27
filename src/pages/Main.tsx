@@ -8,6 +8,7 @@ import {
   loadTableWidth,
   saveTableWidth,
 } from "../details/detailsSplitStorage.ts";
+import { addPanelShortcut } from "../utils/panelShortcut.ts";
 
 // Esc in a form field belongs to the field, not to the details
 const isEditable = (target: EventTarget | null) =>
@@ -27,19 +28,14 @@ export const Main = () => {
     if (!rpcRequest) {
       return;
     }
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (
-        event.key === "Escape" &&
-        !event.defaultPrevented &&
-        !isEditable(event.target)
-      ) {
-        // Keep DevTools from also toggling its drawer
-        event.preventDefault();
-        setRequestId(null);
+    // Handled, Esc does not also toggle the DevTools drawer
+    return addPanelShortcut((event) => {
+      if (event.key !== "Escape" || isEditable(event.target)) {
+        return false;
       }
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
+      setRequestId(null);
+      return true;
+    });
   }, [rpcRequest, setRequestId]);
 
   const panelRef = useRef<HTMLDivElement>(null);

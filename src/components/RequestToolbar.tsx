@@ -8,6 +8,7 @@ import {
   RpcRequestFilter,
   selectMethodCategory,
 } from "../table/rpcRequestFilter.ts";
+import { addPanelShortcut } from "../utils/panelShortcut.ts";
 
 const CHIPS: readonly MethodCategoryChip[] = ["All", ...METHOD_CATEGORIES];
 
@@ -30,24 +31,25 @@ export const RequestToolbar = ({
 
   const searchRef = useRef<InputRef>(null);
 
-  // Ctrl/⌘+F jumps to the search box from anywhere in the Panel
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (
-        (event.ctrlKey || event.metaKey) &&
-        !event.altKey &&
-        !event.shiftKey &&
-        // By key position, so it works on non-Latin layouts too
-        event.code === "KeyF" &&
-        !event.defaultPrevented
-      ) {
-        event.preventDefault();
+  // Ctrl/⌘+F jumps to the search box from anywhere in the Panel, instead of
+  // opening the DevTools search
+  useEffect(
+    () =>
+      addPanelShortcut((event) => {
+        if (
+          !(event.ctrlKey || event.metaKey) ||
+          event.altKey ||
+          event.shiftKey ||
+          // By key position, so it works on non-Latin layouts too
+          event.code !== "KeyF"
+        ) {
+          return false;
+        }
         searchRef.current?.focus({ cursor: "all" });
-      }
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
+        return true;
+      }),
+    [],
+  );
 
   return (
     <div className="rpc-table-toolbar">
