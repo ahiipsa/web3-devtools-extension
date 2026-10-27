@@ -79,9 +79,11 @@ const CollapsedSubtitle = ({ row }: { row: RpcRequestRow }) => {
 
 interface RequestTableProps {
   filter: RpcRequestFilter;
+  // The focusable grid, which also scrolls the rows
+  scrollRef: React.RefObject<HTMLDivElement>;
 }
 
-export const RequestTable = ({ filter }: RequestTableProps) => {
+export const RequestTable = ({ filter, scrollRef }: RequestTableProps) => {
   const appContext = useContext(AppContext);
   const data = useRpcRequestRows(appContext.rpcRequestList);
 
@@ -143,7 +145,6 @@ export const RequestTable = ({ filter }: RequestTableProps) => {
 
   const { rows } = table.getRowModel();
 
-  const scrollRef = useRef<HTMLDivElement>(null);
   const virtualizer = useVirtualizer({
     count: rows.length,
     getScrollElement: () => scrollRef.current,
@@ -164,7 +165,7 @@ export const RequestTable = ({ filter }: RequestTableProps) => {
     if (scrollElement && stickToBottom.current && !sorted) {
       scrollElement.scrollTop = scrollElement.scrollHeight;
     }
-  }, [rows.length, sorted]);
+  }, [rows.length, sorted, scrollRef]);
 
   // Rows change height as the details open and close; keep the selected one
   // in view through the change
@@ -296,8 +297,8 @@ export const RequestTable = ({ filter }: RequestTableProps) => {
                   style={{
                     transform: `translateY(${virtualRow.start - virtualizer.options.scrollMargin}px)`,
                   }}
-                  // Clicking the selected row again closes the details
-                  onClick={() => select(row.id, requestId !== row.id)}
+                  // A click always opens the details; only Esc and ✕ close them
+                  onClick={() => select(row.id, true)}
                 >
                   {collapsed && (
                     <div

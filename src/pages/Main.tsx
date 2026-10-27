@@ -1,5 +1,5 @@
 import cx from "classnames";
-import { useContext, useEffect, useRef, useState } from "react";
+import { useCallback, useContext, useEffect, useRef, useState } from "react";
 import { RequestTable } from "../components/RequestTable.tsx";
 import { RequestDetails } from "../components/RequestDetails.tsx";
 import { RequestToolbar } from "../components/RequestToolbar.tsx";
@@ -37,6 +37,19 @@ export const Main = () => {
       ? undefined
       : rpcRequestList.find((request) => request.id === requestId);
 
+  const gridRef = useRef<HTMLDivElement>(null);
+  const detailsRef = useRef<HTMLDivElement>(null);
+
+  // Closing unmounts the details, so focus inside them would fall to <body>
+  // and leave the keyboard dead; hand it to the grid instead, Network-style.
+  // Focus elsewhere stays where it is.
+  const closeDetails = useCallback(() => {
+    if (detailsRef.current?.contains(document.activeElement)) {
+      gridRef.current?.focus({ preventScroll: true });
+    }
+    setRequestId(null);
+  }, [setRequestId]);
+
   useEffect(() => {
     if (!rpcRequest) {
       return;
@@ -46,10 +59,10 @@ export const Main = () => {
       if (event.key !== "Escape" || isEditable(event.target)) {
         return false;
       }
-      setRequestId(null);
+      closeDetails();
       return true;
     });
-  }, [rpcRequest, setRequestId]);
+  }, [rpcRequest, closeDetails]);
 
   const splitRef = useRef<HTMLDivElement>(null);
   const [tableWidth, setTableWidth] = useState(() =>
@@ -103,7 +116,7 @@ export const Main = () => {
           )}
           style={rpcRequest ? { width: tableWidth ?? "40%" } : undefined}
         >
-          <RequestTable filter={filter} />
+          <RequestTable filter={filter} scrollRef={gridRef} />
         </div>
         {rpcRequest && (
           <>
@@ -113,11 +126,8 @@ export const Main = () => {
               aria-orientation="vertical"
               onPointerDown={startDrag}
             />
-            <div className="flex-1 min-w-0 h-full">
-              <RequestDetails
-                request={rpcRequest}
-                onClose={() => setRequestId(null)}
-              />
+            <div ref={detailsRef} className="flex-1 min-w-0 h-full">
+              <RequestDetails request={rpcRequest} onClose={closeDetails} />
             </div>
           </>
         )}

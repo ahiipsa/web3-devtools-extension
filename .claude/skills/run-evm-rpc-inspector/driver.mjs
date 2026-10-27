@@ -408,7 +408,16 @@ async function smoke() {
       "Esc does not also open the DevTools drawer",
       (await app.drawerOpen()) === drawer,
     );
-    await ev(`document.querySelector(".rpc-table-scroll").focus()`);
+    check(
+      "Esc with focus in the details hands focus to the table",
+      await ev(
+        `document.activeElement?.classList.contains("rpc-table-scroll")`,
+      ),
+    );
+    check(
+      "Esc keeps the RPC Request selected",
+      (await app.selected()) === "eth_call",
+    );
     await key("Enter");
     check("Enter reopens the details", await app.detailsOpen());
     await key("ArrowDown");
@@ -425,6 +434,21 @@ async function smoke() {
       "ArrowUp selects the previous",
       (await app.selected()) === "eth_call",
     );
+    await click(".rpc-table-body [role=row]:nth-child(4)");
+    await click(".rpc-table-body [role=row]:nth-child(4)");
+    check(
+      "clicking the selected row keeps the details open",
+      (await app.detailsOpen()) && (await app.selected()) === "eth_call",
+    );
+    await click(".rpc-details-close");
+    check(
+      "✕ closes the details and hands focus to the table",
+      !(await app.detailsOpen()) &&
+        (await ev(
+          `document.activeElement?.classList.contains("rpc-table-scroll")`,
+        )),
+    );
+    await key("Enter");
     await shot("04-keyboard");
     await key("f", "meta");
     check(

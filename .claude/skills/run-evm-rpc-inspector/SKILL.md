@@ -73,7 +73,7 @@ npm test && npm run lint
 - **DevTools injects `forwardKeyboardEvent` into the Panel.** It is a keydown listener on `document` in the bubble phase that `preventDefault()`s Esc and Ctrl/⌘ shortcuts and forwards them to DevTools (Esc toggles the drawer, ⌘+F opens DevTools search). A Panel shortcut must listen on `window` in the capture phase and stop propagation (`src/utils/panelShortcut.ts`). A stubbed `chrome.devtools` cannot show this, which is why this driver exists.
 - **Synthetic `dispatchEvent` keys are not enough** for keyboard checks: they skip the DevTools forwarding path. Use `key`, which goes through `Input.dispatchKeyEvent`.
 - **When the DevTools drawer opens, it takes focus**, and every later key misses the Panel. If a key check fails, check `drawer` first.
-- **Clicking the already selected row closes the details**, and a search that hides the selected RPC Request closes them too. Reopen with a click or Enter before checking details.
+- **A search that hides the selected RPC Request closes the details.** Reopen with a click or Enter before checking details. Only Esc and ✕ close them otherwise; a click always opens them.
 - **The Panel receives entries asynchronously**: `rpc` and `traffic` wait a little before returning.
 
 ## Troubleshooting
