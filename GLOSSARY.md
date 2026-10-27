@@ -17,7 +17,7 @@ The URL an RPC Request was sent to. One page can talk to several Endpoints.
 _Avoid_: RPC URL, node, provider
 
 **Chain**:
-The EVM network an Endpoint serves, identified by its chain id.
+The EVM network an Endpoint serves, identified by its chain id. An RPC Request's Chain is its Endpoint's Chain when it was sent; an Endpoint can switch Chains, e.g. a restarted local fork.
 _Avoid_: Network, chainId
 
 **Method Category**:
