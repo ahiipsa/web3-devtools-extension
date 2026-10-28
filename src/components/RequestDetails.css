@@ -115,9 +115,29 @@
   padding: 6px 12px;
 }
 
+/* The triangle of a raw section's fold, not the native marker, so the titles
+   of both start at the same x */
 .rpc-details-collapsible > summary {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  list-style: none;
   cursor: pointer;
   user-select: none;
+}
+
+.rpc-details-collapsible > summary::-webkit-details-marker {
+  display: none;
+}
+
+.rpc-details-collapsible > summary::before {
+  content: "▶";
+  width: 10px;
+  font-size: 9px;
+}
+
+.rpc-details-collapsible[open] > summary::before {
+  content: "▼";
 }
 
 .rpc-details-inner-calls {
@@ -277,9 +297,20 @@
   content: "↗";
 }
 
-/* antd's inline-flex icon would put line breaks in the text too */
+/* In a line of text: middle would centre the 16px box on the x-height, below
+   the line's centre; its top 1px above the text's centres it */
+.rpc-value-actions .rpc-value-action {
+  vertical-align: text-top;
+  margin-top: -1px;
+}
+
+/* antd's inline-flex icon would put line breaks in the text too. antd's
+   -0.125em puts the glyph below the box's centre; this centres it */
 .rpc-value-action .anticon {
   display: inline-block;
+  vertical-align: top;
+  line-height: 0;
+  margin-top: calc((16px - 1em) / 2);
 }
 
 .rpc-value-action + .rpc-value-action {
@@ -310,7 +341,7 @@
   user-select: none;
 }
 
-/* Like the triangle of a native <details>, as Decoded input has */
+/* Decoded input's summary draws the same triangle */
 .rpc-details-fold-arrow {
   width: 10px;
   font-size: 9px;

@@ -1775,6 +1775,45 @@ async function smoke() {
         `document.querySelector(".rpc-details-collapsible")?.open === false`,
       ),
     );
+    // Geometry: an icon's centre against its text's centre, and where the
+    // words of the two folded titles start
+    const alignment = await ev(`(() => {
+      const textBox = (node) => {
+        const range = document.createRange();
+        range.selectNodeContents(node);
+        return range.getBoundingClientRect();
+      };
+      const middle = (box) => box.top + box.height / 2;
+      const firstText = (el) => {
+        const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+        let node;
+        while ((node = walker.nextNode())) if (node.textContent.trim()) return node;
+      };
+      const iconOffsets = [...document.querySelectorAll(".rpc-details-inner-call .rpc-value")]
+        .flatMap((value) => {
+          const text = middle(textBox(firstText(value.querySelector(".rpc-value-text"))));
+          return [...value.querySelectorAll(".rpc-value-action")].map((action) =>
+            middle((action.querySelector("svg") ?? action).getBoundingClientRect()) - text);
+        });
+      const rawTitle = [...document.querySelectorAll(".rpc-details-raw-title")]
+        .find((el) => el.innerText.includes("Raw params"));
+      const rawFold = rawTitle.querySelector(".rpc-details-fold");
+      const rawWord = textBox([...rawFold.childNodes].find((n) => n.nodeType === 3));
+      iconOffsets.push(middle(rawTitle.querySelector(".rpc-value-action svg").getBoundingClientRect()) - middle(rawWord));
+      const summaryWord = textBox(firstText(document.querySelector(".rpc-details-collapsible > summary")));
+      return { iconOffsets, titleOffset: rawWord.left - summaryWord.left };
+    })()`);
+    check(
+      "copy and ↗ sit on the centre of their text's line",
+      alignment.iconOffsets.length >= 3 &&
+        alignment.iconOffsets.every((offset) => Math.abs(offset) <= 0.6),
+      JSON.stringify(alignment.iconOffsets),
+    );
+    check(
+      "Decoded input and Raw params start their titles at the same x",
+      Math.abs(alignment.titleOffset) <= 0.6,
+      String(alignment.titleOffset),
+    );
     await shot("09-multicall");
     await click(".rpc-details-tab", "Response");
     const innerResultsListed = (results) =>
