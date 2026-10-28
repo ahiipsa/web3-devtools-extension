@@ -5,12 +5,6 @@ import {
 } from "./formatDecodedValue.ts";
 import { formatRevert } from "./formatRevert.ts";
 
-// The function with its arguments, else the Selector
-export const formatInnerCallFunction = ({ callData, decoding }: InnerCall) =>
-  decoding?.status === "decoded"
-    ? `${decoding.functionName}(${formatInlineValues(decoding.args)})`
-    : callData.slice(0, 10).toLowerCase();
-
 // The function's name, else the Selector
 export const formatInnerCallFunctionName = ({
   callData,
@@ -19,6 +13,15 @@ export const formatInnerCallFunctionName = ({
   decoding?.status === "decoded"
     ? decoding.functionName
     : callData.slice(0, 10).toLowerCase();
+
+// The function with its arguments, else the Selector
+export const formatInnerCallFunction = (innerCall: InnerCall) => {
+  const name = formatInnerCallFunctionName(innerCall);
+  const { decoding } = innerCall;
+  return decoding?.status === "decoded"
+    ? `${name}(${formatInlineValues(decoding.args)})`
+    : name;
+};
 
 // The decoded return data: a lone value bare, several in parentheses
 export const formatInnerCallResult = ({ decoding }: InnerCall) => {

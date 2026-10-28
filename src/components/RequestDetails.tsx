@@ -263,10 +263,10 @@ const getStorage = () => window.localStorage;
 
 // Raw JSON or text, foldable, with copy in its header. Folded by default
 // beside a decoded view of the same data; the user's fold or unfold is
-// remembered
+// remembered. `code` builds the text only when shown or copied
 const RawSection = (props: {
   title: RawSectionTitle;
-  code: string;
+  code: () => string;
   hasDecodedView: boolean;
 }) => {
   const { title, code, hasDecodedView } = props;
@@ -293,7 +293,7 @@ const RawSection = (props: {
         </button>
         <CopyButton text={code} label={`Copy ${title.toLowerCase()}`} />
       </div>
-      {open && <pre className="rpc-details-code">{code}</pre>}
+      {open && <pre className="rpc-details-code">{code()}</pre>}
     </section>
   );
 };
@@ -521,7 +521,7 @@ const Params = (props: {
       )}
       <RawSection
         title="Raw params"
-        code={formatCode(request.requestBody.params)}
+        code={() => formatCode(request.requestBody.params)}
         hasDecodedView={!!innerCalls || decoding?.status === "decoded"}
       />
     </>
@@ -545,7 +545,7 @@ const HttpResponseBodySection = ({ request }: { request: RpcRequest }) => {
     <>
       <RawSection
         title="Raw HTTP body"
-        code={body.text}
+        code={() => body.text}
         hasDecodedView={false}
       />
       {cut && <div className="rpc-details-muted">{cut}</div>}
@@ -583,10 +583,17 @@ const DecodedRevert = (props: {
 const InnerCallResults = (props: {
   innerCalls: InnerCall[];
   resultCountMismatch: ResultCountMismatch | undefined;
+  // The return data is not the aggregator's: no Inner Call has a result
+  returnValueMismatch: boolean;
 }) => {
-  const { innerCalls, resultCountMismatch } = props;
+  const { innerCalls, resultCountMismatch, returnValueMismatch } = props;
   return (
     <Section title="Inner Call results">
+      {returnValueMismatch && (
+        <DecodingMismatch>
+          The RPC Response does not match the Contract&apos;s ABI
+        </DecodingMismatch>
+      )}
       {resultCountMismatch && (
         <DecodingMismatch>
           {formatResultCountMismatch(resultCountMismatch)}
@@ -672,7 +679,7 @@ const Response = (props: {
         <StatusLabel status={status} />
         <RawSection
           title="Raw response"
-          code={formatCode(response)}
+          code={() => formatCode(response)}
           hasDecodedView={false}
         />
         <HttpResponseBodySection request={request} />
@@ -690,14 +697,14 @@ const Response = (props: {
         )}
         <RawSection
           title="Raw error"
-          code={formatCode(response.error)}
+          code={() => formatCode(response.error)}
           hasDecodedView={!!decodedRevert}
         />
       </>
     );
   }
 
-  const rawResult = formatCode(response.result);
+  const rawResult = () => formatCode(response.result);
 
   // A Multicall's results are per Inner Call, in place of its aggregator's
   // return value
@@ -707,6 +714,9 @@ const Response = (props: {
         <InnerCallResults
           innerCalls={innerCalls}
           resultCountMismatch={resultCountMismatch}
+          returnValueMismatch={
+            decoding?.status === "decoded" && !!decoding.returnValueMismatch
+          }
         />
         <RawSection
           title="Raw result"
