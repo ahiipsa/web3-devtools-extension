@@ -7,6 +7,8 @@ import {
   useEffect,
   useMemo,
   useRef,
+  useState,
+  useSyncExternalStore,
 } from "react";
 import { Button } from "antd";
 import { ContractCall, RpcRequest, RpcRequestStatus } from "../types/main.ts";
@@ -42,12 +44,23 @@ import {
   formatInnerCallRawResult,
   formatInnerCallResult,
   formatInnerCallRevert,
-  formatInnerCallTarget,
   formatResultCountMismatch,
 } from "../decoding/formatInnerCall.ts";
 import { useAbiFetchState } from "../hooks/useAbiFetchState.ts";
 import { formatAbiFetchState } from "../abiSources/formatAbiFetchState.ts";
 import { trimContractAddress } from "../utils/text.ts";
+import { formatAddress, formatShortAddress } from "../details/formatAddress.ts";
+import {
+  isRawSectionOpen,
+  loadRawSectionFolds,
+  RawSectionTitle,
+  saveRawSectionFold,
+} from "../details/rawSectionStorage.ts";
+import {
+  CopyButton,
+  DetailsChainContext,
+  DetailsValue,
+} from "./DetailsValue.tsx";
 
 interface RequestDetailsProps {
   request: RpcRequest;
@@ -55,8 +68,19 @@ interface RequestDetailsProps {
 }
 
 export const RequestDetails = ({ request, onClose }: RequestDetailsProps) => {
-  const { detailsTab, setDetailsTab, contractTabTarget, showContractTab } =
-    useContext(AppContext);
+  const {
+    detailsTab,
+    setDetailsTab,
+    contractTabTarget,
+    showContractTab,
+    endpointChains,
+  } = useContext(AppContext);
+  // Explorer links follow the Chain the RPC Request was sent to
+  const requestChain = useSyncExternalStore(endpointChains.subscribe, () =>
+    endpointChains.getRequestChain(request),
+  );
+  const chainId =
+    requestChain.kind === "known" ? requestChain.chainId : undefined;
 
   const callParams = getContractCallParams(request);
   const callsContract = callParams !== undefined;
@@ -113,84 +137,86 @@ export const RequestDetails = ({ request, onClose }: RequestDetailsProps) => {
   }, []);
 
   return (
-    <div className="rpc-details">
-      <div className="rpc-details-tab-bar">
-        <button
-          type="button"
-          className="rpc-details-close"
-          title="Close (Esc)"
-          aria-label="Close"
-          onClick={onClose}
-        >
-          ✕
-        </button>
-        <div className="rpc-details-tabs" role="tablist" ref={tabListRef}>
-          {tabs.map((tab) => (
-            <button
-              key={tab}
-              ref={tab === shownTab ? shownTabRef : undefined}
-              type="button"
-              role="tab"
-              aria-selected={tab === shownTab}
-              className={cx("rpc-details-tab", {
-                "rpc-details-tab-selected": tab === shownTab,
-              })}
-              onClick={() => setDetailsTab(tab)}
-            >
-              {tab}
-            </button>
-          ))}
+    <DetailsChainContext.Provider value={chainId}>
+      <div className="rpc-details">
+        <div className="rpc-details-tab-bar">
+          <button
+            type="button"
+            className="rpc-details-close"
+            title="Close (Esc)"
+            aria-label="Close"
+            onClick={onClose}
+          >
+            ✕
+          </button>
+          <div className="rpc-details-tabs" role="tablist" ref={tabListRef}>
+            {tabs.map((tab) => (
+              <button
+                key={tab}
+                ref={tab === shownTab ? shownTabRef : undefined}
+                type="button"
+                role="tab"
+                aria-selected={tab === shownTab}
+                className={cx("rpc-details-tab", {
+                  "rpc-details-tab-selected": tab === shownTab,
+                })}
+                onClick={() => setDetailsTab(tab)}
+              >
+                {tab}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="rpc-details-body" role="tabpanel">
+          {shownTab === "Overview" && (
+            <Overview
+              request={request}
+              callParams={callParams}
+              contractName={contract?.name}
+            />
+          )}
+          {shownTab === "Params" && (
+            <Params
+              request={request}
+              callParams={callParams}
+              hasContract={!!contract}
+              decoding={decoding}
+              innerCalls={innerCalls}
+              findContract={findContract}
+              onAddAbi={showInnerCallContract}
+            />
+          )}
+          {shownTab === "Response" && (
+            <Response request={request} decoding={decoding} />
+          )}
+          {shownTab === "Contract" && callParams && contractTabAddress && (
+            <>
+              {normalizeAddress(contractTabAddress) !==
+                normalizeAddress(callParams.to) && (
+                <div className="flex flex-row flex-wrap items-center gap-x-2 mb-2">
+                  <span className="rpc-details-muted break-all">
+                    Inner Call target {contractTabAddress}
+                  </span>
+                  <Button
+                    size="small"
+                    type="link"
+                    onClick={() => showInnerCallContract(callParams.to)}
+                  >
+                    Back to {trimContractAddress(callParams.to)}
+                  </Button>
+                </div>
+              )}
+              <ContractForm
+                key={normalizeAddress(contractTabAddress)}
+                contractAddress={contractTabAddress}
+                endpoint={request.url}
+              />
+            </>
+          )}
         </div>
       </div>
-
-      <div className="rpc-details-body" role="tabpanel">
-        {shownTab === "Overview" && (
-          <Overview
-            request={request}
-            callParams={callParams}
-            contractName={contract?.name}
-          />
-        )}
-        {shownTab === "Params" && (
-          <Params
-            request={request}
-            callParams={callParams}
-            hasContract={!!contract}
-            decoding={decoding}
-            innerCalls={innerCalls}
-            findContract={findContract}
-            onAddAbi={showInnerCallContract}
-          />
-        )}
-        {shownTab === "Response" && (
-          <Response request={request} decoding={decoding} />
-        )}
-        {shownTab === "Contract" && callParams && contractTabAddress && (
-          <>
-            {normalizeAddress(contractTabAddress) !==
-              normalizeAddress(callParams.to) && (
-              <div className="flex flex-row flex-wrap items-center gap-x-2 mb-2">
-                <span className="rpc-details-muted break-all">
-                  Inner Call target {contractTabAddress}
-                </span>
-                <Button
-                  size="small"
-                  type="link"
-                  onClick={() => showInnerCallContract(callParams.to)}
-                >
-                  Back to {trimContractAddress(callParams.to)}
-                </Button>
-              </div>
-            )}
-            <ContractForm
-              key={normalizeAddress(contractTabAddress)}
-              contractAddress={contractTabAddress}
-              endpoint={request.url}
-            />
-          </>
-        )}
-      </div>
-    </div>
+    </DetailsChainContext.Provider>
   );
 };
 
@@ -212,13 +238,46 @@ const Fields = (props: { fields: [string, ReactNode][] }) => (
   </div>
 );
 
-const Code = (props: { value: unknown }) => (
-  <pre className="rpc-details-code">
-    {props.value === undefined
-      ? "undefined"
-      : JSON.stringify(props.value, null, 2)}
-  </pre>
-);
+const formatCode = (value: unknown) =>
+  value === undefined ? "undefined" : JSON.stringify(value, null, 2);
+
+// Each RawSection reads the folds when it mounts and saves the user's choice
+const getStorage = () => window.localStorage;
+
+// Raw JSON, foldable, with copy in its header. Folded by default beside a
+// decoded view of the same data; the user's fold or unfold is remembered
+const RawSection = (props: {
+  title: RawSectionTitle;
+  value: unknown;
+  hasDecodedView: boolean;
+}) => {
+  const { title, value, hasDecodedView } = props;
+  const [folds, setFolds] = useState(() => loadRawSectionFolds(getStorage()));
+  const open = isRawSectionOpen(folds, title, hasDecodedView);
+  const code = formatCode(value);
+
+  return (
+    <section className="rpc-details-section">
+      <div className="rpc-details-section-title rpc-details-raw-title">
+        <button
+          type="button"
+          className="rpc-details-fold"
+          aria-expanded={open}
+          onClick={() =>
+            setFolds(saveRawSectionFold(getStorage(), title, !open))
+          }
+        >
+          <span className="rpc-details-fold-arrow" aria-hidden="true">
+            {open ? "▼" : "▶"}
+          </span>
+          {title}
+        </button>
+        <CopyButton text={code} label={`Copy ${title.toLowerCase()}`} />
+      </div>
+      {open && <pre className="rpc-details-code">{code}</pre>}
+    </section>
+  );
+};
 
 const DecodedValues = (props: { values: DecodedValue[]; empty: string }) =>
   props.values.length === 0 ? (
@@ -232,7 +291,11 @@ const DecodedValues = (props: { values: DecodedValue[]; empty: string }) =>
             <span className="rpc-details-muted">{type}</span>
           </div>
           <div className="rpc-details-field-value rpc-details-decoded-value">
-            {formatDecodedValue(value)}
+            {type === "address" && typeof value === "string" ? (
+              <DetailsValue value={formatAddress(value)} explorer="address" />
+            ) : (
+              formatDecodedValue(value)
+            )}
           </div>
         </Fragment>
       ))}
@@ -275,7 +338,10 @@ const Overview = (props: {
   if (callParams) {
     fields.push([
       "Contract",
-      contractName ? `${contractName} (${callParams.to})` : callParams.to,
+      <>
+        {contractName && `${contractName} `}
+        <DetailsValue value={formatAddress(callParams.to)} explorer="address" />
+      </>,
     ]);
   }
 
@@ -338,9 +404,13 @@ const InnerCalls = (props: {
               <li key={index} className="rpc-details-inner-call">
                 <div>
                   <span className="rpc-details-muted">#{index + 1}</span>{" "}
-                  <span title={innerCall.target}>
-                    {formatInnerCallTarget(innerCall)}
-                  </span>
+                  {innerCall.contractName && `${innerCall.contractName} `}
+                  <DetailsValue
+                    value={formatAddress(innerCall.target)}
+                    explorer="address"
+                  >
+                    {formatShortAddress(innerCall.target)}
+                  </DetailsValue>
                   {innerCall.success === false && (
                     <span
                       className="rpc-details-failed"
@@ -411,7 +481,16 @@ const Params = (props: {
   const decodedInput = callParams && (
     <>
       {callParams.data && (
-        <Fields fields={[["Selector", callParams.data.slice(0, 10)]]} />
+        <Fields
+          fields={[
+            [
+              "Selector",
+              <DetailsValue
+                value={callParams.data.slice(0, 10).toLowerCase()}
+              />,
+            ],
+          ]}
+        />
       )}
       {decoding?.status === "decoded" && (
         <>
@@ -460,9 +539,11 @@ const Params = (props: {
       ) : (
         decodedInput && <Section title="Decoded input">{decodedInput}</Section>
       )}
-      <Section title="Raw params">
-        <Code value={request.requestBody.params} />
-      </Section>
+      <RawSection
+        title="Raw params"
+        value={request.requestBody.params}
+        hasDecodedView={!!innerCalls || decoding?.status === "decoded"}
+      />
     </>
   );
 };
@@ -490,9 +571,11 @@ const Response = (props: {
     return (
       <>
         <StatusLabel status={status} />
-        <Section title="Raw response">
-          <Code value={response} />
-        </Section>
+        <RawSection
+          title="Raw response"
+          value={response}
+          hasDecodedView={false}
+        />
       </>
     );
   }
@@ -514,9 +597,16 @@ const Response = (props: {
           </DecodingMismatch>
         </Section>
       )}
-      <Section title={response.error ? "Raw error" : "Raw result"}>
-        <Code value={response.error ?? response.result} />
-      </Section>
+      {/* The Revert in an RPC error is not decoded yet: Raw error stays open */}
+      <RawSection
+        title={response.error ? "Raw error" : "Raw result"}
+        value={response.error ?? response.result}
+        hasDecodedView={
+          !response.error &&
+          decoding?.status === "decoded" &&
+          !!decoding.returnValues
+        }
+      />
     </>
   );
 };

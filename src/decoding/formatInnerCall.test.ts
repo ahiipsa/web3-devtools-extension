@@ -4,7 +4,6 @@ import {
   formatInnerCallRawResult,
   formatInnerCallResult,
   formatInnerCallRevert,
-  formatInnerCallTarget,
   formatResultCountMismatch,
 } from "./formatInnerCall.ts";
 import { InnerCall } from "./multicall.ts";
@@ -28,16 +27,6 @@ const decoded: InnerCall = {
     returnValues: [{ name: "", type: "uint256", value: 1000000n }],
   },
 };
-
-describe("formatInnerCallTarget", () => {
-  it("names the Contract and its short address", () => {
-    expect(formatInnerCallTarget(decoded)).toBe("USDC 0xA0b8...eB48");
-  });
-
-  it("is the short address without a Contract", () => {
-    expect(formatInnerCallTarget(undecoded)).toBe("0xA0b8...eB48");
-  });
-});
 
 describe("formatInnerCallFunction", () => {
   it("is the function with its named arguments once decoded", () => {

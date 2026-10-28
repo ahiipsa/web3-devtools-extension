@@ -1,7 +1,6 @@
 import { InnerCall, ResultCountMismatch } from "./multicall.ts";
 import { DecodedValue } from "./decodeRpcRequest.ts";
 import { formatDecodedValue } from "./formatDecodedValue.ts";
-import { trimContractAddress } from "../utils/text.ts";
 
 // Positional labels (`[0]`) add nothing inline
 const formatValues = (values: DecodedValue[]) =>
@@ -12,10 +11,6 @@ const formatValues = (values: DecodedValue[]) =>
         : formatDecodedValue(value),
     )
     .join(", ");
-
-// The Contract's name and the short target address, else the address alone
-export const formatInnerCallTarget = ({ target, contractName }: InnerCall) =>
-  [contractName, trimContractAddress(target)].filter(Boolean).join(" ");
 
 // The function with its arguments, else the Selector
 export const formatInnerCallFunction = ({ callData, decoding }: InnerCall) =>

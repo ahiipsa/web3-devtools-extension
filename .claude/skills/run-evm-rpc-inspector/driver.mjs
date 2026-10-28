@@ -131,6 +131,10 @@ const ANSWERS = {
   eth_estimateGas: { error: { code: 3, message: "execution reverted" } },
 };
 
+// Endpoints on another Chain than the node's chain id 1: Base, and a local
+// Chain (Hardhat and Anvil's 31337), which has no Explorer
+const CHAIN_IDS = { "/base": "0x2105", "/local": "0x7a69" };
+
 // A Multicall3 aggregate3 to an address no ABI Source knows: WETH's
 // balanceOf (WETH9 once fetched) succeeds, an unknown call to UNVERIFIED
 // reverts with Error("Not allowed")
@@ -281,7 +285,9 @@ const startNode = () =>
                       `${String(r.params?.[0]).toLowerCase()}:${r.params?.[1]}`
                     ] ?? "0x" + pad("0"),
                 }
-              : (ANSWERS[r.method] ?? { result: null })),
+              : r.method === "eth_chainId" && CHAIN_IDS[req.url]
+                ? { result: CHAIN_IDS[req.url] }
+                : (ANSWERS[r.method] ?? { result: null })),
         });
         res.setHeader("content-type", "application/json");
         res.end(
@@ -1555,10 +1561,10 @@ async function smoke() {
     await click(".rpc-details-tab", "Params");
     const innerCallsListed = (innerCalls) =>
       innerCalls?.length === 2 &&
-      /^#1 WETH9 0xC02a\.\.\.6Cc2\s+balanceOf\(account: 0x28C6c06298d514Db089934071355E5743bf21d60\)\s+→ 1000000$/.test(
+      /^#1 WETH9 0xC02a…6Cc2\s+balanceOf\(account: 0x28C6c06298d514Db089934071355E5743bf21d60\)\s+→ 1000000$/.test(
         innerCalls[0],
       ) &&
-      /^#2 0x2222\.\.\.2222 ✗ Not allowed\s+0x12345678\s+No verified ABI[^\n]*\s+Add ABI$/.test(
+      /^#2 0x2222…2222 ✗ Not allowed\s+0x12345678\s+No verified ABI[^\n]*\s+Add ABI$/.test(
         innerCalls[1],
       );
     const innerCalls = await until(detailsInnerCalls, innerCallsListed);
@@ -1592,11 +1598,11 @@ async function smoke() {
     await click(".rpc-details-tab", "Params");
     const fetchedInnerListed = (innerCalls) =>
       innerCalls?.length === 2 &&
-      /^#1 InnerToken 0x7777\.\.\.7777\s+balanceOf\(account: 0x28C6c06298d514Db089934071355E5743bf21d60\)\s+→ 1000000$/.test(
+      /^#1 InnerToken 0x7777…7777\s+balanceOf\(account: 0x28C6c06298d514Db089934071355E5743bf21d60\)\s+→ 1000000$/.test(
         innerCalls[0],
       ) &&
       new RegExp(
-        `^#2 0x8888\\.\\.\\.8888\\s+0x12345678\\s+→ ${INNER_RAW_RESULT}\\s+No verified ABI on Sourcify[^\\n]*\\s+Add ABI$`,
+        `^#2 0x8888…8888\\s+0x12345678\\s+→ ${INNER_RAW_RESULT}\\s+No verified ABI on Sourcify[^\\n]*\\s+Add ABI$`,
       ).test(innerCalls[1]);
     const fetchedInner = await until(detailsInnerCalls, fetchedInnerListed);
     check(
