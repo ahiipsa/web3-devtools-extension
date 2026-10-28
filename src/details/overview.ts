@@ -1,8 +1,9 @@
 import { BatchPosition, RpcRequestStatus } from "../types/main.ts";
-import { DecodedValue, Decoding } from "../decoding/decodeRpcRequest.ts";
+import { Decoding } from "../decoding/decodeRpcRequest.ts";
 import { InnerCall } from "../decoding/multicall.ts";
 import { formatInlineValues } from "../decoding/formatDecodedValue.ts";
-import { formatReturnValues } from "../decoding/formatInnerCall.ts";
+import { count, formatReturnValues } from "../decoding/formatInnerCall.ts";
+import { getFunctionSelector } from "../decoding/selector.ts";
 import { Revert } from "../decoding/decodeRevert.ts";
 import { formatRevert } from "../decoding/formatRevert.ts";
 import { formatRpcRequestStatus } from "../capture/getRpcRequestStatus.ts";
@@ -16,15 +17,12 @@ export interface OverviewSegment {
   tone?: "muted" | "failed";
 }
 
-// Addresses short on one line; the Contract field holds the whole address
-const shortenAddresses = (values: DecodedValue[]): DecodedValue[] =>
-  values.map((value) =>
-    value.type === "address" && typeof value.value === "string"
-      ? { ...value, value: formatShortAddress(value.value) }
-      : value,
-  );
-
-const count = (n: number, noun: string) => `${n} ${noun}${n === 1 ? "" : "s"}`;
+// On one line: a struct's JSON joined up and every address short, also
+// inside structs and arrays; the Contract field holds the whole address
+const toOneLine = (text: string) =>
+  text
+    .replace(/\s*\n\s*/g, " ")
+    .replace(/0x[0-9a-fA-F]{40}(?![0-9a-fA-F])/g, formatShortAddress);
 
 export interface CallLineInput {
   // The RPC Request's calldata; no call line without it
@@ -44,13 +42,13 @@ export interface CallLineInput {
 export function getCallLine(input: CallLineInput): OverviewSegment[] {
   const { data, decoding, innerCalls, hasContract, contractPending, failed } =
     input;
-  if (!data) {
+  const selector = getFunctionSelector(data);
+  if (!selector) {
     return [];
   }
   const failedMark: OverviewSegment[] = failed
     ? [{ text: " ✗", tone: "failed" }]
     : [];
-  const selector = data.slice(0, 10).toLowerCase();
 
   if (decoding?.status !== "decoded") {
     const note = contractPending
@@ -77,12 +75,12 @@ export function getCallLine(input: CallLineInput): OverviewSegment[] {
     ];
   }
 
-  const call = `${decoding.functionName}(${formatInlineValues(shortenAddresses(decoding.args))})`;
+  const call = `${decoding.functionName}(${formatInlineValues(decoding.args)})`;
   const result =
     !failed && decoding.returnValues
-      ? ` → ${formatReturnValues(shortenAddresses(decoding.returnValues))}`
+      ? ` → ${formatReturnValues(decoding.returnValues)}`
       : "";
-  return [{ text: call + result }, ...failedMark];
+  return [{ text: toOneLine(call + result) }, ...failedMark];
 }
 
 // The RPC Request's Chain: its name and chain id, or the chain id alone
@@ -108,8 +106,10 @@ export function formatOverviewStatus(
   if (status.kind !== "error") {
     return label;
   }
+  const decoded = revert && revert.kind !== "raw" && formatRevert(revert);
+  // Most nodes already put an Error(string) in the message
   const reason =
-    revert && revert.kind !== "raw" ? ` — ${formatRevert(revert)}` : "";
+    decoded && !status.message.includes(decoded) ? ` — ${decoded}` : "";
   return `${label}: ${status.message}${reason}`;
 }
 

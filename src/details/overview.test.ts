@@ -86,8 +86,34 @@ describe("getCallLine", () => {
     ).toBe("0x70a08231");
   });
 
-  it("is nothing without calldata", () => {
+  it("is nothing without calldata or with less than a Selector", () => {
     expect(getCallLine({ ...balanceOf, data: undefined })).toEqual([]);
+    expect(getCallLine({ ...balanceOf, data: "0x" })).toEqual([]);
+  });
+
+  it("keeps structs and arrays on one line with short addresses", () => {
+    expect(
+      text(
+        getCallLine({
+          ...balanceOf,
+          decoding: {
+            status: "decoded",
+            functionName: "swap",
+            signature: "swap(…)",
+            args: [
+              {
+                name: "params",
+                type: "tuple",
+                value: { tokenIn: HOLDER, amount: 5n },
+              },
+              { name: "path", type: "address[]", value: [HOLDER] },
+            ],
+          },
+        }),
+      ),
+    ).toBe(
+      'swap(params: { "tokenIn": "0xd8dA…6045", "amount": 5 }, path: [0xd8dA…6045])',
+    );
   });
 
   describe("for a Multicall", () => {
@@ -161,6 +187,15 @@ describe("formatOverviewStatus", () => {
     ).toBe(
       "error 3: execution reverted — ERC20: transfer amount exceeds balance",
     );
+  });
+
+  it("leaves out a Revert the message already holds", () => {
+    expect(
+      formatOverviewStatus(
+        { ...error, message: "execution reverted: Not enough" },
+        { kind: "error", message: "Not enough" },
+      ),
+    ).toBe("error 3: execution reverted: Not enough");
   });
 
   it("leaves out revert data nothing decodes", () => {

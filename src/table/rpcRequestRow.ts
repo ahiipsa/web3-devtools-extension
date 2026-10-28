@@ -16,6 +16,7 @@ import {
 } from "../decoding/multicall.ts";
 import { LOOKING_UP, RpcRequestChain } from "../chains/endpointChains.ts";
 import { getChainName } from "../chains/chainNames.ts";
+import { getFunctionSelector } from "../decoding/selector.ts";
 
 // What the table knows of one Inner Call of a Multicall: what a search
 // matches, and whether it failed for the Method column's count
@@ -73,11 +74,6 @@ const getFunctionName = (abi: Abi, data: `0x${string}`) => {
     return undefined;
   }
 };
-
-const getFunctionSelector = (data: string | undefined) =>
-  data && /^0x[0-9a-f]{8}/i.test(data)
-    ? (data.slice(0, 10).toLowerCase() as `0x${string}`)
-    : undefined;
 
 const getHost = (url: string) => {
   try {

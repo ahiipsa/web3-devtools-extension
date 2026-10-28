@@ -60,7 +60,8 @@ export const getInnerCallOutcome = (innerCall: InnerCall): InnerCallOutcome => {
     : { kind: "succeeded", value: result, decoded: true };
 };
 
-const count = (n: number, noun: string) => `${n} ${noun}${n === 1 ? "" : "s"}`;
+export const count = (n: number, noun: string) =>
+  `${n} ${noun}${n === 1 ? "" : "s"}`;
 
 export const formatResultCountMismatch = ({
   resultCount,
