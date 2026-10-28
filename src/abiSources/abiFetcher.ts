@@ -92,6 +92,9 @@ export function createAbiFetcher(deps: AbiFetcherDeps) {
   let automatic = false;
   // Undefined until the Panel passes the key it starts with
   let etherscanApiKey: string | undefined;
+  // The key misses were last fetched with: the one the Panel starts with,
+  // the last one re-fetched for, or none once cleared
+  let settledEtherscanApiKey = "";
   let etherscanApiKeyTimer: ReturnType<typeof setTimeout> | undefined;
   // Counts the re-fetches for a new key; a fetch that started before one
   // may have missed the key, so it is fetched again when it ends
@@ -153,6 +156,7 @@ export function createAbiFetcher(deps: AbiFetcherDeps) {
       if (
         round !== etherscanApiKeyRound &&
         automatic &&
+        chains.getChainId(endpoint) === chainId &&
         mayFindWithKey(attempts.get(key))
       ) {
         void fetchAbi(chainId, address, endpoint);
@@ -163,32 +167,46 @@ export function createAbiFetcher(deps: AbiFetcherDeps) {
   // Fetches again, as automatically, every attempt the new key could change
   const refetchForEtherscanApiKey = () => {
     etherscanApiKeyTimer = undefined;
+    settledEtherscanApiKey = etherscanApiKey ?? "";
     if (!automatic) {
       return;
     }
     etherscanApiKeyRound++;
     for (const [key, state] of attempts) {
       const endpoint = attemptEndpoints.get(key);
-      if (endpoint && mayFindWithKey(state)) {
-        const [chainId, address] = key.split(":");
+      const [chainId, address] = key.split(":");
+      // An Endpoint since switched to another Chain would read a proxy's
+      // implementation there
+      if (
+        endpoint &&
+        chains.getChainId(endpoint) === Number(chainId) &&
+        mayFindWithKey(state)
+      ) {
         void fetchAbi(Number(chainId), address as `0x${string}`, endpoint);
       }
     }
   };
 
   // The Etherscan API key in the settings, each time it changes; the first
-  // call passes the key the Panel starts with
+  // call passes the key the Panel starts with. An edit that ends on the key
+  // misses were last fetched with fetches nothing.
   const setEtherscanApiKey = (value: string) => {
     const apiKey = value.trim();
-    const previous = etherscanApiKey;
-    etherscanApiKey = apiKey;
-    if (previous === undefined || apiKey === previous) {
+    if (etherscanApiKey === undefined) {
+      etherscanApiKey = settledEtherscanApiKey = apiKey;
       return;
     }
+    etherscanApiKey = apiKey;
     clearTimeout(etherscanApiKeyTimer);
-    etherscanApiKeyTimer = apiKey
-      ? setTimeout(refetchForEtherscanApiKey, etherscanApiKeyDelay)
-      : undefined;
+    etherscanApiKeyTimer = undefined;
+    if (!apiKey) {
+      settledEtherscanApiKey = "";
+    } else if (apiKey !== settledEtherscanApiKey) {
+      etherscanApiKeyTimer = setTimeout(
+        refetchForEtherscanApiKey,
+        etherscanApiKeyDelay,
+      );
+    }
   };
 
   const fetchAutomatically = (

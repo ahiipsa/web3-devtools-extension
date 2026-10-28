@@ -810,36 +810,82 @@ describe("Setting an Etherscan API key", () => {
   });
 
   it("re-fetches once, after the key has stopped changing", async () => {
-    const { fetchAbi, setKey } = withKey();
-    const { fetcher, deps } = setup({ fetchAbi, etherscanApiKeyDelay: 30 });
-    setKey(fetcher, "");
-    fetcher.observe([chainIdOn(ENDPOINT, "0x1"), callOn(ENDPOINT, WETH)], true);
-    await flush();
+    vi.useFakeTimers();
+    try {
+      const { fetchAbi, setKey } = withKey();
+      const { fetcher, deps } = setup({ fetchAbi, etherscanApiKeyDelay: 1000 });
+      setKey(fetcher, "");
+      fetcher.observe(
+        [chainIdOn(ENDPOINT, "0x1"), callOn(ENDPOINT, WETH)],
+        true,
+      );
+      await vi.advanceTimersByTimeAsync(0);
 
-    setKey(fetcher, "K");
-    await new Promise((resolve) => setTimeout(resolve, 15));
-    setKey(fetcher, "KE");
-    await new Promise((resolve) => setTimeout(resolve, 15));
-    setKey(fetcher, "KEY");
-    await new Promise((resolve) => setTimeout(resolve, 15));
-    expect(deps.fetchAbi).toHaveBeenCalledTimes(1);
+      setKey(fetcher, "K");
+      await vi.advanceTimersByTimeAsync(900);
+      setKey(fetcher, "KE");
+      await vi.advanceTimersByTimeAsync(900);
+      setKey(fetcher, "KEY");
+      await vi.advanceTimersByTimeAsync(900);
+      expect(deps.fetchAbi).toHaveBeenCalledTimes(1);
 
-    await new Promise((resolve) => setTimeout(resolve, 40));
-    await flush();
+      await vi.advanceTimersByTimeAsync(100);
 
-    expect(deps.fetchAbi).toHaveBeenCalledTimes(2);
+      expect(deps.fetchAbi).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("does not re-fetch when the key is cleared before it settles", async () => {
-    const { fetchAbi, setKey } = withKey();
-    const { fetcher, deps } = setup({ fetchAbi, etherscanApiKeyDelay: 20 });
-    setKey(fetcher, "");
+    vi.useFakeTimers();
+    try {
+      const { fetchAbi, setKey } = withKey();
+      const { fetcher, deps } = setup({ fetchAbi, etherscanApiKeyDelay: 1000 });
+      setKey(fetcher, "");
+      fetcher.observe(
+        [chainIdOn(ENDPOINT, "0x1"), callOn(ENDPOINT, WETH)],
+        true,
+      );
+      await vi.advanceTimersByTimeAsync(0);
+
+      setKey(fetcher, "K");
+      setKey(fetcher, "");
+      await vi.advanceTimersByTimeAsync(2000);
+
+      expect(deps.fetchAbi).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not re-fetch when an edit ends on the same key", async () => {
+    const { fetcher, deps } = setup({
+      fetchAbi: async () => ({ kind: "not-found", sources: ["sourcify"] }),
+    });
+    fetcher.setEtherscanApiKey("KEY");
     fetcher.observe([chainIdOn(ENDPOINT, "0x1"), callOn(ENDPOINT, WETH)], true);
     await flush();
 
-    setKey(fetcher, "K");
+    fetcher.setEtherscanApiKey("KEYX");
+    fetcher.setEtherscanApiKey("KEY");
+    await flush();
+    await flush();
+
+    expect(deps.fetchAbi).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not re-fetch on an Endpoint that has switched to another Chain", async () => {
+    const { fetchAbi, setKey } = withKey();
+    const { fetcher, deps } = setup({ fetchAbi });
     setKey(fetcher, "");
-    await new Promise((resolve) => setTimeout(resolve, 40));
+    fetcher.observe([chainIdOn(ENDPOINT, "0x1"), callOn(ENDPOINT, WETH)], true);
+    await flush();
+    fetcher.observe([chainIdOn(ENDPOINT, "0x89")], true);
+
+    setKey(fetcher, "KEY");
+    await flush();
+    await flush();
 
     expect(deps.fetchAbi).toHaveBeenCalledTimes(1);
   });
