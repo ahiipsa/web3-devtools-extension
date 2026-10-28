@@ -1,5 +1,5 @@
 import { formatUnits, isAddress } from "viem";
-import { ExplorerTarget } from "../chains/explorers.ts";
+import { ExplorerTarget, isBlockHash } from "../chains/explorers.ts";
 import { getChainName } from "../chains/chainNames.ts";
 import { getNativeCurrency } from "../chains/nativeCurrencies.ts";
 import { count } from "../utils/text.ts";
@@ -56,9 +56,6 @@ const parseQuantity = (value: unknown) =>
     ? BigInt(value)
     : undefined;
 
-const isHash = (value: unknown): value is string =>
-  typeof value === "string" && /^0x[0-9a-f]{64}$/i.test(value);
-
 // A 32-byte hash or word short, as the call line shows it
 const formatShortHex = (hex: string) =>
   hex.length > 14 ? `${hex.slice(0, 6)}…${hex.slice(-4)}` : hex;
@@ -78,7 +75,7 @@ const numberPart = (
 });
 
 // The hex as the RPC Response has it, muted, with its own copy
-const hexParts = (hex: string): ValuePart[] => [
+const besideHex = (hex: string): ValuePart[] => [
   SEPARATOR,
   { kind: "value", text: hex, value: hex, muted: true },
 ];
@@ -114,7 +111,7 @@ const formatSize = (bytes: number) =>
 // An EIP-7702 delegation designator: 0xef0100 and the delegate's address
 const DELEGATION = /^0xef0100([0-9a-f]{40})$/i;
 
-const formatCode = (code: unknown): ValueLine[] | undefined => {
+const formatBytecode = (code: unknown): ValueLine[] | undefined => {
   if (typeof code !== "string" || !/^0x([0-9a-f]{2})*$/i.test(code)) {
     return undefined;
   }
@@ -163,11 +160,12 @@ const formatStorageWord = (word: unknown): ValueLine[] | undefined => {
     return undefined;
   }
   const padded = word.slice(2).padStart(64, "0");
+  const number = BigInt(word);
   const lines: ValueLine[] = [
-    { label: "as uint256", parts: [numberPart(BigInt(word))] },
+    { label: "as uint256", parts: [numberPart(number)] },
   ];
   // A zero word is no address
-  if (padded.startsWith("0".repeat(24)) && BigInt(word) !== 0n) {
+  if (padded.startsWith("0".repeat(24)) && number !== 0n) {
     lines.push({
       label: "as address",
       parts: [addressPart(`0x${padded.slice(24)}`)],
@@ -197,7 +195,7 @@ export function formatChainMethodResult(
     case "eth_blockNumber":
       return quantityLine(result, (number, hex) => [
         numberPart(number, "", "block"),
-        ...hexParts(hex),
+        ...besideHex(hex),
       ]);
     case "eth_chainId":
       return quantityLine(result, (id, hex) => {
@@ -205,7 +203,7 @@ export function formatChainMethodResult(
         return [
           { kind: "value", text: id.toString(), value: id.toString() },
           ...(name ? [{ kind: "text", text: ` · ${name}` } as const] : []),
-          ...hexParts(hex),
+          ...besideHex(hex),
         ];
       });
     case "eth_getBalance":
@@ -219,15 +217,15 @@ export function formatChainMethodResult(
     case "eth_estimateGas":
       return quantityLine(result, (gas, hex) => [
         numberPart(gas, " gas"),
-        ...hexParts(hex),
+        ...besideHex(hex),
       ]);
     case "eth_getTransactionCount":
       return quantityLine(result, (nonce, hex) => [
         numberPart(nonce),
-        ...hexParts(hex),
+        ...besideHex(hex),
       ]);
     case "eth_getCode":
-      return formatCode(result);
+      return formatBytecode(result);
     case "eth_getStorageAt":
       return formatStorageWord(result);
   }
@@ -269,21 +267,24 @@ export function formatBlockParam(block: unknown): FormattedParam {
   if (typeof block === "string" && BLOCK_TAGS.includes(block)) {
     return { parts: [{ kind: "text", text: block }], inline: block };
   }
-  if (isHash(block)) {
+  if (isBlockHash(block)) {
     return formatBlockHash(block);
   }
   const number = parseQuantity(block);
   if (number !== undefined) {
     return {
-      parts: [numberPart(number, "", "block"), ...hexParts(block as string)],
+      parts: [numberPart(number, "", "block"), ...besideHex(block as string)],
       inline: groupThousands(number.toString()),
     };
   }
   if (typeof block === "object" && block !== null) {
-    if ("blockHash" in block && isHash(block.blockHash)) {
+    if ("blockHash" in block && isBlockHash(block.blockHash)) {
       return formatBlockHash(block.blockHash);
     }
-    if ("blockNumber" in block && parseQuantity(block.blockNumber)) {
+    if (
+      "blockNumber" in block &&
+      parseQuantity(block.blockNumber) !== undefined
+    ) {
       return formatBlockParam(block.blockNumber);
     }
   }

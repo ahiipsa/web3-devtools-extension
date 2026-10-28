@@ -202,6 +202,7 @@ describe("formatBlockParam", () => {
     expect(formatBlockParam({ blockNumber: "0x1312918" })).toEqual(
       formatBlockParam("0x1312918"),
     );
+    expect(formatBlockParam({ blockNumber: "0x0" }).inline).toBe("0");
   });
 
   it("shows anything else as JSON", () => {

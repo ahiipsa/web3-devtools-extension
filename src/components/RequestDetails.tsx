@@ -431,7 +431,7 @@ const Overview = (props: {
   } = props;
   const status = getRpcRequestStatus(request);
   const { method, params } = request.requestBody;
-  const chainId = chain.kind === "known" ? chain.chainId : undefined;
+  const chainId = useContext(DetailsChainContext);
   const failed = isFailedRpcRequestStatus(status);
   const result = failed ? undefined : request.response?.result;
   const callLine = callParams

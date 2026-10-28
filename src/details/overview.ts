@@ -44,6 +44,10 @@ export interface CallLineInput {
   result?: string;
 }
 
+// ✗ in red at the end of a call line that failed
+const getFailedMark = (failed: boolean): OverviewSegment[] =>
+  failed ? [{ text: " ✗", tone: "failed" }] : [];
+
 // What an RPC Request to a contract called and how it ended, on one line in
 // the Inner Call format
 export function getCallLine(input: CallLineInput): OverviewSegment[] {
@@ -60,9 +64,7 @@ export function getCallLine(input: CallLineInput): OverviewSegment[] {
   if (!selector) {
     return [];
   }
-  const failedMark: OverviewSegment[] = failed
-    ? [{ text: " ✗", tone: "failed" }]
-    : [];
+  const failedMark = getFailedMark(failed);
 
   if (decoding?.status !== "decoded") {
     const note = contractPending
@@ -129,7 +131,7 @@ export function getChainMethodCallLine(
     {
       text: toOneLine(`${method}(${args})${returned ? ` → ${returned}` : ""}`),
     },
-    ...(failed ? [{ text: " ✗", tone: "failed" } as const] : []),
+    ...getFailedMark(failed),
   ];
 }
 

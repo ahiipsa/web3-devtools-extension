@@ -54,6 +54,9 @@ export type ExplorerTarget =
   | { kind: "transaction"; value: string }
   | { kind: "block"; value: string };
 
+export const isBlockHash = (value: unknown): value is string =>
+  typeof value === "string" && /^0x[0-9a-f]{64}$/i.test(value);
+
 const toDecimal = (blockNumber: string) =>
   /^(0x[0-9a-f]+|[0-9]+)$/i.test(blockNumber)
     ? BigInt(blockNumber).toString()
@@ -66,7 +69,7 @@ const getPath = (target: ExplorerTarget) => {
     case "transaction":
       return `tx/${target.value}`;
     case "block": {
-      if (/^0x[0-9a-f]{64}$/i.test(target.value)) {
+      if (isBlockHash(target.value)) {
         return `block/${target.value}`;
       }
       const number = toDecimal(target.value);

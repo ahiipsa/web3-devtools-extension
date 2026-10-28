@@ -53,5 +53,6 @@ const CHAIN_NAMES: Record<number, string> = {
 export const getChainName = (chainId: number): string | undefined =>
   CHAIN_NAMES[chainId];
 
-// Every Chain with a name, for the tables kept beside this one
+// Every Chain with a name: nativeCurrencies.ts and explorers.ts keep one
+// entry for each
 export const NAMED_CHAIN_IDS = Object.keys(CHAIN_NAMES).map(Number);
