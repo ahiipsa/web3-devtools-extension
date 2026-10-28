@@ -1818,13 +1818,21 @@ async function smoke() {
     await click(".rpc-details-tab", "Response");
     const innerResultsListed = (results) =>
       results?.length === 2 &&
-      /^#1 0xC02a…6Cc2\s+balanceOf\s+✓ 1000000$/.test(results[0]) &&
+      /^#1 WETH9 0xC02a…6Cc2\s+balanceOf\(account: 0x28C6c06298d514Db089934071355E5743bf21d60\)\s+✓ 1000000$/.test(
+        results[0],
+      ) &&
       /^#2 0x2222…2222\s+0x12345678\s+✗ Not allowed$/.test(results[1]);
     const innerResults = await until(detailsInnerCalls, innerResultsListed);
     check(
-      "Response lists the Inner Call results, ✓ with the decoded value, ✗ with the Revert",
+      "Response lists the Inner Call results as Params does, ✓ with the decoded value, ✗ with the Revert",
       innerResultsListed(innerResults),
       JSON.stringify(innerResults),
+    );
+    check(
+      "Response shows no Add ABI",
+      !(await ev(`document.querySelector(".rpc-details")?.innerText`)).includes(
+        "Add ABI",
+      ),
     );
     check(
       "Response shows no decoded returnData tuple[] and folds Raw result",
@@ -1867,6 +1875,9 @@ async function smoke() {
     await click(".rpc-details-tab", "Response");
     const rawResultListed = (results) =>
       results?.length === 2 &&
+      /^#1 InnerToken 0x7777…7777\s+balanceOf\(account: 0x28C6c06298d514Db089934071355E5743bf21d60\)\s+✓ /.test(
+        results[0],
+      ) &&
       new RegExp(
         `^#2 0x8888…8888\\s+0x12345678\\s+✓ ${INNER_RAW_RESULT}$`,
       ).test(results[1]);

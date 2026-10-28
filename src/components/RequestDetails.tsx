@@ -46,7 +46,6 @@ import {
 } from "../decoding/multicall.ts";
 import {
   formatInnerCallFunction,
-  formatInnerCallFunctionName,
   formatResultCountMismatch,
   getInnerCallOutcome,
 } from "../decoding/formatInnerCall.ts";
@@ -508,10 +507,31 @@ const AbiFetch = (props: {
   );
 };
 
-const InnerCallTarget = ({ target }: { target: `0x${string}` }) => (
-  <DetailsValue value={formatAddress(target)} explorer="address">
-    {formatShortAddress(target)}
-  </DetailsValue>
+// The first two lines of an Inner Call, the same in Params and Response:
+// #n, the Contract's name and the target, then the decoded call
+const InnerCallHeading = ({
+  innerCall,
+  index,
+}: {
+  innerCall: InnerCall;
+  index: number;
+}) => (
+  <>
+    <div>
+      <span className="rpc-details-muted">#{index + 1}</span>{" "}
+      {innerCall.contractName && `${innerCall.contractName} `}
+      <DetailsValue value={formatAddress(innerCall.target)} explorer="address">
+        {formatShortAddress(innerCall.target)}
+      </DetailsValue>
+    </div>
+    <div
+      className={cx("rpc-details-decoded-value", {
+        "rpc-details-muted": innerCall.decoding?.status !== "decoded",
+      })}
+    >
+      {formatInnerCallFunction(innerCall)}
+    </div>
+  </>
 );
 
 // Params shows only what each Inner Call sends; its result is in Response
@@ -529,18 +549,7 @@ const InnerCalls = (props: {
     <ol className="rpc-details-inner-calls">
       {innerCalls.map((innerCall, index) => (
         <li key={index} className="rpc-details-inner-call">
-          <div>
-            <span className="rpc-details-muted">#{index + 1}</span>{" "}
-            {innerCall.contractName && `${innerCall.contractName} `}
-            <InnerCallTarget target={innerCall.target} />
-          </div>
-          <div
-            className={cx("rpc-details-decoded-value", {
-              "rpc-details-muted": innerCall.decoding?.status !== "decoded",
-            })}
-          >
-            {formatInnerCallFunction(innerCall)}
-          </div>
+          <InnerCallHeading innerCall={innerCall} index={index} />
           {!findContract(innerCall.target) && (
             <AbiFetch
               endpoint={endpoint}
@@ -779,18 +788,7 @@ const InnerCallResults = (props: {
             const outcome = getInnerCallOutcome(innerCall);
             return (
               <li key={index} className="rpc-details-inner-call">
-                <div>
-                  <span className="rpc-details-muted">#{index + 1}</span>{" "}
-                  <InnerCallTarget target={innerCall.target} />{" "}
-                  <span
-                    className={cx({
-                      "rpc-details-muted":
-                        innerCall.decoding?.status !== "decoded",
-                    })}
-                  >
-                    {formatInnerCallFunctionName(innerCall)}
-                  </span>
-                </div>
+                <InnerCallHeading innerCall={innerCall} index={index} />
                 {outcome.kind === "succeeded" &&
                   (outcome.decoded ? (
                     <div className="rpc-details-decoded-value">
