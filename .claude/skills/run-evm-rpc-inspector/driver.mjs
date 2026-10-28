@@ -1766,6 +1766,114 @@ async function smoke() {
       json(rpc3Chain) === json(["Ethereum", "Chain 1"]),
       json(rpc3Chain),
     );
+
+    // Values in the details: copy, and ↗ to the Explorer of the Chain the
+    // RPC Request was sent to; none on a local Chain
+    await app.rpc(callTo(30, WETH), "/base");
+    await app.rpc(callTo(31, WETH), "/local");
+    const valueActions = () =>
+      ev(
+        `[...document.querySelectorAll(".rpc-value")].map((v) => [v.querySelector(".rpc-value-text").innerText, v.querySelector("a")?.href ?? null])`,
+      );
+    const WETH_CHECKSUM = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2";
+    for (const [path, chain, explorer] of [
+      ["/base", "Base", `https://basescan.org/address/${WETH_CHECKSUM}`],
+      ["/local", "Localhost", null],
+    ]) {
+      if (await app.detailsOpen()) await key("Escape");
+      await key("f", "meta");
+      await type(path);
+      await until(
+        app.rowChains,
+        (chains) => chains.length === 1 && chains[0]?.[0] === chain,
+        8000,
+      );
+      await clickRow({ method: "eth_call" });
+      await click(".rpc-details-tab", "Overview");
+      const contract = await until(valueActions, (values) =>
+        values?.some(([text]) => text === WETH_CHECKSUM),
+      );
+      check(
+        `on ${chain} the Contract shows whole in checksum case, ${explorer ? "↗ to its Explorer" : "copy only"}`,
+        json(contract) === json([[WETH_CHECKSUM, explorer]]),
+        json(contract),
+      );
+      // Close the details, then clear the search
+      await key("Escape");
+      await key("f", "meta");
+      await key("Escape");
+    }
+    await shot("15-base-overview");
+
+    // Copy puts the whole value on the clipboard, also for a short address:
+    // pasted into the search field
+    await clickRow({ contract: "Multicall3" }, 0);
+    await click(".rpc-details-tab", "Params");
+    const target = await ev(
+      `(() => { const t = document.querySelector(".rpc-details-inner-call .rpc-value-text"); return [t.innerText, t.title] })()`,
+    );
+    check(
+      "an Inner Call target is short, whole in its tooltip",
+      json(target) === json(["0xC02a…6Cc2", WETH_CHECKSUM]),
+      json(target),
+    );
+    await click(".rpc-details-inner-call .rpc-value button", "Copy");
+    await key("f", "meta");
+    const paste = {
+      key: "v",
+      code: "KeyV",
+      windowsVirtualKeyCode: 86,
+      modifiers: MODIFIERS.meta,
+      commands: ["paste"],
+    };
+    await app.devtools.send("Input.dispatchKeyEvent", {
+      type: "rawKeyDown",
+      ...paste,
+    });
+    await app.devtools.send("Input.dispatchKeyEvent", {
+      type: "keyUp",
+      ...paste,
+    });
+    const pasted = await until(
+      () => ev(`document.activeElement.value`),
+      (value) => value === WETH_CHECKSUM,
+    );
+    check(
+      "copying a short Inner Call target puts the whole address on the clipboard",
+      pasted === WETH_CHECKSUM,
+      json(pasted),
+    );
+    await key("Escape");
+
+    // Raw params: folded beside a decoded view, open without; an unfold is
+    // remembered for the next RPC Requests and in the Panel's storage
+    const rawParams = () =>
+      ev(
+        `document.querySelector(".rpc-details-fold")?.getAttribute("aria-expanded")`,
+      );
+    await clickRow({ method: "eth_blockNumber" });
+    await click(".rpc-details-tab", "Params");
+    check(
+      "Raw params is open without a decoded view",
+      (await rawParams()) === "true",
+    );
+    await clickRow({ contract: "Multicall3" }, 0);
+    await click(".rpc-details-tab", "Params");
+    check(
+      "Raw params is folded beside the Inner Calls",
+      (await rawParams()) === "false",
+    );
+    await click(".rpc-details-fold");
+    await clickRow({ contract: "WETH9" });
+    check(
+      "an unfolded Raw params stays unfolded for the next RPC Request",
+      (await rawParams()) === "true",
+    );
+    check(
+      "the unfold is kept in the Panel's storage",
+      (await ev(`localStorage.getItem("rpcRequestDetails.rawSections")`)) ===
+        json({ "Raw params beside decoded": true }),
+    );
     await shot("15-end");
     // Both bars, for a human to compare by eye
     if (bars)

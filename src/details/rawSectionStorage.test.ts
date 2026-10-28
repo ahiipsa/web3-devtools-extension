@@ -24,23 +24,35 @@ describe("raw section folds", () => {
   it("keeps the user's unfold for the next RPC Requests and after a reload", () => {
     const storage = memoryStorage();
 
-    saveRawSectionFold(storage, "Raw params", true);
+    saveRawSectionFold(storage, "Raw params", true, true);
     const folds = loadRawSectionFolds(storage);
 
     expect(isRawSectionOpen(folds, "Raw params", true)).toBe(true);
     expect(isRawSectionOpen(folds, "Raw result", true)).toBe(false);
   });
 
-  it("remembers each section on its own", () => {
+  it("keeps a section open without a decoded view after folding it beside one", () => {
     const storage = memoryStorage();
 
-    saveRawSectionFold(storage, "Raw params", true);
-    saveRawSectionFold(storage, "Raw error", false);
+    saveRawSectionFold(storage, "Raw error", false, false);
+    saveRawSectionFold(storage, "Raw params", true, false);
+    const folds = loadRawSectionFolds(storage);
 
-    expect(loadRawSectionFolds(storage)).toEqual({
-      "Raw params": true,
-      "Raw error": false,
-    });
+    expect(isRawSectionOpen(folds, "Raw error", false)).toBe(false);
+    expect(isRawSectionOpen(folds, "Raw params", false)).toBe(true);
+  });
+
+  it("still folds and unfolds when the storage refuses to save", () => {
+    const storage = {
+      getItem: () => null,
+      setItem: () => {
+        throw new Error("QuotaExceededError");
+      },
+    };
+
+    const folds = saveRawSectionFold(storage, "Raw result", true, true);
+
+    expect(isRawSectionOpen(folds, "Raw result", true)).toBe(true);
   });
 
   it("ignores saved data it cannot read", () => {

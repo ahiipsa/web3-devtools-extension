@@ -53,14 +53,10 @@ export type ExplorerTarget =
   | { kind: "transaction"; value: string }
   | { kind: "block"; value: string };
 
-const toDecimal = (blockNumber: string) => {
-  try {
-    const number = BigInt(blockNumber);
-    return number >= 0n ? number.toString() : undefined;
-  } catch {
-    return undefined;
-  }
-};
+const toDecimal = (blockNumber: string) =>
+  /^(0x[0-9a-f]+|[0-9]+)$/i.test(blockNumber)
+    ? BigInt(blockNumber).toString()
+    : undefined;
 
 const getPath = (target: ExplorerTarget) => {
   switch (target.kind) {

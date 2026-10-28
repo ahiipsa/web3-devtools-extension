@@ -4,10 +4,15 @@ const RAW_SECTIONS_KEY = "rpcRequestDetails.rawSections";
 // Raw params, Raw result, Raw error, Raw response
 export type RawSectionTitle = string;
 
-// The user's last fold (false) or unfold (true) of each raw section
-export type RawSectionFolds = Record<RawSectionTitle, boolean>;
+// The user's last fold (false) or unfold (true) of each raw section, apart
+// beside a decoded view and without one: folding Raw params beside its
+// decoded input must not hide the only view of another RPC Request's params
+export type RawSectionFolds = Record<string, boolean>;
 
 type FoldStorage = Pick<Storage, "getItem" | "setItem">;
+
+const foldKey = (title: RawSectionTitle, hasDecodedView: boolean) =>
+  hasDecodedView ? `${title} beside decoded` : title;
 
 export function loadRawSectionFolds(storage: FoldStorage): RawSectionFolds {
   let saved: unknown;
@@ -24,13 +29,23 @@ export function loadRawSectionFolds(storage: FoldStorage): RawSectionFolds {
   );
 }
 
+// The folds with this one; they still apply for this Panel session when the
+// storage refuses them
 export function saveRawSectionFold(
   storage: FoldStorage,
   title: RawSectionTitle,
+  hasDecodedView: boolean,
   open: boolean,
 ): RawSectionFolds {
-  const folds = { ...loadRawSectionFolds(storage), [title]: open };
-  storage.setItem(RAW_SECTIONS_KEY, JSON.stringify(folds));
+  const folds = {
+    ...loadRawSectionFolds(storage),
+    [foldKey(title, hasDecodedView)]: open,
+  };
+  try {
+    storage.setItem(RAW_SECTIONS_KEY, JSON.stringify(folds));
+  } catch {
+    // Remembered until the Panel reloads
+  }
   return folds;
 }
 
@@ -40,4 +55,4 @@ export const isRawSectionOpen = (
   folds: RawSectionFolds,
   title: RawSectionTitle,
   hasDecodedView: boolean,
-) => folds[title] ?? !hasDecodedView;
+) => folds[foldKey(title, hasDecodedView)] ?? !hasDecodedView;

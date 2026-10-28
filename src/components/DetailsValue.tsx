@@ -5,40 +5,52 @@ import {
   useEffect,
   useState,
 } from "react";
-import { CheckOutlined, CopyOutlined } from "@ant-design/icons";
+import { CheckOutlined, CloseOutlined, CopyOutlined } from "@ant-design/icons";
 import { ExplorerTarget, getExplorerUrl } from "../chains/explorers.ts";
 import { copyText } from "../utils/copyText.ts";
 
 // The chain id of the shown RPC Request's Chain, when it is known
 export const DetailsChainContext = createContext<number | undefined>(undefined);
 
-// A copy button that shows a tick for a moment once the value is copied
-export const CopyButton = (props: { text: string; label: string }) => {
+const COPY_RESULTS = {
+  copied: { title: "Copied", icon: <CheckOutlined /> },
+  failed: { title: "Copy failed", icon: <CloseOutlined /> },
+};
+
+// A copy button that shows for a moment whether the value was copied. `text`
+// may be a function, for a long value only built when copied
+export const CopyButton = (props: {
+  text: string | (() => string);
+  label: string;
+}) => {
   const { text, label } = props;
-  const [copied, setCopied] = useState(false);
+  const [result, setResult] = useState<keyof typeof COPY_RESULTS>();
 
   useEffect(() => {
-    if (!copied) {
+    if (!result) {
       return;
     }
-    const timer = setTimeout(() => setCopied(false), 1200);
+    const timer = setTimeout(() => setResult(undefined), 1200);
     return () => clearTimeout(timer);
-  }, [copied]);
+  }, [result]);
 
   return (
     <button
       type="button"
       className="rpc-value-action"
-      title={copied ? "Copied" : label}
+      title={result ? COPY_RESULTS[result].title : label}
       aria-label={label}
       onClick={() =>
-        copyText(text).then(
-          () => setCopied(true),
-          () => {},
+        copyText(typeof text === "function" ? text() : text).then(
+          () => setResult("copied"),
+          (error) => {
+            console.error("Copy failed", error);
+            setResult("failed");
+          },
         )
       }
     >
-      {copied ? <CheckOutlined /> : <CopyOutlined />}
+      {result ? COPY_RESULTS[result].icon : <CopyOutlined />}
     </button>
   );
 };
@@ -68,15 +80,13 @@ export const DetailsValue = (props: {
         <CopyButton text={value} label="Copy" />
         {explorerUrl && explorer && (
           <a
-            className="rpc-value-action"
+            className="rpc-value-action rpc-value-explorer"
             href={explorerUrl}
             target="_blank"
             rel="noreferrer"
             title={`Open in Explorer: ${explorerUrl}`}
             aria-label={`Open ${explorer} in Explorer`}
-          >
-            ↗
-          </a>
+          />
         )}
       </span>
     </span>

@@ -254,7 +254,6 @@ const RawSection = (props: {
   const { title, value, hasDecodedView } = props;
   const [folds, setFolds] = useState(() => loadRawSectionFolds(getStorage()));
   const open = isRawSectionOpen(folds, title, hasDecodedView);
-  const code = formatCode(value);
 
   return (
     <section className="rpc-details-section">
@@ -264,7 +263,9 @@ const RawSection = (props: {
           className="rpc-details-fold"
           aria-expanded={open}
           onClick={() =>
-            setFolds(saveRawSectionFold(getStorage(), title, !open))
+            setFolds(
+              saveRawSectionFold(getStorage(), title, hasDecodedView, !open),
+            )
           }
         >
           <span className="rpc-details-fold-arrow" aria-hidden="true">
@@ -272,9 +273,12 @@ const RawSection = (props: {
           </span>
           {title}
         </button>
-        <CopyButton text={code} label={`Copy ${title.toLowerCase()}`} />
+        <CopyButton
+          text={() => formatCode(value)}
+          label={`Copy ${title.toLowerCase()}`}
+        />
       </div>
-      {open && <pre className="rpc-details-code">{code}</pre>}
+      {open && <pre className="rpc-details-code">{formatCode(value)}</pre>}
     </section>
   );
 };
@@ -597,7 +601,7 @@ const Response = (props: {
           </DecodingMismatch>
         </Section>
       )}
-      {/* The Revert in an RPC error is not decoded yet: Raw error stays open */}
+      {/* The Revert in an RPC error is not decoded yet: Raw error opens by default */}
       <RawSection
         title={response.error ? "Raw error" : "Raw result"}
         value={response.error ?? response.result}

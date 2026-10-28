@@ -45,5 +45,6 @@ describe("getExplorerUrl", () => {
     expect(
       getExplorerUrl(1, { kind: "block", value: "latest" }),
     ).toBeUndefined();
+    expect(getExplorerUrl(1, { kind: "block", value: "" })).toBeUndefined();
   });
 });

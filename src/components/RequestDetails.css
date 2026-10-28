@@ -199,24 +199,24 @@
 }
 
 /* A value with copy and ↗; the actions keep their room so hovering does not
-   reflow the line */
+   reflow the line, and stay focusable (opacity, not visibility) for the
+   keyboard */
+/* Inline, not inline-flex, which puts line breaks around it in the text */
 .rpc-value-actions {
-  display: inline-flex;
-  gap: 2px;
+  display: inline;
+  white-space: nowrap;
   margin-left: 4px;
-  vertical-align: middle;
-  visibility: hidden;
+  opacity: 0;
+  user-select: none;
 }
 
 .rpc-value:hover .rpc-value-actions,
 .rpc-value:focus-within .rpc-value-actions {
-  visibility: visible;
+  opacity: 1;
 }
 
 .rpc-value-action {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+  display: inline-block;
   width: 16px;
   height: 16px;
   padding: 0;
@@ -226,9 +226,25 @@
   color: var(--rpc-details-muted);
   font: inherit;
   font-size: 11px;
-  line-height: 1;
+  line-height: 16px;
+  text-align: center;
+  vertical-align: middle;
   text-decoration: none;
   cursor: pointer;
+}
+
+/* Drawn by CSS, so the arrow stays out of selected and copied text */
+.rpc-value-explorer::before {
+  content: "↗";
+}
+
+/* antd's inline-flex icon would put line breaks in the text too */
+.rpc-value-action .anticon {
+  display: inline-block;
+}
+
+.rpc-value-action + .rpc-value-action {
+  margin-left: 2px;
 }
 
 .rpc-value-action:hover {
