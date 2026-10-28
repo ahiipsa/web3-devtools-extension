@@ -113,12 +113,13 @@ export const RequestDetails = ({ request, onClose }: RequestDetailsProps) => {
     [request, findContract],
   );
 
-  // By default the Contract tab is for `to`; Add ABI picks an Inner Call target
+  // By default the Contract tab is for `to`; Add ABI picks `to` or an Inner
+  // Call target
   const contractTabAddress =
     contractTabTarget?.requestId === request.id
       ? contractTabTarget.address
       : callParams?.to;
-  const showInnerCallContract = (address: `0x${string}`) =>
+  const showContractFor = (address: `0x${string}`) =>
     showContractTab({ requestId: request.id, address });
 
   const tabListRef = useRef<HTMLDivElement>(null);
@@ -194,10 +195,11 @@ export const RequestDetails = ({ request, onClose }: RequestDetailsProps) => {
               request={request}
               callParams={callParams}
               hasContract={!!contract}
+              contractPending={contractQuery.isPending}
               decoding={decoding}
               innerCalls={innerCalls}
               findContract={findContract}
-              onAddAbi={showInnerCallContract}
+              onAddAbi={showContractFor}
             />
           )}
           {shownTab === "Response" && (
@@ -219,7 +221,7 @@ export const RequestDetails = ({ request, onClose }: RequestDetailsProps) => {
                   <Button
                     size="small"
                     type="link"
-                    onClick={() => showInnerCallContract(callParams.to)}
+                    onClick={() => showContractFor(callParams.to)}
                   >
                     Back to {trimContractAddress(callParams.to)}
                   </Button>
@@ -445,6 +447,8 @@ const Params = (props: {
   request: RpcRequest;
   callParams: ContractCall | undefined;
   hasContract: boolean;
+  // The stored Contract is still being read: no fetch state yet
+  contractPending: boolean;
   decoding: Decoding | undefined;
   innerCalls: InnerCall[] | undefined;
   findContract: FindContract;
@@ -454,6 +458,7 @@ const Params = (props: {
     request,
     callParams,
     hasContract,
+    contractPending,
     decoding,
     innerCalls,
     findContract,
@@ -470,18 +475,16 @@ const Params = (props: {
 
   const decodedInput = callParams && (
     <>
-      {decoding?.status === "decoded" ? (
-        <>
-          <Fields
-            fields={[
-              ["Function", decoding.signature],
-              ["Selector", selector],
-            ]}
-          />
-          <DecodedValues values={decoding.args} empty="No arguments" />
-        </>
-      ) : (
-        selector && <Fields fields={[["Selector", selector]]} />
+      <Fields
+        fields={[
+          ...(decoding?.status === "decoded"
+            ? [["Function", decoding.signature] as [string, ReactNode]]
+            : []),
+          ...(selector ? [["Selector", selector] as [string, ReactNode]] : []),
+        ]}
+      />
+      {decoding?.status === "decoded" && (
+        <DecodedValues values={decoding.args} empty="No arguments" />
       )}
       {decoding?.status === "mismatch" && (
         <DecodingMismatch>
@@ -495,7 +498,7 @@ const Params = (props: {
           </div>
         ) : hasContract ? (
           <div className="rpc-details-muted">Not decoded</div>
-        ) : (
+        ) : contractPending ? null : (
           <AbiFetch
             endpoint={request.url}
             target={callParams.to}

@@ -2011,7 +2011,7 @@ async function smoke() {
     await clickRow({ method: "eth_getBalance" });
     check(
       "Raw params is open without a decoded view",
-      (await rawParams()) === "true",
+      (await until(rawParams, (open) => open != null)) === "true",
     );
     await clickRow({ contract: "Multicall3" }, 0);
     await click(".rpc-details-tab", "Params");
@@ -2044,9 +2044,7 @@ async function smoke() {
       ev(
         `(() => { const b = document.querySelector(".rpc-details-body"); return b.scrollWidth <= b.clientWidth; })()`,
       );
-    const responseText = () =>
-      ev(`document.querySelector(".rpc-details-body")?.innerText ?? ""`);
-    const responseSoon = (test) => until(responseText, test);
+    const responseSoon = (test) => until(detailsBody, test);
     const rawFold = () =>
       ev(
         `document.querySelector(".rpc-details-body .rpc-details-fold")?.getAttribute("aria-expanded")`,
@@ -2142,7 +2140,9 @@ async function smoke() {
     await clickRow({ contract: "Vault" }, 0);
     await narrowDetails();
     await click(".rpc-details-tab", "Params");
-    const vaultParams = await responseSoon((text) => /Function/.test(text));
+    const vaultParams = await until(detailsBody, (text) =>
+      /Function/.test(text),
+    );
     check(
       "decoded Params fit a 320 px details pane, Function before Selector",
       /^Decoded input\s+Function\s+withdraw\(.*\)\s+Selector\s+0x/.test(
@@ -2155,12 +2155,14 @@ async function smoke() {
     await clickRow({ method: "eth_call" }, 0);
     await narrowDetails();
     await click(".rpc-details-tab", "Params");
-    const unverifiedParams = await responseSoon((text) =>
+    const unverifiedParams = await until(detailsBody, (text) =>
       /No verified ABI on Sourcify/.test(text),
     );
     check(
       "the fetch state and Add ABI fit a 320 px details pane",
-      /Add ABI/.test(unverifiedParams) && (await noOverflow()),
+      unverifiedParams.includes(`"to": "${TOKEN}"`) &&
+        /Add ABI/.test(unverifiedParams) &&
+        (await noOverflow()),
       json(unverifiedParams),
     );
     await shot("21-params-abi-fetch-320");
