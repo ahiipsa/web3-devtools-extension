@@ -141,6 +141,12 @@
   margin-top: 2px;
 }
 
+/* The Revert, then the RPC error it came in */
+.rpc-details-revert {
+  margin-bottom: 4px;
+  user-select: text;
+}
+
 .rpc-details-inner-call + .rpc-details-inner-call {
   border-top: 1px solid var(--rpc-details-separator);
 }

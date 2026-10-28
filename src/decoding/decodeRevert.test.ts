@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { Abi, encodeErrorResult, parseAbi } from "viem";
-import { decodeRevert } from "./decodeRevert.ts";
+import { decodeRevert, getRpcRequestRevert } from "./decodeRevert.ts";
+import { RpcRequest } from "../types/main.ts";
 
 const solidityAbi = parseAbi([
   "error Error(string message)",
@@ -69,6 +70,7 @@ describe("decodeRevert", () => {
     ).toEqual({
       kind: "custom",
       name: "InsufficientBalance",
+      signature: "InsufficientBalance(uint256 available, uint256 required)",
       args: [
         { name: "available", type: "uint256", value: 1n },
         { name: "required", type: "uint256", value: 2n },
@@ -86,6 +88,7 @@ describe("decodeRevert", () => {
     ).toEqual({
       kind: "custom",
       name: "Unauthorized",
+      signature: "Unauthorized(address)",
       args: [{ name: "", type: "address", value: HOLDER }],
     });
   });
@@ -100,6 +103,7 @@ describe("decodeRevert", () => {
     ).toEqual({
       kind: "custom",
       name: "Panic",
+      signature: "Panic(string reason)",
       args: [{ name: "reason", type: "string", value: "oops" }],
     });
   });
@@ -122,5 +126,89 @@ describe("decodeRevert", () => {
       kind: "raw",
       data: "0x08c379a0ff",
     });
+  });
+});
+
+describe("getRpcRequestRevert", () => {
+  const message = encodeErrorResult({
+    abi: solidityAbi,
+    errorName: "Error",
+    args: ["Not allowed"],
+  });
+
+  const failedRequest = (
+    error: NonNullable<RpcRequest["response"]>["error"],
+  ): RpcRequest => ({
+    id: "1",
+    url: "https://rpc.example",
+    requestBody: { jsonrpc: "2.0", id: 1, method: "eth_call", params: [] },
+    response: { jsonrpc: "2.0", id: 1, error },
+    methodCategory: "Calls",
+    startedDateTime: "2026-01-01T00:00:00.000Z",
+    time: 1,
+    httpStatus: 200,
+    hasRpcResponseBody: true,
+  });
+
+  it("decodes the revert data an RPC error carries", () => {
+    expect(
+      getRpcRequestRevert(
+        failedRequest({
+          code: 3,
+          message: "execution reverted",
+          data: message,
+        }),
+      ),
+    ).toEqual({ kind: "error", message: "Not allowed" });
+  });
+
+  it("decodes a custom error with the Contract's ABI", () => {
+    const data = encodeErrorResult({
+      abi: tokenAbi,
+      errorName: "InsufficientBalance",
+      args: [1n, 2n],
+    });
+    expect(
+      getRpcRequestRevert(
+        failedRequest({ code: 3, message: "execution reverted", data }),
+        tokenAbi,
+      ),
+    ).toMatchObject({ kind: "custom", name: "InsufficientBalance" });
+  });
+
+  it("finds revert data nested in the error's data", () => {
+    expect(
+      getRpcRequestRevert(
+        failedRequest({
+          code: -32000,
+          message: "execution reverted",
+          data: { message: "execution reverted", data: message },
+        }),
+      ),
+    ).toEqual({ kind: "error", message: "Not allowed" });
+  });
+
+  it("is nothing without hex revert data or an RPC error", () => {
+    expect(
+      getRpcRequestRevert(
+        failedRequest({ code: -32000, message: "nonce too low" }),
+      ),
+    ).toBeUndefined();
+    expect(
+      getRpcRequestRevert(
+        failedRequest({ code: 3, message: "execution reverted", data: "0x" }),
+      ),
+    ).toBeUndefined();
+    expect(
+      getRpcRequestRevert(
+        failedRequest({ code: -32000, message: "oops", data: "Reverted" }),
+      ),
+    ).toBeUndefined();
+    expect(
+      getRpcRequestRevert({
+        ...failedRequest(undefined),
+        response: { jsonrpc: "2.0", id: 1, result: message },
+      }),
+    ).toBeUndefined();
   });
 });

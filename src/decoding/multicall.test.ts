@@ -396,6 +396,7 @@ describe("getInnerCalls", () => {
         revert: {
           kind: "custom",
           name: "InsufficientBalance",
+          signature: "InsufficientBalance(uint256 required)",
           args: [{ name: "required", type: "uint256", value: 9n }],
         },
       },

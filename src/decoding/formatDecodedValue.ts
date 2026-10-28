@@ -1,3 +1,5 @@
+import { DecodedValue } from "./decodeRpcRequest.ts";
+
 const INDENT = "    ";
 
 // JSON.stringify's layout, except that integers (bigint) print as bare
@@ -38,3 +40,14 @@ export function formatDecodedValue(value: unknown): string {
   }
   return String(value);
 }
+
+// Values on one line, labelled by name; positional labels (`[0]`) add
+// nothing inline
+export const formatInlineValues = (values: DecodedValue[]) =>
+  values
+    .map(({ name, value }) =>
+      name && !name.startsWith("[")
+        ? `${name}: ${formatDecodedValue(value)}`
+        : formatDecodedValue(value),
+    )
+    .join(", ");

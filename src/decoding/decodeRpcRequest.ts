@@ -1,4 +1,4 @@
-import { Abi, AbiFunction, AbiParameter, decodeAbiParameters, Hex } from "viem";
+import { Abi, AbiParameter, decodeAbiParameters, Hex } from "viem";
 import { findAbiFunction } from "./findAbiFunction.ts";
 import { RpcRequest } from "../types/main.ts";
 import { getContractCallParams } from "../utils/requestUtils.ts";
@@ -56,8 +56,14 @@ const formatParameterType = (param: AbiParameter): string =>
 const formatParameter = (param: AbiParameter): string =>
   [formatParameterType(param), param.name].filter(Boolean).join(" ");
 
-const buildSignature = (fn: AbiFunction) =>
-  `${fn.name}(${fn.inputs.map(formatParameter).join(", ")})`;
+// A function's or a custom error's name with its typed, named parameters
+export const formatSignature = ({
+  name,
+  inputs,
+}: {
+  name: string;
+  inputs: readonly AbiParameter[];
+}) => `${name}(${inputs.map(formatParameter).join(", ")})`;
 
 // Decodes calldata, and return data when given, with the function its
 // Selector names in the ABI
@@ -71,7 +77,7 @@ export function decodeCall(abi: Abi, data: Hex, returnData?: Hex): Decoding {
   const decoding: Extract<Decoding, { status: "decoded" }> = {
     status: "decoded",
     functionName: fn.name,
-    signature: buildSignature(fn),
+    signature: formatSignature(fn),
     args,
   };
 

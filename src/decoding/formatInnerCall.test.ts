@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   formatInnerCallFunction,
-  formatInnerCallRawResult,
+  formatInnerCallFunctionName,
   formatInnerCallResult,
-  formatInnerCallRevert,
   formatResultCountMismatch,
+  getInnerCallOutcome,
 } from "./formatInnerCall.ts";
 import { InnerCall } from "./multicall.ts";
 
@@ -97,22 +97,44 @@ describe("formatInnerCallResult", () => {
   });
 });
 
-describe("formatInnerCallRawResult", () => {
+describe("formatInnerCallFunctionName", () => {
+  it("is the function's name once decoded, else the lowercase Selector", () => {
+    expect(formatInnerCallFunctionName(decoded)).toBe("balanceOf");
+    expect(formatInnerCallFunctionName(undecoded)).toBe("0x70a08231");
+    expect(
+      formatInnerCallFunctionName({
+        ...decoded,
+        decoding: { status: "mismatch" },
+      }),
+    ).toBe("0x70a08231");
+  });
+});
+
+describe("getInnerCallOutcome", () => {
   const RETURNED = `0x${"0".repeat(63)}1` as const;
+
+  it("is the decoded result of a succeeded Inner Call", () => {
+    expect(
+      getInnerCallOutcome({ ...decoded, success: true, returnData: RETURNED }),
+    ).toEqual({ kind: "succeeded", value: "1000000", decoded: true });
+    // aggregate reports no success flag: its results are all successes
+    expect(getInnerCallOutcome({ ...decoded, returnData: RETURNED })).toEqual({
+      kind: "succeeded",
+      value: "1000000",
+      decoded: true,
+    });
+  });
 
   it("is the raw return data when nothing decodes it", () => {
     expect(
-      formatInnerCallRawResult({ ...undecoded, returnData: RETURNED }),
-    ).toBe(RETURNED);
-    expect(
-      formatInnerCallRawResult({
-        ...decoded,
-        decoding: { status: "mismatch" },
+      getInnerCallOutcome({
+        ...undecoded,
+        success: true,
         returnData: RETURNED,
       }),
-    ).toBe(RETURNED);
+    ).toEqual({ kind: "succeeded", value: RETURNED, decoded: false });
     expect(
-      formatInnerCallRawResult({
+      getInnerCallOutcome({
         ...decoded,
         decoding: {
           ...decoded.decoding!,
@@ -121,83 +143,28 @@ describe("formatInnerCallRawResult", () => {
         } as InnerCall["decoding"],
         returnData: "0x01",
       }),
-    ).toBe("0x01");
+    ).toEqual({ kind: "succeeded", value: "0x01", decoded: false });
+    expect(
+      getInnerCallOutcome({ ...undecoded, success: true, returnData: "0x" }),
+    ).toEqual({ kind: "succeeded", value: "0x", decoded: false });
   });
 
-  it("is 0x for empty return data", () => {
+  it("is the Revert of a failed Inner Call", () => {
     expect(
-      formatInnerCallRawResult({
-        ...undecoded,
-        success: true,
-        returnData: "0x",
-      }),
-    ).toBe("0x");
-  });
-
-  it("is nothing once decoded, for a failed Inner Call or without return data", () => {
-    expect(
-      formatInnerCallRawResult({ ...decoded, returnData: RETURNED }),
-    ).toBeUndefined();
-    expect(
-      formatInnerCallRawResult({
-        ...undecoded,
+      getInnerCallOutcome({
+        ...decoded,
         success: false,
         returnData: RETURNED,
+        revert: { kind: "panic", code: 0x11n },
       }),
-    ).toBeUndefined();
-    expect(formatInnerCallRawResult(undecoded)).toBeUndefined();
-  });
-});
-
-describe("formatInnerCallRevert", () => {
-  const failed = (revert: InnerCall["revert"]): InnerCall => ({
-    ...undecoded,
-    success: false,
-    returnData: "0x",
-    revert,
-  });
-
-  it("is an Error(string)'s message", () => {
+    ).toEqual({ kind: "failed", revert: "Panic 0x11 (arithmetic overflow)" });
     expect(
-      formatInnerCallRevert(failed({ kind: "error", message: "Not allowed" })),
-    ).toBe("Not allowed");
+      getInnerCallOutcome({ ...decoded, success: false, returnData: "0x" }),
+    ).toEqual({ kind: "failed", revert: undefined });
   });
 
-  it("names a Panic's code and its reason", () => {
-    expect(formatInnerCallRevert(failed({ kind: "panic", code: 0x11n }))).toBe(
-      "Panic 0x11 (arithmetic overflow)",
-    );
-    expect(formatInnerCallRevert(failed({ kind: "panic", code: 0x01n }))).toBe(
-      "Panic 0x01 (assertion failed)",
-    );
-    expect(formatInnerCallRevert(failed({ kind: "panic", code: 0x99n }))).toBe(
-      "Panic 0x99",
-    );
-  });
-
-  it("is a custom error's name with its args", () => {
-    expect(
-      formatInnerCallRevert(
-        failed({
-          kind: "custom",
-          name: "InsufficientBalance",
-          args: [
-            { name: "available", type: "uint256", value: 1n },
-            { name: "[1]", type: "uint256", value: 2n },
-          ],
-        }),
-      ),
-    ).toBe("InsufficientBalance(available: 1, 2)");
-  });
-
-  it("is unknown revert data raw", () => {
-    expect(
-      formatInnerCallRevert(failed({ kind: "raw", data: "0xdeadbeef" })),
-    ).toBe("0xdeadbeef");
-  });
-
-  it("is nothing without a revert", () => {
-    expect(formatInnerCallRevert(failed(undefined))).toBeUndefined();
+  it("is no result without return data", () => {
+    expect(getInnerCallOutcome(decoded)).toEqual({ kind: "none" });
   });
 });
 

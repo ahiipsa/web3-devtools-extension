@@ -11,7 +11,12 @@ import {
   useSyncExternalStore,
 } from "react";
 import { Button } from "antd";
-import { ContractCall, RpcRequest, RpcRequestStatus } from "../types/main.ts";
+import {
+  ContractCall,
+  RpcRequest,
+  RpcRequestStatus,
+  RpcResponseBody,
+} from "../types/main.ts";
 import { FindContract, normalizeAddress } from "../dal/contract.ts";
 import { AppContext } from "./AppContext.tsx";
 import { ContractForm } from "./ContractForm.tsx";
@@ -41,11 +46,14 @@ import {
 } from "../decoding/multicall.ts";
 import {
   formatInnerCallFunction,
-  formatInnerCallRawResult,
-  formatInnerCallResult,
-  formatInnerCallRevert,
+  formatInnerCallFunctionName,
   formatResultCountMismatch,
+  getInnerCallOutcome,
 } from "../decoding/formatInnerCall.ts";
+import { getRpcRequestRevert, Revert } from "../decoding/decodeRevert.ts";
+import { formatRevert, formatRpcError } from "../decoding/formatRevert.ts";
+import { getReturnData } from "../decoding/decodeRpcRequest.ts";
+import { formatHttpResponseBodyCut } from "../details/formatHttpResponseBody.ts";
 import { useAbiFetchState } from "../hooks/useAbiFetchState.ts";
 import { formatAbiFetchState } from "../abiSources/formatAbiFetchState.ts";
 import { trimContractAddress } from "../utils/text.ts";
@@ -92,6 +100,10 @@ export const RequestDetails = ({ request, onClose }: RequestDetailsProps) => {
   const contract = contractQuery.data ?? findBuiltInContract(callParams?.data);
   const decoding = useMemo(
     () => (contract ? decodeRpcRequest(request, contract.abi) : undefined),
+    [contract, request],
+  );
+  const revert = useMemo(
+    () => getRpcRequestRevert(request, contract?.abi),
     [contract, request],
   );
   const findContract = useFindContract();
@@ -188,7 +200,12 @@ export const RequestDetails = ({ request, onClose }: RequestDetailsProps) => {
             />
           )}
           {shownTab === "Response" && (
-            <Response request={request} decoding={decoding} />
+            <Response
+              request={request}
+              decoding={decoding}
+              revert={revert}
+              innerCalls={innerCalls}
+            />
           )}
           {shownTab === "Contract" && callParams && contractTabAddress && (
             <>
@@ -244,14 +261,15 @@ const formatCode = (value: unknown) =>
 // Each RawSection reads the folds when it mounts and saves the user's choice
 const getStorage = () => window.localStorage;
 
-// Raw JSON, foldable, with copy in its header. Folded by default beside a
-// decoded view of the same data; the user's fold or unfold is remembered
+// Raw JSON or text, foldable, with copy in its header. Folded by default
+// beside a decoded view of the same data; the user's fold or unfold is
+// remembered
 const RawSection = (props: {
   title: RawSectionTitle;
-  value: unknown;
+  code: string;
   hasDecodedView: boolean;
 }) => {
-  const { title, value, hasDecodedView } = props;
+  const { title, code, hasDecodedView } = props;
   const [folds, setFolds] = useState(() => loadRawSectionFolds(getStorage()));
   const open = isRawSectionOpen(folds, title, hasDecodedView);
 
@@ -273,12 +291,9 @@ const RawSection = (props: {
           </span>
           {title}
         </button>
-        <CopyButton
-          text={() => formatCode(value)}
-          label={`Copy ${title.toLowerCase()}`}
-        />
+        <CopyButton text={code} label={`Copy ${title.toLowerCase()}`} />
       </div>
-      {open && <pre className="rpc-details-code">{formatCode(value)}</pre>}
+      {open && <pre className="rpc-details-code">{code}</pre>}
     </section>
   );
 };
@@ -379,82 +394,49 @@ const InnerCallAbiFetch = (props: {
   );
 };
 
+const InnerCallTarget = ({ target }: { target: `0x${string}` }) => (
+  <DetailsValue value={formatAddress(target)} explorer="address">
+    {formatShortAddress(target)}
+  </DetailsValue>
+);
+
+// Params shows only what each Inner Call sends; its result is in Response
 const InnerCalls = (props: {
   innerCalls: InnerCall[];
-  resultCountMismatch: ResultCountMismatch | undefined;
   endpoint: string;
   findContract: FindContract;
   onAddAbi: (address: `0x${string}`) => void;
 }) => {
-  const { innerCalls, resultCountMismatch, endpoint, findContract, onAddAbi } =
-    props;
+  const { innerCalls, endpoint, findContract, onAddAbi } = props;
 
-  return (
-    <>
-      {resultCountMismatch && (
-        <DecodingMismatch>
-          {formatResultCountMismatch(resultCountMismatch)}
-        </DecodingMismatch>
-      )}
-      {innerCalls.length === 0 ? (
-        <div className="rpc-details-muted">No Inner Calls</div>
-      ) : (
-        <ol className="rpc-details-inner-calls">
-          {innerCalls.map((innerCall, index) => {
-            const result = formatInnerCallResult(innerCall);
-            const rawResult = formatInnerCallRawResult(innerCall);
-            const revert = formatInnerCallRevert(innerCall);
-            return (
-              <li key={index} className="rpc-details-inner-call">
-                <div>
-                  <span className="rpc-details-muted">#{index + 1}</span>{" "}
-                  {innerCall.contractName && `${innerCall.contractName} `}
-                  <DetailsValue
-                    value={formatAddress(innerCall.target)}
-                    explorer="address"
-                  >
-                    {formatShortAddress(innerCall.target)}
-                  </DetailsValue>
-                  {innerCall.success === false && (
-                    <span
-                      className="rpc-details-failed"
-                      title={revert ?? "Failed"}
-                    >
-                      {" "}
-                      ✗{revert !== undefined && ` ${revert}`}
-                    </span>
-                  )}
-                </div>
-                <div
-                  className={cx("rpc-details-decoded-value", {
-                    "rpc-details-muted":
-                      innerCall.decoding?.status !== "decoded",
-                  })}
-                >
-                  {formatInnerCallFunction(innerCall)}
-                </div>
-                {result !== undefined && (
-                  <div className="rpc-details-decoded-value">→ {result}</div>
-                )}
-                {/* Clipped to one line; the full value is in the tooltip and copies whole */}
-                {rawResult !== undefined && (
-                  <div className="rpc-details-clipped" title={rawResult}>
-                    → {rawResult}
-                  </div>
-                )}
-                {!findContract(innerCall.target) && (
-                  <InnerCallAbiFetch
-                    endpoint={endpoint}
-                    target={innerCall.target}
-                    onAddAbi={onAddAbi}
-                  />
-                )}
-              </li>
-            );
-          })}
-        </ol>
-      )}
-    </>
+  return innerCalls.length === 0 ? (
+    <div className="rpc-details-muted">No Inner Calls</div>
+  ) : (
+    <ol className="rpc-details-inner-calls">
+      {innerCalls.map((innerCall, index) => (
+        <li key={index} className="rpc-details-inner-call">
+          <div>
+            <span className="rpc-details-muted">#{index + 1}</span>{" "}
+            {innerCall.contractName && `${innerCall.contractName} `}
+            <InnerCallTarget target={innerCall.target} />
+          </div>
+          <div
+            className={cx("rpc-details-decoded-value", {
+              "rpc-details-muted": innerCall.decoding?.status !== "decoded",
+            })}
+          >
+            {formatInnerCallFunction(innerCall)}
+          </div>
+          {!findContract(innerCall.target) && (
+            <InnerCallAbiFetch
+              endpoint={endpoint}
+              target={innerCall.target}
+              onAddAbi={onAddAbi}
+            />
+          )}
+        </li>
+      ))}
+    </ol>
   );
 };
 
@@ -476,11 +458,6 @@ const Params = (props: {
     findContract,
     onAddAbi,
   } = props;
-
-  const resultCountMismatch = useMemo(
-    () => getResultCountMismatch(request),
-    [request],
-  );
 
   const decodedInput = callParams && (
     <>
@@ -526,7 +503,6 @@ const Params = (props: {
           <Section title="Inner Calls">
             <InnerCalls
               innerCalls={innerCalls}
-              resultCountMismatch={resultCountMismatch}
               endpoint={request.url}
               findContract={findContract}
               onAddAbi={onAddAbi}
@@ -545,20 +521,138 @@ const Params = (props: {
       )}
       <RawSection
         title="Raw params"
-        value={request.requestBody.params}
+        code={formatCode(request.requestBody.params)}
         hasDecodedView={!!innerCalls || decoding?.status === "decoded"}
       />
     </>
   );
 };
 
+// The calls that return a transaction hash
+const TRANSACTION_HASH_METHODS = [
+  "eth_sendRawTransaction",
+  "eth_sendTransaction",
+];
+
+// The HTTP response body of an RPC Request without a valid RPC Response
+const HttpResponseBodySection = ({ request }: { request: RpcRequest }) => {
+  const body = request.httpResponseBody;
+  if (!body?.length) {
+    return null;
+  }
+  const cut = formatHttpResponseBodyCut(body);
+  return (
+    <>
+      <RawSection
+        title="Raw HTTP body"
+        code={body.text}
+        hasDecodedView={false}
+      />
+      {cut && <div className="rpc-details-muted">{cut}</div>}
+    </>
+  );
+};
+
+const DecodedRevert = (props: {
+  revert: Revert;
+  error: NonNullable<RpcResponseBody["error"]>;
+}) => {
+  const { revert, error } = props;
+  return (
+    <Section title="Decoded revert">
+      <div className="rpc-details-revert">
+        {revert.kind === "custom" ? (
+          <>
+            <div className="rpc-details-failed rpc-details-decoded-value">
+              {revert.signature}
+            </div>
+            <DecodedValues values={revert.args} empty="No arguments" />
+          </>
+        ) : (
+          <div className="rpc-details-failed rpc-details-decoded-value">
+            {formatRevert(revert)}
+          </div>
+        )}
+      </div>
+      <div className="rpc-details-muted">{formatRpcError(error)}</div>
+    </Section>
+  );
+};
+
+// Each Inner Call's outcome, numbered like the Inner Calls in Params
+const InnerCallResults = (props: {
+  innerCalls: InnerCall[];
+  resultCountMismatch: ResultCountMismatch | undefined;
+}) => {
+  const { innerCalls, resultCountMismatch } = props;
+  return (
+    <Section title="Inner Call results">
+      {resultCountMismatch && (
+        <DecodingMismatch>
+          {formatResultCountMismatch(resultCountMismatch)}
+        </DecodingMismatch>
+      )}
+      {innerCalls.length === 0 ? (
+        <div className="rpc-details-muted">No Inner Calls</div>
+      ) : (
+        <ol className="rpc-details-inner-calls">
+          {innerCalls.map((innerCall, index) => {
+            const outcome = getInnerCallOutcome(innerCall);
+            return (
+              <li key={index} className="rpc-details-inner-call">
+                <div>
+                  <span className="rpc-details-muted">#{index + 1}</span>{" "}
+                  <InnerCallTarget target={innerCall.target} />{" "}
+                  <span
+                    className={cx({
+                      "rpc-details-muted":
+                        innerCall.decoding?.status !== "decoded",
+                    })}
+                  >
+                    {formatInnerCallFunctionName(innerCall)}
+                  </span>
+                </div>
+                {outcome.kind === "succeeded" &&
+                  (outcome.decoded ? (
+                    <div className="rpc-details-decoded-value">
+                      ✓ {outcome.value}
+                    </div>
+                  ) : (
+                    // Clipped to one line; the full value is in the tooltip
+                    <div className="rpc-details-clipped" title={outcome.value}>
+                      ✓ {outcome.value}
+                    </div>
+                  ))}
+                {outcome.kind === "failed" && (
+                  <div className="rpc-details-failed rpc-details-decoded-value">
+                    ✗{outcome.revert !== undefined && ` ${outcome.revert}`}
+                  </div>
+                )}
+                {outcome.kind === "none" && (
+                  <div className="rpc-details-muted">no result</div>
+                )}
+              </li>
+            );
+          })}
+        </ol>
+      )}
+    </Section>
+  );
+};
+
 const Response = (props: {
   request: RpcRequest;
   decoding: Decoding | undefined;
+  revert: Revert | undefined;
+  innerCalls: InnerCall[] | undefined;
 }) => {
-  const { request, decoding } = props;
+  const { request, decoding, revert, innerCalls } = props;
   const { response } = request;
   const status = getRpcRequestStatus(request);
+  const resultCountMismatch = useMemo(
+    () => getResultCountMismatch(request),
+    [request],
+  );
 
   if (!response) {
     return (
@@ -567,6 +661,7 @@ const Response = (props: {
         {request.hasRpcResponseBody && (
           <div className="rpc-details-muted">No RPC Response with this id</div>
         )}
+        <HttpResponseBodySection request={request} />
       </>
     );
   }
@@ -577,9 +672,69 @@ const Response = (props: {
         <StatusLabel status={status} />
         <RawSection
           title="Raw response"
-          value={response}
+          code={formatCode(response)}
           hasDecodedView={false}
         />
+        <HttpResponseBodySection request={request} />
+      </>
+    );
+  }
+
+  if (response.error) {
+    // Revert data that does not decode leaves Raw error the only view
+    const decodedRevert = revert && revert.kind !== "raw" ? revert : undefined;
+    return (
+      <>
+        {decodedRevert && (
+          <DecodedRevert revert={decodedRevert} error={response.error} />
+        )}
+        <RawSection
+          title="Raw error"
+          code={formatCode(response.error)}
+          hasDecodedView={!!decodedRevert}
+        />
+      </>
+    );
+  }
+
+  const rawResult = formatCode(response.result);
+
+  // A Multicall's results are per Inner Call, in place of its aggregator's
+  // return value
+  if (innerCalls && getReturnData(request) !== undefined) {
+    return (
+      <>
+        <InnerCallResults
+          innerCalls={innerCalls}
+          resultCountMismatch={resultCountMismatch}
+        />
+        <RawSection
+          title="Raw result"
+          code={rawResult}
+          hasDecodedView={innerCalls.some(
+            ({ returnData }) => returnData !== undefined,
+          )}
+        />
+      </>
+    );
+  }
+
+  const { result } = response;
+  if (
+    TRANSACTION_HASH_METHODS.includes(request.requestBody.method) &&
+    typeof result === "string"
+  ) {
+    return (
+      <>
+        <Fields
+          fields={[
+            [
+              "Transaction hash",
+              <DetailsValue value={result} explorer="transaction" />,
+            ],
+          ]}
+        />
+        <RawSection title="Raw result" code={rawResult} hasDecodedView />
       </>
     );
   }
@@ -601,14 +756,11 @@ const Response = (props: {
           </DecodingMismatch>
         </Section>
       )}
-      {/* The Revert in an RPC error is not decoded yet: Raw error opens by default */}
       <RawSection
-        title={response.error ? "Raw error" : "Raw result"}
-        value={response.error ?? response.result}
+        title="Raw result"
+        code={rawResult}
         hasDecodedView={
-          !response.error &&
-          decoding?.status === "decoded" &&
-          !!decoding.returnValues
+          decoding?.status === "decoded" && !!decoding.returnValues
         }
       />
     </>

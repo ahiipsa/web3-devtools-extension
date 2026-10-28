@@ -79,6 +79,60 @@ export const SLOT_IMPLEMENTATION = "0x6666666666666666666666666666666666666666";
 // on the fake Sourcify, INNER_UNVERIFIED is not
 export const INNER_TOKEN = "0x7777777777777777777777777777777777777777";
 export const INNER_UNVERIFIED = "0x8888888888888888888888888888888888888888";
+// Verified on the fake Sourcify as Vault; every eth_call to it reverts, by
+// its `withdraw(amount)`: 1 Error("Not enough"), 2 a Panic 0x11, any other
+// amount the Vault's InsufficientBalance(available, required)
+export const VAULT = "0x9999999999999999999999999999999999999999";
+const VAULT_ABI = parseAbi([
+  "function withdraw(uint256 amount)",
+  "error InsufficientBalance(uint256 available, uint256 required)",
+]);
+const vaultRevert = (callData) => {
+  const amount = BigInt("0x" + (String(callData).slice(10) || "0"));
+  return amount === 1n
+    ? encodeErrorResult({
+        abi: parseAbi(["error Error(string)"]),
+        errorName: "Error",
+        args: ["Not enough"],
+      })
+    : amount === 2n
+      ? encodeErrorResult({
+          abi: parseAbi(["error Panic(uint256)"]),
+          errorName: "Panic",
+          args: [0x11n],
+        })
+      : encodeErrorResult({
+          abi: VAULT_ABI,
+          errorName: "InsufficientBalance",
+          args: [5n, amount],
+        });
+};
+export const withdrawCall = (id, amount) => ({
+  jsonrpc: "2.0",
+  id,
+  method: "eth_call",
+  params: [
+    {
+      to: VAULT,
+      data: encodeFunctionData({
+        abi: VAULT_ABI,
+        functionName: "withdraw",
+        args: [amount],
+      }),
+    },
+    "latest",
+  ],
+});
+// What the mock node answers eth_sendRawTransaction
+export const TX_HASH = "0x" + "ab".repeat(32);
+// The HTML a failing gateway sends on `/bad`, with a 502: 18 KB, more than
+// the 4 KB the Panel keeps
+const BAD_GATEWAY_HTML = (
+  "<html><body><h1>502 Bad Gateway</h1>" + "<!-- padding -->".repeat(2000)
+)
+  .slice(0, 18 * 1024 - 14)
+  .concat("</body></html>");
+
 // The fake Sourcify answers 500 for it; the fake Etherscan has it verified
 export const SOURCIFY_DOWN = "0x3333333333333333333333333333333333333333";
 export const SOURCIFY = {
@@ -101,6 +155,7 @@ export const SOURCIFY = {
     abi: BALANCE_OF_ABI,
     compilation: { name: "SlotToken" },
   },
+  [VAULT]: { abi: VAULT_ABI, compilation: { name: "Vault" } },
 };
 
 // The mock node's eth_getStorageAt, by `${address}:${slot}`; any other slot
@@ -129,6 +184,7 @@ const ANSWERS = {
   eth_getBalance: { result: "0xde0b6b3a7640000" },
   eth_call: { result: "0x" + pad("f4240") }, // 1000000
   eth_estimateGas: { error: { code: 3, message: "execution reverted" } },
+  eth_sendRawTransaction: { result: TX_HASH },
 };
 
 // Endpoints on another Chain than the node's chain id 1: Base, and a local
@@ -261,6 +317,11 @@ const startNode = () =>
         } catch {
           return res.end("ok");
         }
+        if (req.url === "/bad") {
+          res.statusCode = 502;
+          res.setHeader("content-type", "text/html");
+          return res.end(BAD_GATEWAY_HTML);
+        }
         for (const r of [parsed].flat())
           nodeLog.push({
             origin: req.headers.origin ?? "",
@@ -271,23 +332,32 @@ const startNode = () =>
           jsonrpc: "2.0",
           id: r.id,
           ...(r.method === "eth_call" &&
-          String(r.params?.[0]?.to).toLowerCase() === MULTICALL
+          String(r.params?.[0]?.to).toLowerCase() === VAULT
             ? {
-                result:
-                  r.id === MULTICALL_FETCH_CALL.id
-                    ? MULTICALL_FETCH_RESULT
-                    : MULTICALL_RESULT,
+                error: {
+                  code: 3,
+                  message: "execution reverted",
+                  data: vaultRevert(r.params[0].data),
+                },
               }
-            : r.method === "eth_getStorageAt"
+            : r.method === "eth_call" &&
+                String(r.params?.[0]?.to).toLowerCase() === MULTICALL
               ? {
                   result:
-                    STORAGE[
-                      `${String(r.params?.[0]).toLowerCase()}:${r.params?.[1]}`
-                    ] ?? "0x" + pad("0"),
+                    r.id === MULTICALL_FETCH_CALL.id
+                      ? MULTICALL_FETCH_RESULT
+                      : MULTICALL_RESULT,
                 }
-              : r.method === "eth_chainId" && CHAIN_IDS[req.url]
-                ? { result: CHAIN_IDS[req.url] }
-                : (ANSWERS[r.method] ?? { result: null })),
+              : r.method === "eth_getStorageAt"
+                ? {
+                    result:
+                      STORAGE[
+                        `${String(r.params?.[0]).toLowerCase()}:${r.params?.[1]}`
+                      ] ?? "0x" + pad("0"),
+                  }
+                : r.method === "eth_chainId" && CHAIN_IDS[req.url]
+                  ? { result: CHAIN_IDS[req.url] }
+                  : (ANSWERS[r.method] ?? { result: null })),
         });
         res.setHeader("content-type", "application/json");
         res.end(
@@ -1561,15 +1631,15 @@ async function smoke() {
     await click(".rpc-details-tab", "Params");
     const innerCallsListed = (innerCalls) =>
       innerCalls?.length === 2 &&
-      /^#1 WETH9 0xC02a…6Cc2\s+balanceOf\(account: 0x28C6c06298d514Db089934071355E5743bf21d60\)\s+→ 1000000$/.test(
+      /^#1 WETH9 0xC02a…6Cc2\s+balanceOf\(account: 0x28C6c06298d514Db089934071355E5743bf21d60\)$/.test(
         innerCalls[0],
       ) &&
-      /^#2 0x2222…2222 ✗ Not allowed\s+0x12345678\s+No verified ABI[^\n]*\s+Add ABI$/.test(
+      /^#2 0x2222…2222\s+0x12345678\s+No verified ABI[^\n]*\s+Add ABI$/.test(
         innerCalls[1],
       );
     const innerCalls = await until(detailsInnerCalls, innerCallsListed);
     check(
-      "Params lists the Inner Calls, decoded with a result, the failed one ✗ with its revert message",
+      "Params lists the Inner Calls, decoded, without their results",
       innerCallsListed(innerCalls),
       JSON.stringify(innerCalls),
     );
@@ -1580,6 +1650,25 @@ async function smoke() {
       ),
     );
     await shot("09-multicall");
+    await click(".rpc-details-tab", "Response");
+    const innerResultsListed = (results) =>
+      results?.length === 2 &&
+      /^#1 0xC02a…6Cc2\s+balanceOf\s+✓ 1000000$/.test(results[0]) &&
+      /^#2 0x2222…2222\s+0x12345678\s+✗ Not allowed$/.test(results[1]);
+    const innerResults = await until(detailsInnerCalls, innerResultsListed);
+    check(
+      "Response lists the Inner Call results, ✓ with the decoded value, ✗ with the Revert",
+      innerResultsListed(innerResults),
+      JSON.stringify(innerResults),
+    );
+    check(
+      "Response shows no decoded returnData tuple[] and folds Raw result",
+      !/returnData/.test(await app.text()) &&
+        (await ev(
+          `document.querySelector(".rpc-details-fold")?.getAttribute("aria-expanded")`,
+        )) === "false",
+    );
+    await shot("09-multicall-response");
 
     // Inner Call targets the Panel has not seen are fetched for the Multicall
     const beforeInner = app.sourcifyUrls.length;
@@ -1598,18 +1687,31 @@ async function smoke() {
     await click(".rpc-details-tab", "Params");
     const fetchedInnerListed = (innerCalls) =>
       innerCalls?.length === 2 &&
-      /^#1 InnerToken 0x7777…7777\s+balanceOf\(account: 0x28C6c06298d514Db089934071355E5743bf21d60\)\s+→ 1000000$/.test(
+      /^#1 InnerToken 0x7777…7777\s+balanceOf\(account: 0x28C6c06298d514Db089934071355E5743bf21d60\)$/.test(
         innerCalls[0],
       ) &&
-      new RegExp(
-        `^#2 0x8888…8888\\s+0x12345678\\s+→ ${INNER_RAW_RESULT}\\s+No verified ABI on Sourcify[^\\n]*\\s+Add ABI$`,
-      ).test(innerCalls[1]);
+      /^#2 0x8888…8888\s+0x12345678\s+No verified ABI on Sourcify[^\n]*\s+Add ABI$/.test(
+        innerCalls[1],
+      );
     const fetchedInner = await until(detailsInnerCalls, fetchedInnerListed);
     check(
-      "a fetched Inner Call target decodes in Params; an unverified one shows its raw result, its state and Add ABI",
+      "a fetched Inner Call target decodes in Params; an unverified one shows its state and Add ABI",
       fetchedInnerListed(fetchedInner),
       JSON.stringify(fetchedInner),
     );
+    await click(".rpc-details-tab", "Response");
+    const rawResultListed = (results) =>
+      results?.length === 2 &&
+      new RegExp(
+        `^#2 0x8888…8888\\s+0x12345678\\s+✓ ${INNER_RAW_RESULT}$`,
+      ).test(results[1]);
+    const fetchedResults = await until(detailsInnerCalls, rawResultListed);
+    check(
+      "an Inner Call result nothing decodes shows its raw return data",
+      rawResultListed(fetchedResults),
+      JSON.stringify(fetchedResults),
+    );
+    await click(".rpc-details-tab", "Params");
     await click(".rpc-details-inner-call button", "Add ABI");
     const innerContractTabShown = (text) =>
       text.includes(`Inner Call target ${INNER_UNVERIFIED}`) &&
@@ -1686,7 +1788,7 @@ async function smoke() {
     await shot("12-inner-call-search");
     const searchedInnerCalls = await until(detailsInnerCalls, innerCallsListed);
     check(
-      "Params still lists both Inner Calls, the failed one ✗ with its revert message",
+      "Params still lists both Inner Calls",
       innerCallsListed(searchedInnerCalls),
       json(searchedInnerCalls),
     );
@@ -1874,6 +1976,113 @@ async function smoke() {
       (await ev(`localStorage.getItem("rpcRequestDetails.rawSections")`)) ===
         json({ "Raw params beside decoded": true }),
     );
+
+    // Response at a details pane 320 px wide: the Revert of an RPC error,
+    // the body of an HTTP failure and a transaction hash
+    const narrowDetails = () =>
+      ev(`(() => {
+        const table = document.querySelector(".rpc-details-table");
+        const details = document.querySelector(".rpc-details");
+        table.style.width = table.getBoundingClientRect().width + details.getBoundingClientRect().width - 320 + "px";
+        return Math.round(details.getBoundingClientRect().width);
+      })()`);
+    const noOverflow = () =>
+      ev(
+        `(() => { const b = document.querySelector(".rpc-details-body"); return b.scrollWidth <= b.clientWidth; })()`,
+      );
+    const responseText = () =>
+      ev(`document.querySelector(".rpc-details-body")?.innerText ?? ""`);
+    const responseSoon = (test) => until(responseText, test);
+    const rawFold = () =>
+      ev(
+        `document.querySelector(".rpc-details-body .rpc-details-fold")?.getAttribute("aria-expanded")`,
+      );
+    // The Vault's ABI comes from Sourcify: fetching is back on
+    await ev(
+      `chrome.storage.local.get("settings").then(({ settings }) => chrome.storage.local.set({ settings: { ...settings, fetchAbisAutomatically: true } })).then(() => 1)`,
+    );
+    await app.rpc(withdrawCall(40, 1n));
+    check(
+      "an eth_call to the Vault decodes as Vault / withdraw",
+      await callsContractSoon("Vault", "withdraw"),
+    );
+    await app.rpc(withdrawCall(41, 2n));
+    await app.rpc(withdrawCall(42, 7n));
+    await clickRow({ contract: "Vault" }, 0);
+    check("the details pane is 320 px wide", (await narrowDetails()) === 320);
+    await click(".rpc-details-tab", "Response");
+    const reverts = [
+      [
+        "an Error(string) Revert shows its message, then the RPC error",
+        /^Decoded revert\s+Not enough\s+RPC error 3 · execution reverted\s+▶\s*Raw error$/,
+      ],
+      [
+        "a Panic 0x11 Revert shows arithmetic overflow",
+        /^Decoded revert\s+Panic 0x11 \(arithmetic overflow\)\s+RPC error 3 · execution reverted\s+▶\s*Raw error$/,
+      ],
+      [
+        "a custom error Revert shows its signature and named arguments",
+        /^Decoded revert\s+InsufficientBalance\(uint256 available, uint256 required\)\s+available\s+uint256\s+5\s+required\s+uint256\s+7\s+RPC error 3 · execution reverted\s+▶\s*Raw error$/,
+      ],
+    ];
+    for (const [index, [name, expected]] of reverts.entries()) {
+      await clickRow({ contract: "Vault" }, index);
+      const text = await responseSoon((text) => expected.test(text));
+      check(name, expected.test(text), json(text));
+    }
+    check(
+      "Raw error is folded under a decoded Revert, nothing overflows at 320 px",
+      (await rawFold()) === "false" && (await noOverflow()),
+    );
+    await shot("16-revert-320");
+
+    await app.rpc({ jsonrpc: "2.0", id: 43, method: "eth_gasPrice" }, "/bad");
+    await clickRow({ method: "eth_gasPrice" });
+    await narrowDetails();
+    await click(".rpc-details-tab", "Response");
+    const httpBody = await responseSoon((text) => /First 4 KB/.test(text));
+    const shownBody = await ev(
+      `document.querySelector(".rpc-details-body pre")?.innerText ?? ""`,
+    );
+    check(
+      "an HTTP 502 shows its HTML body open, cut at 4 KB of 18 KB",
+      /^HTTP 502\s+▼\s*Raw HTTP body/.test(httpBody) &&
+        /First 4 KB of 18 KB$/.test(httpBody) &&
+        shownBody.startsWith("<html><body><h1>502 Bad Gateway</h1>") &&
+        shownBody.length === 4096 &&
+        (await noOverflow()),
+      json([httpBody.slice(0, 60), httpBody.slice(-40), shownBody.length]),
+    );
+    await shot("17-http-body-320");
+
+    await app.rpc({
+      jsonrpc: "2.0",
+      id: 44,
+      method: "eth_sendRawTransaction",
+      params: ["0x02"],
+    });
+    await clickRow({ method: "eth_sendRawTransaction" });
+    await narrowDetails();
+    await click(".rpc-details-tab", "Response");
+    const txText = await responseSoon((text) => text.includes(TX_HASH));
+    const txExplorer = await ev(
+      `document.querySelector(".rpc-details-body .rpc-value-explorer")?.href ?? null`,
+    );
+    check(
+      "eth_sendRawTransaction shows its Transaction hash with Explorer, Raw result folded",
+      new RegExp(`^Transaction hash\\s+${TX_HASH}`).test(txText) &&
+        txExplorer === `https://etherscan.io/tx/${TX_HASH}` &&
+        (await rawFold()) === "false",
+      json([txText, txExplorer]),
+    );
+    await shot("18-tx-hash-320");
+
+    await clickRow({ contract: "Multicall3" }, 0);
+    await narrowDetails();
+    await click(".rpc-details-tab", "Response");
+    await until(detailsInnerCalls, innerResultsListed);
+    check("Inner Call results fit a 320 px details pane", await noOverflow());
+    await shot("19-inner-call-results-320");
     await shot("15-end");
     // Both bars, for a human to compare by eye
     if (bars)
