@@ -21,6 +21,48 @@ export const getContractTabKind = (
   return builtIn ? "built-in" : "none";
 };
 
+// What the form's buttons say for each kind. Removing a fetched Contract
+// lasts only until DevTools reopens: the ABI is fetched once per Chain and
+// address per Panel session
+export interface ContractTabActions {
+  save: string;
+  remove?: {
+    button: string;
+    question: string;
+    confirm: string;
+    done: string;
+    failed: string;
+  };
+}
+
+export const CONTRACT_TAB_ACTIONS: Record<ContractTabKind, ContractTabActions> =
+  {
+    own: {
+      save: "Save",
+      remove: {
+        button: "Delete",
+        question:
+          "Delete this Contract? Its RPC Requests will no longer be decoded.",
+        confirm: "Yes, delete",
+        done: "Contract deleted",
+        failed: "Failed to delete Contract",
+      },
+    },
+    fetched: {
+      save: "Save as mine",
+      remove: {
+        button: "Forget fetched ABI",
+        question:
+          "Forget the fetched ABI? It is fetched again the next time DevTools opens.",
+        confirm: "Forget",
+        done: "Fetched ABI forgotten",
+        failed: "Failed to forget the fetched ABI",
+      },
+    },
+    "built-in": { save: "Save as mine" },
+    none: { save: "Save" },
+  };
+
 // The row above the form: where the ABI comes from, and its action
 export interface ContractTabHeader {
   segments: OverviewSegment[];

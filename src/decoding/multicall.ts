@@ -1,6 +1,6 @@
 import { decodeFunctionData, decodeFunctionResult, Hex, parseAbi } from "viem";
 import { RpcRequest } from "../types/main.ts";
-import { Contract, FindContract } from "../dal/contract.ts";
+import { Contract, FindContract, normalizeAddress } from "../dal/contract.ts";
 import { getContractCallParams } from "../utils/requestUtils.ts";
 import { findAbiFunction } from "./findAbiFunction.ts";
 import { decodeCall, Decoding, getReturnData } from "./decodeRpcRequest.ts";
@@ -40,6 +40,24 @@ export const findDecodingContract = (
   data: Hex | undefined,
 ): BuiltInContract | undefined =>
   findContract(address) ?? findBuiltInContract(data);
+
+// The built-in ABI the calls to an address decode with while it has no
+// Contract, as findDecodingContract picks it: `to` by the RPC Request's
+// calldata, an Inner Call target by its Inner Calls'
+export const findBuiltInContractAt = (
+  address: `0x${string}`,
+  call: { to: `0x${string}`; data?: Hex },
+  innerCalls: InnerCall[] | undefined,
+): BuiltInContract | undefined => {
+  const target = normalizeAddress(address);
+  if (target === normalizeAddress(call.to)) {
+    return findBuiltInContract(call.data);
+  }
+  return innerCalls
+    ?.filter((innerCall) => normalizeAddress(innerCall.target) === target)
+    .map((innerCall) => findBuiltInContract(innerCall.callData))
+    .find(Boolean);
+};
 
 // One call bundled in a Multicall
 export interface InnerCall {

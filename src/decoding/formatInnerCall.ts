@@ -1,3 +1,4 @@
+import { count } from "../utils/text.ts";
 import { InnerCall, ResultCountMismatch } from "./multicall.ts";
 import {
   formatDecodedValue,
@@ -60,8 +61,7 @@ export const getInnerCallOutcome = (innerCall: InnerCall): InnerCallOutcome => {
     : { kind: "succeeded", value: result, decoded: true };
 };
 
-export const count = (n: number, noun: string) =>
-  `${n} ${noun}${n === 1 ? "" : "s"}`;
+export { count };
 
 export const formatResultCountMismatch = ({
   resultCount,

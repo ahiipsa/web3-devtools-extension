@@ -38,6 +38,7 @@ import { getTabListScrollDelta } from "../details/tabListWheel.ts";
 import { useFindContract } from "../hooks/useFindContract.ts";
 import {
   findBuiltInContract,
+  findBuiltInContractAt,
   getInnerCalls,
   getResultCountMismatch,
   InnerCall,
@@ -252,7 +253,7 @@ export const RequestDetails = ({ request, onClose }: RequestDetailsProps) => {
                 key={normalizeAddress(contractTabAddress)}
                 contractAddress={contractTabAddress}
                 endpoint={request.url}
-                builtIn={findBuiltInContractFor(
+                builtIn={findBuiltInContractAt(
                   contractTabAddress,
                   callParams,
                   innerCalls,
@@ -264,24 +265,6 @@ export const RequestDetails = ({ request, onClose }: RequestDetailsProps) => {
       </div>
     </DetailsChainContext.Provider>
   );
-};
-
-// The built-in ABI the calls to an address decode with while it has no
-// Contract: `to` by the RPC Request's calldata, an Inner Call target by its
-// Inner Calls'
-const findBuiltInContractFor = (
-  address: `0x${string}`,
-  callParams: ContractCall,
-  innerCalls: InnerCall[] | undefined,
-) => {
-  const target = normalizeAddress(address);
-  if (target === normalizeAddress(callParams.to)) {
-    return findBuiltInContract(callParams.data);
-  }
-  return innerCalls
-    ?.filter((innerCall) => normalizeAddress(innerCall.target) === target)
-    .map((innerCall) => findBuiltInContract(innerCall.callData))
-    .find(Boolean);
 };
 
 const Section = (props: { title: string; children: ReactNode }) => (

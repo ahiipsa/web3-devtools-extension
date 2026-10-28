@@ -281,6 +281,40 @@ describe("parseAbiInput", () => {
     ).toThrow('Line 3: Unknown type. Type "to" is not a valid ABI type.');
   });
 
+  it("drops the trailing semicolon of a line from a Solidity interface", () => {
+    expect(
+      parseAbiInput("function totalSupply() external view returns (uint256);"),
+    ).toEqual([
+      {
+        type: "function",
+        name: "totalSupply",
+        stateMutability: "view",
+        inputs: [],
+        outputs: [{ type: "uint256" }],
+      },
+    ]);
+  });
+
+  it("names the line of a struct that does not parse", () => {
+    expect(() =>
+      parseAbiInput(
+        "function run(Call call)\nstruct Call { address target bytes callData; }",
+      ),
+    ).toThrow(/^Line 2: /);
+  });
+
+  it("reads no line from text the engine's message quotes", () => {
+    vi.spyOn(JSON, "parse").mockImplementationOnce(() => {
+      throw new SyntaxError(
+        'Unexpected token x, "see line 42 x" is not valid JSON',
+      );
+    });
+    expect(() => parseAbiInput('["see line 42" x]')).toThrow(
+      /^ABI is not valid JSON$/,
+    );
+    vi.restoreAllMocks();
+  });
+
   it("names the line of a JSON syntax error when the parser gives its position", () => {
     vi.spyOn(JSON, "parse").mockImplementationOnce(() => {
       throw new SyntaxError("Unexpected token x in JSON at position 13");

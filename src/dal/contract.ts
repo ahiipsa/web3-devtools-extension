@@ -1,4 +1,5 @@
 import { Abi, parseAbi } from "viem";
+import { count } from "../utils/text.ts";
 
 // A public registry of verified contracts an ABI can be fetched from
 export type AbiSourceName = "sourcify" | "etherscan";
@@ -46,13 +47,17 @@ export const getContracts = async (): Promise<ContractStore> => {
 };
 
 // The line of a JSON syntax error, when the parser names its position
+// (Firefox's "… at line 3 column 2 of the JSON data", older V8's "… in JSON
+// at position 13"; today's V8 names none). Anchored at the end: the message
+// may quote the input
 const getJsonErrorLine = (json: string, error: unknown) => {
   const message = error instanceof Error ? error.message : "";
-  const line = /line (\d+)/.exec(message);
+  const line = / at line (\d+) column \d+ of the JSON data$/.exec(message);
   if (line) {
     return Number(line[1]);
   }
-  const position = /position (\d+)/.exec(message);
+  const position =
+    / in JSON at position (\d+)(?: \(line \d+ column \d+\))?$/.exec(message);
   return position
     ? json.slice(0, Number(position[1])).split("\n").length
     : undefined;
@@ -106,27 +111,45 @@ const formatParseAbiError = (error: unknown) => {
     : error.message;
 };
 
-// One signature per line, as viem's parseAbi takes them; a struct line
-// serves the others
-const parseHumanReadableAbi = (text: string): unknown[] => {
-  const lines = text.split("\n").map((line) => line.trim());
-  const signatures = lines.filter(Boolean);
+const parses = (signatures: string[]) => {
   try {
-    return [...parseAbi(signatures)];
+    parseAbi(signatures);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+const isStruct = (line: string) => line.startsWith("struct ");
+
+// The index of the line a failed parseAbi is about, or -1: a struct whose
+// removal lets the other structs parse, else the first other line that does
+// not parse with the structs
+const findFaultyLine = (lines: string[]) => {
+  const structs = lines.filter((line) => line && isStruct(line));
+  if (!parses(structs)) {
+    return lines.findIndex(
+      (line) =>
+        line &&
+        isStruct(line) &&
+        parses(structs.filter((struct) => struct !== line)),
+    );
+  }
+  return lines.findIndex(
+    (line) => line && !isStruct(line) && !parses([...structs, line]),
+  );
+};
+
+// One signature per line, as viem's parseAbi takes them; a struct line
+// serves the others. A trailing ";", as in a Solidity interface, is dropped
+const parseHumanReadableAbi = (text: string): unknown[] => {
+  const lines = text
+    .split("\n")
+    .map((line) => line.trim().replace(/;$/, "").trim());
+  try {
+    return [...parseAbi(lines.filter(Boolean))];
   } catch (error) {
-    // Each line on its own with the structs finds the one at fault
-    const structs = signatures.filter((line) => line.startsWith("struct "));
-    const at = lines.findIndex((line) => {
-      if (!line || line.startsWith("struct ")) {
-        return false;
-      }
-      try {
-        parseAbi([...structs, line]);
-        return false;
-      } catch {
-        return true;
-      }
-    });
+    const at = findFaultyLine(lines);
     throw new Error(
       withLine(formatParseAbiError(error), at === -1 ? undefined : at + 1),
     );
@@ -156,19 +179,13 @@ export function parseAbiInput(text: string): Abi {
   return parsed as Abi;
 }
 
-const countOf = (count: number, noun: string) =>
-  `${count} ${noun}${count === 1 ? "" : "s"}`;
-
 // Shown under the ABI field once it parses
-export const formatAbiSummary = (abi: Abi) => {
-  const count = (type: string) =>
-    abi.filter((entry) => entry.type === type).length;
-  return [
-    countOf(count("function"), "function"),
-    countOf(count("event"), "event"),
-    countOf(count("error"), "error"),
-  ].join(" · ");
-};
+export const formatAbiSummary = (abi: Abi) =>
+  (["function", "event", "error"] as const)
+    .map((type) =>
+      count(abi.filter((entry) => entry.type === type).length, type),
+    )
+    .join(" · ");
 
 // Each change reads and writes the whole store, so changes run one at a time:
 // automatic fetches save while the user edits, and none may lose another

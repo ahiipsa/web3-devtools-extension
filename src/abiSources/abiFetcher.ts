@@ -1,7 +1,7 @@
 import { RpcRequest } from "../types/main.ts";
 import { Contract, normalizeAddress } from "../dal/contract.ts";
 import { getContractCallParams } from "../utils/requestUtils.ts";
-import { trimContractAddress } from "../utils/text.ts";
+import { errorMessage, trimContractAddress } from "../utils/text.ts";
 import { getInnerCallTargets } from "../decoding/multicall.ts";
 import { EndpointChains } from "../chains/endpointChains.ts";
 import { AbiSourceName, ContractAbi } from "./abiSources.ts";
@@ -63,9 +63,6 @@ const createConcurrencyLimit = (limit: number) => {
 };
 
 const IDLE: AbiFetchState = { kind: "idle" };
-
-const errorMessage = (error: unknown) =>
-  error instanceof Error ? error.message : String(error);
 
 // Fetches the ABIs of called addresses without a Contract and saves them as
 // Contracts. All state lives in memory for one Panel session: one automatic

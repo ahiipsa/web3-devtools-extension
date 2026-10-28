@@ -1,3 +1,4 @@
+import { errorMessage } from "../utils/text.ts";
 import { RpcRequest } from "../types/main.ts";
 import { getCapturedChainId } from "./chainId.ts";
 
@@ -20,9 +21,6 @@ export interface EndpointChainsDeps {
 export type EndpointChains = ReturnType<typeof createEndpointChains>;
 
 export const LOOKING_UP: RpcRequestChain = { kind: "looking-up" };
-
-const errorMessage = (error: unknown) =>
-  error instanceof Error ? error.message : String(error);
 
 // The Chain of every Endpoint and of every RPC Request, the one source of
 // truth for the table and the ABI fetcher. All state lives in memory for one

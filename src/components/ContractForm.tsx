@@ -10,12 +10,14 @@ import { Button, Form, FormProps, Input, message } from "antd";
 import { useAbiFetchState } from "../hooks/useAbiFetchState.ts";
 import { BuiltInContract } from "../decoding/multicall.ts";
 import {
+  CONTRACT_TAB_ACTIONS,
   getContractTabHeader,
   getContractTabKind,
 } from "../details/contractTab.ts";
 import { formatAddress } from "../details/formatAddress.ts";
 import { AppContext } from "./AppContext.tsx";
 import { DetailsValue } from "./DetailsValue.tsx";
+import { errorMessage } from "../utils/text.ts";
 
 interface ContractInfoProps {
   contractAddress: `0x${string}`;
@@ -52,9 +54,6 @@ const getAbiSummary = (value: string | undefined) => {
   }
 };
 
-const errorMessage = (error: unknown) =>
-  error instanceof Error ? error.message : String(error);
-
 export const ContractForm = (props: ContractInfoProps) => {
   const { contractAddress, endpoint, builtIn } = props;
   const { settings } = useContext(AppContext);
@@ -64,7 +63,8 @@ export const ContractForm = (props: ContractInfoProps) => {
   });
 
   const contract = contractQuery.data;
-  const kind = getContractTabKind(contract, builtIn);
+  const actions = CONTRACT_TAB_ACTIONS[getContractTabKind(contract, builtIn)];
+  const { remove } = actions;
   const abiFetch = useAbiFetchState(endpoint, contractAddress);
   const header = getContractTabHeader({
     contract,
@@ -111,19 +111,15 @@ export const ContractForm = (props: ContractInfoProps) => {
     }
   };
 
-  // A fetched Contract is only forgotten until DevTools reopens: the ABI is
-  // fetched once per Chain and address per Panel session
-  const onDelete = async () => {
-    const fetched = kind === "fetched";
+  const onRemove = async () => {
+    if (!remove) {
+      return;
+    }
     try {
       await deleteContract(contractAddress);
-      messageApi.success(
-        fetched ? "Fetched ABI forgotten" : "Contract deleted",
-      );
+      messageApi.success(remove.done);
     } catch (error) {
-      messageApi.error(
-        `Failed to ${fetched ? "forget the fetched ABI" : "delete Contract"}: ${errorMessage(error)}`,
-      );
+      messageApi.error(`${remove.failed}: ${errorMessage(error)}`);
     } finally {
       setConfirmingDelete(false);
     }
@@ -232,25 +228,19 @@ export const ContractForm = (props: ContractInfoProps) => {
                 }}
               </Form.Item>
               <Button type="primary" htmlType="submit">
-                {kind === "fetched" || kind === "built-in"
-                  ? "Save as mine"
-                  : "Save"}
+                {actions.save}
               </Button>
-              {(kind === "own" || kind === "fetched") && !confirmingDelete && (
+              {remove && !confirmingDelete && (
                 <Button danger onClick={() => setConfirmingDelete(true)}>
-                  {kind === "fetched" ? "Forget fetched ABI" : "Delete"}
+                  {remove.button}
                 </Button>
               )}
             </div>
-            {(kind === "own" || kind === "fetched") && confirmingDelete && (
+            {remove && confirmingDelete && (
               <div className="flex flex-row flex-wrap items-center gap-x-4 gap-y-2 mt-4">
-                <span>
-                  {kind === "fetched"
-                    ? "Forget the fetched ABI? It is fetched again the next time DevTools opens."
-                    : "Delete this Contract? Its RPC Requests will no longer be decoded."}
-                </span>
-                <Button danger type="primary" onClick={onDelete}>
-                  {kind === "fetched" ? "Forget" : "Yes, delete"}
+                <span>{remove.question}</span>
+                <Button danger type="primary" onClick={onRemove}>
+                  {remove.confirm}
                 </Button>
                 <Button onClick={() => setConfirmingDelete(false)}>Keep</Button>
               </div>
