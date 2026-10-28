@@ -1919,6 +1919,17 @@ async function smoke() {
     // RPC Request was sent to; none on a local Chain
     await app.rpc(callTo(30, WETH), "/base");
     await app.rpc(callTo(31, WETH), "/local");
+    // The Overview's call line and its fields as `<name> <value>`
+    const OVERVIEW = `(() => {
+      const body = document.querySelector(".rpc-details-body");
+      if (!body?.querySelector(".rpc-details-fields")) return null;
+      return {
+        callLine: body.querySelector(".rpc-details-call-line")?.innerText ?? null,
+        fields: [...body.querySelectorAll(".rpc-details-field-name")].map(
+          (name) => name.innerText + " " + name.nextElementSibling.innerText.trim(),
+        ),
+      };
+    })()`;
     const valueActions = () =>
       ev(
         `[...document.querySelectorAll(".rpc-value")].map((v) => [v.querySelector(".rpc-value-text").innerText, v.querySelector("a")?.href ?? null])`,
@@ -1945,6 +1956,18 @@ async function smoke() {
         `on ${chain} the Contract shows whole in checksum case, ${explorer ? "↗ to its Explorer" : "copy only"}`,
         json(contract) === json([[WETH_CHECKSUM, explorer]]),
         json(contract),
+      );
+      const overview = await until(
+        () => ev(OVERVIEW),
+        (o) => o?.callLine?.includes("→"),
+      );
+      check(
+        `on ${chain} the Overview starts with the decoded call line and the Chain`,
+        /^balanceOf\(account: 0x28C6…1d60\) → 1000000$/.test(overview?.callLine) &&
+          overview.fields[0] ===
+            `Chain ${path === "/base" ? "Base · 8453" : "Localhost · 31337"}` &&
+          overview.fields.at(-1).startsWith("Contract WETH9 "),
+        json(overview),
       );
       // Close the details, then clear the search
       await key("Escape");
@@ -2166,6 +2189,82 @@ async function smoke() {
       json(unverifiedParams),
     );
     await shot("21-params-abi-fetch-320");
+
+    // The Overview at 320 px: a Revert, a Multicall, a Batch, no Contract
+    const overviewOf = async (row, index, test) => {
+      await clickRow(row, index);
+      await narrowDetails();
+      await click(".rpc-details-tab", "Overview");
+      return until(
+        () => ev(OVERVIEW),
+        (o) => !!o && test(o),
+      );
+    };
+    const fieldNames = (o) => o.fields.map((field) => field.split(" ")[0]);
+    const reverted = await overviewOf({ contract: "Vault" }, 0, (o) =>
+      o.callLine?.endsWith("✗"),
+    );
+    check(
+      "a reverted call shows ✗ on its call line and the Revert in Status, fitting 320 px",
+      /^withdraw\(.*\) ✗$/.test(reverted.callLine) &&
+        reverted.fields.includes(
+          "Status error 3: execution reverted — Not enough",
+        ) &&
+        (await noOverflow()),
+      json(reverted),
+    );
+    await shot("22-overview-revert-320");
+    const multicall = await overviewOf({ contract: "Multicall3" }, 0, (o) =>
+      /Inner Call/.test(o.callLine),
+    );
+    check(
+      "a Multicall with one failed Inner Call shows aggregate3 · 2 Inner Calls, 1 failed",
+      multicall.callLine === "aggregate3 · 2 Inner Calls, 1 failed" &&
+        (await ev(
+          `document.querySelector(".rpc-details-call-line .rpc-details-failed")?.innerText`,
+        )) === "1 failed" &&
+        (await noOverflow()),
+      json(multicall),
+    );
+    await shot("23-overview-multicall-320");
+    await app.rpc([
+      { jsonrpc: "2.0", id: 50, method: "eth_syncing" },
+      { jsonrpc: "2.0", id: 51, method: "net_version" },
+      { jsonrpc: "2.0", id: 52, method: "eth_accounts" },
+    ]);
+    const batched = await overviewOf({ method: "net_version" }, 0, (o) =>
+      o.fields.some((field) => field.startsWith("Batch")),
+    );
+    check(
+      "an RPC Request from a Batch of 3 shows Batch 2 of 3, no call line and no Contract, in order",
+      batched.callLine === null &&
+        json(fieldNames(batched)) ===
+          json([
+            "Chain",
+            "Endpoint",
+            "Method",
+            "Status",
+            "HTTP",
+            "Duration",
+            "Started",
+            "JSON-RPC",
+            "Batch",
+          ]) &&
+        batched.fields.includes("Batch 2 of 3") &&
+        (await noOverflow()),
+      json(batched),
+    );
+    await shot("24-overview-batch-320");
+    const alone = await overviewOf(
+      { method: "eth_sendRawTransaction" },
+      0,
+      (o) => o.fields.some((field) => field.startsWith("Method eth_sendRaw")),
+    );
+    check(
+      "an RPC Request sent alone shows no Batch field",
+      !fieldNames(alone).includes("Batch") && alone.callLine === null,
+      json(alone),
+    );
     await shot("15-end");
     // Both bars, for a human to compare by eye
     if (bars)

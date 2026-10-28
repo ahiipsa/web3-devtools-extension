@@ -29,7 +29,6 @@ import {
   Decoding,
 } from "../decoding/decodeRpcRequest.ts";
 import {
-  formatRpcRequestStatus,
   getRpcRequestStatus,
   isFailedRpcRequestStatus,
 } from "../capture/getRpcRequestStatus.ts";
@@ -70,6 +69,14 @@ import {
   DetailsChainContext,
   DetailsValue,
 } from "./DetailsValue.tsx";
+import {
+  formatBatchPosition,
+  formatOverviewChain,
+  formatOverviewStatus,
+  getCallLine,
+  OverviewSegment,
+} from "../details/overview.ts";
+import { RpcRequestChain } from "../chains/endpointChains.ts";
 
 interface RequestDetailsProps {
   request: RpcRequest;
@@ -188,6 +195,12 @@ export const RequestDetails = ({ request, onClose }: RequestDetailsProps) => {
               request={request}
               callParams={callParams}
               contractName={contract?.name}
+              hasContract={!!contract}
+              contractPending={contractQuery.isPending}
+              chain={requestChain}
+              decoding={decoding}
+              revert={revert}
+              innerCalls={innerCalls}
             />
           )}
           {shownTab === "Params" && (
@@ -328,35 +341,80 @@ const DecodingMismatch = (props: { children: ReactNode }) => (
   <div className="rpc-details-failed">{props.children}</div>
 );
 
-const StatusLabel = ({ status }: { status: RpcRequestStatus }) => {
-  const label = formatRpcRequestStatus(status);
+const StatusLabel = (props: { status: RpcRequestStatus; revert?: Revert }) => {
+  const { status, revert } = props;
   return (
     <span
       className={
         isFailedRpcRequestStatus(status) ? "rpc-details-failed" : undefined
       }
     >
-      {status.kind === "error" ? `${label}: ${status.message}` : label}
+      {formatOverviewStatus(status, revert)}
     </span>
   );
 };
 
+const Segments = ({ segments }: { segments: OverviewSegment[] }) =>
+  segments.map(({ text, tone }, index) => (
+    <span
+      key={index}
+      className={cx({
+        "rpc-details-muted": tone === "muted",
+        "rpc-details-failed": tone === "failed",
+      })}
+    >
+      {text}
+    </span>
+  ));
+
+// What happened on one screen: what was called, where, and how it ended
 const Overview = (props: {
   request: RpcRequest;
   callParams: ContractCall | undefined;
   contractName?: string;
+  hasContract: boolean;
+  contractPending: boolean;
+  chain: RpcRequestChain;
+  decoding: Decoding | undefined;
+  revert: Revert | undefined;
+  innerCalls: InnerCall[] | undefined;
 }) => {
-  const { request, callParams, contractName } = props;
+  const {
+    request,
+    callParams,
+    contractName,
+    hasContract,
+    contractPending,
+    chain,
+    decoding,
+    revert,
+    innerCalls,
+  } = props;
+  const status = getRpcRequestStatus(request);
+  const callLine = callParams
+    ? getCallLine({
+        data: callParams.data,
+        decoding,
+        innerCalls,
+        hasContract,
+        contractPending,
+        failed: isFailedRpcRequestStatus(status),
+      })
+    : [];
 
   const fields: [string, ReactNode][] = [
+    ["Chain", <Segments segments={[formatOverviewChain(chain)]} />],
     ["Endpoint", request.url],
     ["Method", request.requestBody.method],
-    ["JSON-RPC id", JSON.stringify(request.requestBody.id ?? null)],
-    ["Status", <StatusLabel status={getRpcRequestStatus(request)} />],
+    ["Status", <StatusLabel status={status} revert={revert} />],
     ["HTTP status", request.httpStatus],
     ["Duration", formatDuration(request.time)],
     ["Started", new Date(request.startedDateTime).toLocaleString()],
+    ["JSON-RPC id", JSON.stringify(request.requestBody.id ?? null)],
   ];
+  if (request.batchPosition) {
+    fields.push(["Batch", formatBatchPosition(request.batchPosition)]);
+  }
   if (callParams) {
     fields.push([
       "Contract",
@@ -367,7 +425,16 @@ const Overview = (props: {
     ]);
   }
 
-  return <Fields fields={fields} />;
+  return (
+    <>
+      {callLine.length > 0 && (
+        <div className="rpc-details-call-line">
+          <Segments segments={callLine} />
+        </div>
+      )}
+      <Fields fields={fields} />
+    </>
+  );
 };
 
 // For a called address without a Contract: `to` or an Inner Call target

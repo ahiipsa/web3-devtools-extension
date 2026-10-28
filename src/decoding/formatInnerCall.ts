@@ -4,6 +4,7 @@ import {
   formatInlineValues,
 } from "./formatDecodedValue.ts";
 import { formatRevert } from "./formatRevert.ts";
+import { DecodedValue } from "./decodeRpcRequest.ts";
 
 // The function's name, else the Selector
 export const formatInnerCallFunctionName = ({
@@ -23,16 +24,17 @@ export const formatInnerCallFunction = (innerCall: InnerCall) => {
     : name;
 };
 
-// The decoded return data: a lone value bare, several in parentheses
+// Return values on one line: a lone value bare, several in parentheses
+export const formatReturnValues = (values: DecodedValue[]) =>
+  values.length === 1
+    ? formatDecodedValue(values[0].value)
+    : `(${formatInlineValues(values)})`;
+
+// The decoded return data
 export const formatInnerCallResult = ({ decoding }: InnerCall) => {
   const values =
     decoding?.status === "decoded" ? decoding.returnValues : undefined;
-  if (!values) {
-    return undefined;
-  }
-  return values.length === 1
-    ? formatDecodedValue(values[0].value)
-    : `(${formatInlineValues(values)})`;
+  return values && formatReturnValues(values);
 };
 
 // What an Inner Call returned, from the RPC Response

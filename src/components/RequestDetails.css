@@ -182,6 +182,16 @@
   white-space: pre-wrap;
 }
 
+/* The Overview's call line: monospace, wrapping in a narrow pane */
+.rpc-details-call-line {
+  margin-bottom: 8px;
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-size: 11px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
 .rpc-details-code {
   margin: 0;
   font-family: ui-monospace, Menlo, Consolas, monospace;
