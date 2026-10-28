@@ -7,7 +7,7 @@ import { hasRpcResponseBody, parseRpcExchange } from "./parseRpcExchange.ts";
 export const HTTP_RESPONSE_BODY_LIMIT = 4 * 1024;
 
 // One finished network entry, with its response body already decoded
-export interface CapturedHttpExchange {
+export interface CapturedNetworkEntry {
   url: string;
   startedDateTime: string;
   time: number;
@@ -16,10 +16,18 @@ export interface CapturedHttpExchange {
   responseText: string;
 }
 
-const cutHttpResponseBody = (responseText: string): HttpResponseBody => ({
-  text: responseText.slice(0, HTTP_RESPONSE_BODY_LIMIT),
-  length: responseText.length,
-});
+const isHighSurrogate = (charCode: number) =>
+  charCode >= 0xd800 && charCode <= 0xdbff;
+
+const cutHttpResponseBody = (responseText: string): HttpResponseBody => {
+  // Never split a surrogate pair, so the kept text stays valid
+  const end = isHighSurrogate(
+    responseText.charCodeAt(HTTP_RESPONSE_BODY_LIMIT - 1),
+  )
+    ? HTTP_RESPONSE_BODY_LIMIT - 1
+    : HTTP_RESPONSE_BODY_LIMIT;
+  return { text: responseText.slice(0, end), length: responseText.length };
+};
 
 // Ok and RPC errors explain themselves; any other Status needs the body
 const keepsHttpResponseBody = (
@@ -36,7 +44,7 @@ export function captureRpcRequests({
   httpStatus,
   requestText,
   responseText,
-}: CapturedHttpExchange): Omit<RpcRequest, "id">[] {
+}: CapturedNetworkEntry): Omit<RpcRequest, "id">[] {
   const exchanges = parseRpcExchange(requestText, responseText);
   const responseIsRpc = hasRpcResponseBody(responseText);
   const isBatch = exchanges.length > 1;
