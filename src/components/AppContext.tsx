@@ -134,6 +134,14 @@ export const AppContextProvider = ({
     );
   }, [rpcRequestList, loaded, settings.fetchAbisAutomatically]);
 
+  // A new key fetches again what was fetched without it; the stored key is
+  // the first one passed, so the defaults before it loads are not
+  useEffect(() => {
+    if (loaded) {
+      abiFetcher.setEtherscanApiKey(settings.etherscanApiKey);
+    }
+  }, [loaded, settings.etherscanApiKey]);
+
   // Drop the selection when the list is cleared (Clear button or navigation)
   useEffect(() => {
     if (rpcRequestList.length === 0) {

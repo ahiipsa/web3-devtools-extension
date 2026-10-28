@@ -1633,7 +1633,22 @@ async function smoke() {
       app.etherscanUrls.join(", "),
     );
 
-    // With a key, Etherscan is asked after a Sourcify 404
+    // An address verified on Etherscan only misses while there is no key
+    await app.rpc(callTo(10, LINK));
+    await clickRow({ contract: "0x5149...86ca" });
+    await click(".rpc-details-tab", "Contract");
+    check(
+      "without a key an address verified on Etherscan only reads no verified ABI on Sourcify",
+      /No verified ABI on Sourcify\b(?! or)/.test(
+        await until(detailsBody, (text) =>
+          /No verified ABI on Sourcify/.test(text),
+        ),
+      ) && !(await callsContract("LinkToken", "balanceOf")),
+      json((await detailsBody()).slice(0, 120)),
+    );
+
+    // Typing a key fetches that miss again, from Etherscan after Sourcify,
+    // without Fetch ABI
     const KEY = "SMOKETESTKEY123";
     await click(".rpc-table-settings-button");
     await click(".rpc-table-settings-field input");
@@ -1646,18 +1661,20 @@ async function smoke() {
     check("the Etherscan API key is stored", withKey?.etherscanApiKey === KEY);
     // Closes the popover
     await click(".rpc-table-settings-button");
-    await app.rpc(callTo(10, LINK));
     check(
-      "an eth_call to an address verified on Etherscan only decodes",
+      "the earlier miss on an address verified on Etherscan only decodes once a key is typed",
       await callsContractSoon("LinkToken", "balanceOf"),
     );
     await app.sleep(DUPLICATE_WINDOW);
+    const linkUrls = app.etherscanUrls.filter((url) => url.includes(LINK));
     check(
-      "Etherscan asked once, after Sourcify, with the Chain, address and key",
-      app.etherscanUrls.length === 1 &&
-        app.etherscanUrls[0] ===
+      "Etherscan asked once for it, after Sourcify, with the Chain, address and key",
+      linkUrls.length === 1 &&
+        linkUrls[0] ===
           `https://api.etherscan.io/v2/api?chainid=1&module=contract&action=getsourcecode&address=${LINK}&apikey=${KEY}` &&
-        app.sourcifyUrls.some((url) => url.toLowerCase().includes(LINK)),
+        // The miss without a key and the fetch again with it
+        app.sourcifyUrls.filter((url) => url.toLowerCase().includes(LINK))
+          .length === 2,
       app.etherscanUrls.join(", ").replaceAll(KEY, "<key>"),
     );
     await clickRow({ contract: "LinkToken" });

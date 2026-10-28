@@ -87,6 +87,7 @@ const setup = (
     ) => Promise<ContractAbi>;
     requestChainId?: (endpoint: string) => Promise<number>;
     chainLookupDelay?: number;
+    etherscanApiKeyDelay?: number;
   } = {},
 ) => {
   const contracts: Record<string, Contract> = { ...options.contracts };
@@ -118,7 +119,11 @@ const setup = (
     requestChainId: deps.requestChainId,
     lookupDelay: options.chainLookupDelay ?? 0,
   });
-  const abiFetcher = createAbiFetcher({ ...deps, chains });
+  const abiFetcher = createAbiFetcher({
+    ...deps,
+    chains,
+    etherscanApiKeyDelay: options.etherscanApiKeyDelay ?? 0,
+  });
   // The Panel observes the Chains first, as the table shows them too
   const fetcher = {
     ...abiFetcher,
@@ -655,5 +660,236 @@ describe("ABI Source fetches at once", () => {
     expect(fetcher.getState(ENDPOINT, TARGETS[5])).toMatchObject({
       kind: "not-found",
     });
+  });
+});
+
+describe("Setting an Etherscan API key", () => {
+  // Etherscan has every ABI, but is asked only with a key
+  const withKey = (failWithoutKey = false) => {
+    const state = { apiKey: "" };
+    const fetchAbi = async (): Promise<ContractAbi> => {
+      if (state.apiKey) {
+        return {
+          kind: "found",
+          name: "LinkToken",
+          abi: ABI,
+          source: "etherscan",
+        };
+      }
+      if (failWithoutKey) {
+        throw new Error("HTTP 500");
+      }
+      return { kind: "not-found", sources: ["sourcify"] };
+    };
+    const setKey = (
+      fetcher: { setEtherscanApiKey: (key: string) => void },
+      key: string,
+    ) => {
+      state.apiKey = key.trim();
+      fetcher.setEtherscanApiKey(key);
+    };
+    return { fetchAbi, setKey };
+  };
+
+  it("re-fetches an address Sourcify missed while Etherscan was not asked", async () => {
+    const { fetchAbi, setKey } = withKey();
+    const { fetcher, deps } = setup({ fetchAbi });
+    setKey(fetcher, "");
+    fetcher.observe([chainIdOn(ENDPOINT, "0x1"), callOn(ENDPOINT, WETH)], true);
+    await flush();
+    expect(fetcher.getState(ENDPOINT, WETH)).toEqual({
+      kind: "not-found",
+      sources: ["sourcify"],
+    });
+
+    setKey(fetcher, "KEY");
+    await flush();
+    await flush();
+
+    expect(deps.fetchAbi).toHaveBeenCalledTimes(2);
+    expect(deps.fetchAbi.mock.calls[1]).toEqual([1, WETH, ENDPOINT]);
+    expect(deps.saveFetchedContract).toHaveBeenCalledWith(
+      expect.objectContaining({ address: WETH, source: "etherscan" }),
+    );
+    expect(fetcher.getState(ENDPOINT, WETH)).toEqual({ kind: "idle" });
+  });
+
+  it("re-fetches an address whose fetch failed", async () => {
+    const { fetchAbi, setKey } = withKey(true);
+    const { fetcher, deps } = setup({ fetchAbi });
+    setKey(fetcher, "");
+    fetcher.observe([chainIdOn(ENDPOINT, "0x1"), callOn(ENDPOINT, WETH)], true);
+    await flush();
+    expect(fetcher.getState(ENDPOINT, WETH)).toMatchObject({ kind: "failed" });
+
+    setKey(fetcher, "KEY");
+    await flush();
+    await flush();
+
+    expect(deps.fetchAbi).toHaveBeenCalledTimes(2);
+    expect(fetcher.getState(ENDPOINT, WETH)).toEqual({ kind: "idle" });
+  });
+
+  it("re-fetches a miss when the key is replaced", async () => {
+    const { fetcher, deps } = setup({
+      fetchAbi: async () => ({ kind: "not-found", sources: ["sourcify"] }),
+    });
+    fetcher.setEtherscanApiKey("OLD");
+    fetcher.observe([chainIdOn(ENDPOINT, "0x1"), callOn(ENDPOINT, WETH)], true);
+    await flush();
+
+    fetcher.setEtherscanApiKey("NEW");
+    await flush();
+    await flush();
+
+    expect(deps.fetchAbi).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not re-fetch a miss that asked Etherscan", async () => {
+    const { fetcher, deps } = setup({
+      fetchAbi: async () => ({
+        kind: "not-found",
+        sources: ["sourcify", "etherscan"],
+      }),
+    });
+    fetcher.setEtherscanApiKey("OLD");
+    fetcher.observe([chainIdOn(ENDPOINT, "0x1"), callOn(ENDPOINT, WETH)], true);
+    await flush();
+
+    fetcher.setEtherscanApiKey("NEW");
+    await flush();
+    await flush();
+
+    expect(deps.fetchAbi).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not re-fetch while automatic fetching is off", async () => {
+    const { fetchAbi, setKey } = withKey();
+    const { fetcher, deps } = setup({ fetchAbi });
+    setKey(fetcher, "");
+    const requests = [chainIdOn(ENDPOINT, "0x1"), callOn(ENDPOINT, WETH)];
+    fetcher.observe(requests, true);
+    await flush();
+    fetcher.observe(requests, false);
+
+    setKey(fetcher, "KEY");
+    await flush();
+    await flush();
+
+    expect(deps.fetchAbi).toHaveBeenCalledTimes(1);
+  });
+
+  it("re-fetches nothing when the key is cleared", async () => {
+    const { fetcher, deps } = setup({
+      fetchAbi: async () => ({ kind: "not-found", sources: ["sourcify"] }),
+    });
+    fetcher.setEtherscanApiKey("KEY");
+    fetcher.observe([chainIdOn(ENDPOINT, "0x1"), callOn(ENDPOINT, WETH)], true);
+    await flush();
+
+    fetcher.setEtherscanApiKey("");
+    fetcher.setEtherscanApiKey("  ");
+    await flush();
+    await flush();
+
+    expect(deps.fetchAbi).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not count the key the Panel starts with as a change", async () => {
+    const { fetcher, deps } = setup({
+      fetchAbi: async () => ({ kind: "not-found", sources: ["sourcify"] }),
+    });
+    fetcher.observe([chainIdOn(ENDPOINT, "0x1"), callOn(ENDPOINT, WETH)], true);
+    await flush();
+
+    fetcher.setEtherscanApiKey("KEY");
+    await flush();
+    await flush();
+
+    expect(deps.fetchAbi).toHaveBeenCalledTimes(1);
+  });
+
+  it("re-fetches once, after the key has stopped changing", async () => {
+    const { fetchAbi, setKey } = withKey();
+    const { fetcher, deps } = setup({ fetchAbi, etherscanApiKeyDelay: 30 });
+    setKey(fetcher, "");
+    fetcher.observe([chainIdOn(ENDPOINT, "0x1"), callOn(ENDPOINT, WETH)], true);
+    await flush();
+
+    setKey(fetcher, "K");
+    await new Promise((resolve) => setTimeout(resolve, 15));
+    setKey(fetcher, "KE");
+    await new Promise((resolve) => setTimeout(resolve, 15));
+    setKey(fetcher, "KEY");
+    await new Promise((resolve) => setTimeout(resolve, 15));
+    expect(deps.fetchAbi).toHaveBeenCalledTimes(1);
+
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    await flush();
+
+    expect(deps.fetchAbi).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not re-fetch when the key is cleared before it settles", async () => {
+    const { fetchAbi, setKey } = withKey();
+    const { fetcher, deps } = setup({ fetchAbi, etherscanApiKeyDelay: 20 });
+    setKey(fetcher, "");
+    fetcher.observe([chainIdOn(ENDPOINT, "0x1"), callOn(ENDPOINT, WETH)], true);
+    await flush();
+
+    setKey(fetcher, "K");
+    setKey(fetcher, "");
+    await new Promise((resolve) => setTimeout(resolve, 40));
+
+    expect(deps.fetchAbi).toHaveBeenCalledTimes(1);
+  });
+
+  it("re-fetches a miss of a fetch still running when the key was set", async () => {
+    const pending: (() => void)[] = [];
+    const { fetcher, deps } = setup({
+      fetchAbi: () =>
+        new Promise((resolve) =>
+          pending.push(() =>
+            resolve({ kind: "not-found", sources: ["sourcify"] }),
+          ),
+        ),
+    });
+    fetcher.setEtherscanApiKey("");
+    fetcher.observe([chainIdOn(ENDPOINT, "0x1"), callOn(ENDPOINT, WETH)], true);
+    await flush();
+
+    fetcher.setEtherscanApiKey("KEY");
+    await flush();
+    expect(deps.fetchAbi).toHaveBeenCalledTimes(1);
+    pending.shift()?.();
+    await flush();
+
+    expect(deps.fetchAbi).toHaveBeenCalledTimes(2);
+    expect(fetcher.getState(ENDPOINT, WETH)).toEqual({ kind: "fetching" });
+  });
+
+  it("re-fetches an address called on several Chains on each", async () => {
+    const { fetchAbi, setKey } = withKey();
+    const { fetcher, deps } = setup({ fetchAbi });
+    setKey(fetcher, "");
+    fetcher.observe(
+      [
+        chainIdOn(ENDPOINT, "0x1"),
+        callOn(ENDPOINT, WETH),
+        chainIdOn(OTHER_ENDPOINT, "0x89"),
+        callOn(OTHER_ENDPOINT, WETH),
+      ],
+      true,
+    );
+    await flush();
+
+    setKey(fetcher, "KEY");
+    await flush();
+    await flush();
+
+    expect(deps.fetchAbi.mock.calls.slice(2)).toEqual([
+      [1, WETH, ENDPOINT],
+      [137, WETH, OTHER_ENDPOINT],
+    ]);
   });
 });

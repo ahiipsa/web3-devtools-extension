@@ -28,6 +28,9 @@ export interface AbiFetcherDeps {
   // The Endpoints' Chains, shared with the table; the Panel observes the RPC
   // Requests there before it calls `observe` here
   chains: EndpointChains;
+  // How long the Etherscan API key must stay unchanged before misses are
+  // fetched again; it is saved as typed, one write per keystroke
+  etherscanApiKeyDelay?: number;
 }
 
 export type AbiFetcher = ReturnType<typeof createAbiFetcher>;
@@ -64,19 +67,35 @@ const createConcurrencyLimit = (limit: number) => {
 
 const IDLE: AbiFetchState = { kind: "idle" };
 
+// An attempt an Etherscan API key could change: Etherscan was not asked, or
+// the fetch failed (a bad key, a network error)
+const mayFindWithKey = (state: AbiFetchState | undefined) =>
+  state?.kind === "failed" ||
+  (state?.kind === "not-found" && !state.sources.includes("etherscan"));
+
 // Fetches the ABIs of called addresses without a Contract and saves them as
 // Contracts. All state lives in memory for one Panel session: one automatic
-// attempt per (Chain, address).
+// attempt per (Chain, address), and one more for those an Etherscan API key
+// set since could change.
 export function createAbiFetcher(deps: AbiFetcherDeps) {
   const { chains } = deps;
+  const etherscanApiKeyDelay = deps.etherscanApiKeyDelay ?? 1000;
   // Addresses called on an Endpoint whose Chain is not known yet
   const waiting = new Map<string, Set<`0x${string}`>>();
   // By `${chainId}:${address}`; present once an attempt was made
   const attempts = new Map<string, AbiFetchState>();
+  // The Endpoint of each attempt's latest fetch, to fetch again on
+  const attemptEndpoints = new Map<string, string>();
   const seen = new WeakSet<RpcRequest>();
   // Shared by automatic and manual fetches, so across the whole Panel
   const limitFetches = createConcurrencyLimit(MAX_FETCHES_AT_ONCE);
   let automatic = false;
+  // Undefined until the Panel passes the key it starts with
+  let etherscanApiKey: string | undefined;
+  let etherscanApiKeyTimer: ReturnType<typeof setTimeout> | undefined;
+  // Counts the re-fetches for a new key; a fetch that started before one
+  // may have missed the key, so it is fetched again when it ends
+  let etherscanApiKeyRound = 0;
 
   const listeners = new Set<() => void>();
   let version = 0;
@@ -102,15 +121,16 @@ export function createAbiFetcher(deps: AbiFetcherDeps) {
   ) => {
     const key = attemptKey(chainId, address);
     setAttempt(key, { kind: "fetching" });
+    attemptEndpoints.set(key, endpoint);
+    let round = etherscanApiKeyRound;
     try {
       // Queued fetches stay "fetching"; a Contract saved meanwhile ends one
-      const result = await limitFetches(
-        async () =>
-          (await deps.getContract(address))
-            ? undefined
-            : deps.fetchAbi(chainId, address, endpoint),
-        manual,
-      );
+      const result = await limitFetches(async () => {
+        round = etherscanApiKeyRound;
+        return (await deps.getContract(address))
+          ? undefined
+          : deps.fetchAbi(chainId, address, endpoint);
+      }, manual);
       if (!result) {
         setAttempt(key, IDLE);
         return;
@@ -129,7 +149,46 @@ export function createAbiFetcher(deps: AbiFetcherDeps) {
       setAttempt(key, IDLE);
     } catch (error) {
       setAttempt(key, { kind: "failed", reason: errorMessage(error) });
+    } finally {
+      if (
+        round !== etherscanApiKeyRound &&
+        automatic &&
+        mayFindWithKey(attempts.get(key))
+      ) {
+        void fetchAbi(chainId, address, endpoint);
+      }
     }
+  };
+
+  // Fetches again, as automatically, every attempt the new key could change
+  const refetchForEtherscanApiKey = () => {
+    etherscanApiKeyTimer = undefined;
+    if (!automatic) {
+      return;
+    }
+    etherscanApiKeyRound++;
+    for (const [key, state] of attempts) {
+      const endpoint = attemptEndpoints.get(key);
+      if (endpoint && mayFindWithKey(state)) {
+        const [chainId, address] = key.split(":");
+        void fetchAbi(Number(chainId), address as `0x${string}`, endpoint);
+      }
+    }
+  };
+
+  // The Etherscan API key in the settings, each time it changes; the first
+  // call passes the key the Panel starts with
+  const setEtherscanApiKey = (value: string) => {
+    const apiKey = value.trim();
+    const previous = etherscanApiKey;
+    etherscanApiKey = apiKey;
+    if (previous === undefined || apiKey === previous) {
+      return;
+    }
+    clearTimeout(etherscanApiKeyTimer);
+    etherscanApiKeyTimer = apiKey
+      ? setTimeout(refetchForEtherscanApiKey, etherscanApiKeyDelay)
+      : undefined;
   };
 
   const fetchAutomatically = (
@@ -232,6 +291,7 @@ export function createAbiFetcher(deps: AbiFetcherDeps) {
   return {
     observe,
     fetchManually,
+    setEtherscanApiKey,
     getState,
     subscribe: (listener: () => void) => {
       listeners.add(listener);
