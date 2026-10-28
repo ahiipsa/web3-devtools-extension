@@ -10,6 +10,11 @@ import { formatRpcRequestStatus } from "../capture/getRpcRequestStatus.ts";
 import { RpcRequestChain } from "../chains/endpointChains.ts";
 import { getChainName } from "../chains/chainNames.ts";
 import { formatShortAddress } from "./formatAddress.ts";
+import {
+  formatChainMethodResultInline,
+  getNamedParams,
+  isScalarChainMethod,
+} from "./chainMethods.ts";
 
 // A piece of an Overview line and how it reads
 export interface OverviewSegment {
@@ -35,13 +40,22 @@ export interface CallLineInput {
   // The stored Contract is still being read
   contractPending: boolean;
   failed: boolean;
+  // A result that is not return data, shown after →: eth_estimateGas's gas
+  result?: string;
 }
 
 // What an RPC Request to a contract called and how it ended, on one line in
 // the Inner Call format
 export function getCallLine(input: CallLineInput): OverviewSegment[] {
-  const { data, decoding, innerCalls, hasContract, contractPending, failed } =
-    input;
+  const {
+    data,
+    decoding,
+    innerCalls,
+    hasContract,
+    contractPending,
+    failed,
+    result,
+  } = input;
   const selector = getFunctionSelector(data);
   if (!selector) {
     return [];
@@ -56,7 +70,11 @@ export function getCallLine(input: CallLineInput): OverviewSegment[] {
       : hasContract
         ? " · ABI does not match"
         : " · no ABI";
-    return [{ text: selector + note, tone: "muted" }, ...failedMark];
+    return [
+      { text: selector + note, tone: "muted" },
+      ...(!failed && result ? [{ text: ` → ${result}` }] : []),
+      ...failedMark,
+    ];
   }
 
   if (innerCalls) {
@@ -76,11 +94,43 @@ export function getCallLine(input: CallLineInput): OverviewSegment[] {
   }
 
   const call = `${decoding.functionName}(${formatInlineValues(decoding.args)})`;
-  const result =
-    !failed && decoding.returnValues
-      ? ` → ${formatReturnValues(decoding.returnValues)}`
-      : "";
-  return [{ text: toOneLine(call + result) }, ...failedMark];
+  const returned = decoding.returnValues
+    ? formatReturnValues(decoding.returnValues)
+    : result;
+  const arrow = !failed && returned ? ` → ${returned}` : "";
+  return [{ text: toOneLine(call + arrow) }, ...failedMark];
+}
+
+export interface ChainMethodCallLineInput {
+  method: string;
+  params: unknown;
+  // The result of an RPC Request that succeeded
+  result: unknown;
+  chainId: number | undefined;
+  failed: boolean;
+}
+
+// A scalar Chain method's call line: the method with its params and the main
+// value of its result, `eth_getBalance(0xd8dA…6045, latest) → 0.01 ETH`
+export function getChainMethodCallLine(
+  input: ChainMethodCallLineInput,
+): OverviewSegment[] {
+  const { method, params, result, chainId, failed } = input;
+  if (!isScalarChainMethod(method)) {
+    return [];
+  }
+  const args = (getNamedParams(method, params) ?? [])
+    .map(({ inline }) => inline)
+    .join(", ");
+  const returned = !failed
+    ? formatChainMethodResultInline(method, result, chainId)
+    : undefined;
+  return [
+    {
+      text: toOneLine(`${method}(${args})${returned ? ` → ${returned}` : ""}`),
+    },
+    ...(failed ? [{ text: " ✗", tone: "failed" } as const] : []),
+  ];
 }
 
 // The RPC Request's Chain: its name and chain id, or the chain id alone

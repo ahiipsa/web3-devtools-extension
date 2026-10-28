@@ -41,6 +41,12 @@ describe("getExplorerUrl", () => {
     expect(getExplorerUrl(undefined, address)).toBeUndefined();
   });
 
+  it("links a block by its hash", () => {
+    expect(getExplorerUrl(1, { kind: "block", value: HASH })).toBe(
+      `https://etherscan.io/block/${HASH}`,
+    );
+  });
+
   it("gives no link for a block number it cannot read", () => {
     expect(
       getExplorerUrl(1, { kind: "block", value: "latest" }),

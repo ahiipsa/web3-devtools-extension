@@ -167,6 +167,14 @@ const STORAGE = {
     "0x" + pad(SLOT_IMPLEMENTATION),
 };
 
+// The mock node's eth_getCode, by address; any other address has no code
+export const CODE_CONTRACT = "0x7777777777777777777777777777777777777777";
+export const DELEGATED = "0x8888888888888888888888888888888888888888";
+const CODE = {
+  [CODE_CONTRACT]: "0x" + "60".repeat(4300),
+  [DELEGATED]: "0xef0100" + HOLDER.slice(2),
+};
+
 // Verified on the fake Etherscan only; any other address is not verified
 export const LINK = "0x514910771af9ca656af840dff83e8264ecf986ca";
 export const ETHERSCAN = {
@@ -182,6 +190,8 @@ const ANSWERS = {
   eth_chainId: { result: "0x1" },
   eth_blockNumber: { result: "0x1406f40" },
   eth_getBalance: { result: "0xde0b6b3a7640000" },
+  eth_gasPrice: { result: "0xbbaee0" }, // 0.0123 gwei
+  eth_getTransactionCount: { result: "0x8e" },
   eth_call: { result: "0x" + pad("f4240") }, // 1000000
   eth_estimateGas: { error: { code: 3, message: "execution reverted" } },
   eth_sendRawTransaction: { result: TX_HASH },
@@ -189,7 +199,12 @@ const ANSWERS = {
 
 // Endpoints on another Chain than the node's chain id 1: Base, and a local
 // Chain (Hardhat and Anvil's 31337), which has no Explorer
-const CHAIN_IDS = { "/base": "0x2105", "/local": "0x7a69" };
+const CHAIN_IDS = {
+  "/base": "0x2105",
+  "/local": "0x7a69",
+  "/polygon": "0x89",
+  "/unknown": "0xf423f",
+};
 
 // A Multicall3 aggregate3 to an address no ABI Source knows: WETH's
 // balanceOf (WETH9 once fetched) succeeds, an unknown call to UNVERIFIED
@@ -348,16 +363,18 @@ const startNode = () =>
                       ? MULTICALL_FETCH_RESULT
                       : MULTICALL_RESULT,
                 }
-              : r.method === "eth_getStorageAt"
-                ? {
-                    result:
-                      STORAGE[
-                        `${String(r.params?.[0]).toLowerCase()}:${r.params?.[1]}`
-                      ] ?? "0x" + pad("0"),
-                  }
-                : r.method === "eth_chainId" && CHAIN_IDS[req.url]
-                  ? { result: CHAIN_IDS[req.url] }
-                  : (ANSWERS[r.method] ?? { result: null })),
+              : r.method === "eth_getCode"
+                ? { result: CODE[String(r.params?.[0]).toLowerCase()] ?? "0x" }
+                : r.method === "eth_getStorageAt"
+                  ? {
+                      result:
+                        STORAGE[
+                          `${String(r.params?.[0]).toLowerCase()}:${r.params?.[1]}`
+                        ] ?? "0x" + pad("0"),
+                    }
+                  : r.method === "eth_chainId" && CHAIN_IDS[req.url]
+                    ? { result: CHAIN_IDS[req.url] }
+                    : (ANSWERS[r.method] ?? { result: null })),
         });
         res.setHeader("content-type", "application/json");
         res.end(
@@ -1228,7 +1245,7 @@ async function smoke() {
     );
     check(
       "Params of a call without a Contract shows the fetch state and Add ABI",
-      /^Decoded input\s+Selector\s+0x70a08231\s+No verified ABI on Sourcify\s+Add ABI\s+▼\s*Raw params/.test(
+      /^Decoded input\s+Selector\s+0x70a08231\s+Block\s+latest\s+No verified ABI on Sourcify\s+Add ABI\s+▼\s*Raw params/.test(
         paramsNoContract,
       ),
       json(paramsNoContract),
@@ -1314,7 +1331,7 @@ async function smoke() {
     );
     check(
       "decoded Params read Function, Selector, then the arguments; Raw params folded",
-      /^Decoded input\s+Function\s+balanceOf\(address account\)\s+Selector\s+0x70a08231\s+account\s+address\s+0x28C6/.test(
+      /^Decoded input\s+Function\s+balanceOf\(address account\)\s+Selector\s+0x70a08231\s+Block\s+latest\s+account\s+address\s+0x28C6/.test(
         await detailsBody(),
       ) &&
         (await ev(
@@ -2132,10 +2149,20 @@ async function smoke() {
       ).trim() === "No params" && (await rawParams()) == null,
       json(await detailsBody()),
     );
-    await clickRow({ method: "eth_getBalance" });
+    await clickRow({ method: "eth_estimateGas" });
     check(
       "Raw params is open without a decoded view",
       (await until(rawParams, (open) => open != null)) === "true",
+    );
+    await clickRow({ method: "eth_getBalance" });
+    const balanceParams =
+      /^Params\s+address\s+0x28C6c06298d514Db089934071355E5743bf21d60\s+block\s+latest\s+▶\s*Raw params/;
+    check(
+      "Raw params is folded beside eth_getBalance's named Params",
+      balanceParams.test(
+        await until(detailsBody, (text) => balanceParams.test(text)),
+      ) && (await rawParams()) === "false",
+      json(await detailsBody()),
     );
     await clickRow({ contract: "Multicall3" }, 0);
     await click(".rpc-details-tab", "Params");
@@ -2366,6 +2393,201 @@ async function smoke() {
       !fieldNames(alone).includes("Batch") && alone.callLine === null,
       json(alone),
     );
+    // Common Chain methods at 320 px: the Value in Response, named Params,
+    // the call line in Overview
+    const valueSection = () =>
+      ev(
+        `[...document.querySelectorAll(".rpc-details-section")].find((s) => s.firstElementChild?.innerText === "Value")?.innerText ?? null`,
+      );
+    const lastRowOf = async (method) =>
+      (await app.rowCells()).filter(
+        (cells) => cells[0].split(" ")[0] === method,
+      ).length - 1;
+    const responseOf = async (method, test) => {
+      await clickRow({ method }, await lastRowOf(method));
+      await narrowDetails();
+      await click(".rpc-details-tab", "Response");
+      return until(valueSection, (text) => !!text && test(text));
+    };
+    for (const [path, symbol] of [
+      ["/rpc", "ETH"],
+      ["/polygon", "POL"],
+      ["/unknown", "native"],
+    ]) {
+      await app.rpc(
+        {
+          jsonrpc: "2.0",
+          id: 60,
+          method: "eth_getBalance",
+          params: [HOLDER, "latest"],
+        },
+        path,
+      );
+      const balance = await responseOf("eth_getBalance", (text) =>
+        text.includes(symbol),
+      );
+      check(
+        `eth_getBalance on ${path} reads 1 ${symbol} with its wei, fitting 320 px`,
+        /^Value\s+1 \S+ · 1,000,000,000,000,000,000 wei$/.test(balance) &&
+          balance.includes(` ${symbol} `) &&
+          (await noOverflow()),
+        json(balance),
+      );
+    }
+    await shot("27-balance-response-320");
+    await click(".rpc-details-tab", "Overview");
+    const balanceOverview = await until(
+      () => ev(OVERVIEW),
+      (o) => o?.callLine?.includes("→"),
+    );
+    check(
+      "the Overview of eth_getBalance reads its call line with the balance",
+      balanceOverview?.callLine ===
+        "eth_getBalance(0x28C6…1d60, latest) → 1 native" &&
+        (await noOverflow()),
+      json(balanceOverview),
+    );
+    const blockNumber = await responseOf("eth_blockNumber", (text) =>
+      text.includes("21,000,000"),
+    );
+    const blockLink = await ev(
+      `document.querySelector(".rpc-details-section .rpc-value-explorer")?.href`,
+    );
+    check(
+      "eth_blockNumber reads 21,000,000 · 0x1406f40 with ↗ to the block on Etherscan",
+      /^Value\s+21,000,000 · 0x1406f40$/.test(blockNumber) &&
+        blockLink === "https://etherscan.io/block/21000000",
+      json([blockNumber, blockLink]),
+    );
+    await click(".rpc-details-section .rpc-value button", "Copy");
+    await key("f", "meta");
+    await app.devtools.send("Input.dispatchKeyEvent", {
+      type: "rawKeyDown",
+      ...paste,
+    });
+    await app.devtools.send("Input.dispatchKeyEvent", {
+      type: "keyUp",
+      ...paste,
+    });
+    const pastedBlock = await until(
+      () => ev(`document.activeElement.value`),
+      (value) => value === "21000000",
+    );
+    check(
+      "copying 21,000,000 gives 21000000",
+      pastedBlock === "21000000",
+      json(pastedBlock),
+    );
+    await key("Escape");
+    if (await app.detailsOpen()) await key("Escape");
+    await clickRow(
+      { method: "eth_blockNumber" },
+      await lastRowOf("eth_blockNumber"),
+    );
+    await click(".rpc-details-tab", "Overview");
+    check(
+      "the Overview of eth_blockNumber reads eth_blockNumber() → 21,000,000",
+      (
+        await until(
+          () => ev(OVERVIEW),
+          (o) => o?.callLine === "eth_blockNumber() → 21,000,000",
+        )
+      )?.callLine === "eth_blockNumber() → 21,000,000",
+    );
+    for (const [address, expected] of [
+      [CODE_CONTRACT, /^Value\s+Contract · 4\.2 KB of bytecode$/],
+      [WETH, /^Value\s+No code · a wallet, or nothing deployed$/],
+      [
+        DELEGATED,
+        /^Value\s+Delegated to 0x28C6c06298d514Db089934071355E5743bf21d60 · EIP-7702$/,
+      ],
+    ]) {
+      await app.rpc({
+        jsonrpc: "2.0",
+        id: 61,
+        method: "eth_getCode",
+        params: [address, "latest"],
+      });
+      const code = await responseOf("eth_getCode", (text) =>
+        expected.test(text),
+      );
+      check(
+        `eth_getCode of ${address.slice(0, 6)}… reads ${expected.source.slice(9, 30)}…, fitting 320 px`,
+        expected.test(code) && (await noOverflow()),
+        json(code),
+      );
+    }
+    await shot("28-delegated-320");
+    await app.rpc({
+      jsonrpc: "2.0",
+      id: 62,
+      method: "eth_getStorageAt",
+      params: [SLOT_PROXY, EIP1967_IMPLEMENTATION_SLOT, "latest"],
+    });
+    const storage = await responseOf("eth_getStorageAt", (text) =>
+      /as address/.test(text),
+    );
+    check(
+      "eth_getStorageAt at a proxy's EIP-1967 implementation slot reads the implementation as an address",
+      /as uint256\s+[\d,]+\s+as address\s+0x6666666666666666666666666666666666666666$/i.test(
+        storage,
+      ) && (await noOverflow()),
+      json(storage),
+    );
+    await shot("29-storage-320");
+    await click(".rpc-details-tab", "Params");
+    const storageParams = await until(detailsBody, (text) =>
+      /^Params/.test(text),
+    );
+    check(
+      "eth_getStorageAt's Params name its address, slot and block, fitting 320 px",
+      /^Params\s+address\s+0x5555555555555555555555555555555555555555\s+slot\s+0x360894a1\S+\s+block\s+latest/i.test(
+        storageParams,
+      ) && (await noOverflow()),
+      json(storageParams),
+    );
+    for (const [method, expected] of [
+      ["eth_gasPrice", /^Value\s+0\.0123 gwei · 12,300,000 wei$/],
+      ["eth_getTransactionCount", /^Value\s+142 · 0x8e$/],
+    ]) {
+      await app.rpc({
+        jsonrpc: "2.0",
+        id: 63,
+        method,
+        params: method === "eth_gasPrice" ? [] : [HOLDER, "pending"],
+      });
+      const value = await responseOf(method, (text) => expected.test(text));
+      check(
+        `${method} reads ${expected.source}`,
+        expected.test(value),
+        json(value),
+      );
+    }
+    await app.rpc({
+      jsonrpc: "2.0",
+      id: 64,
+      method: "eth_call",
+      params: [
+        { to: WETH, data: "0x70a08231" + pad(HOLDER) },
+        "0x1312918",
+        { [HOLDER]: { balance: "0x1" }, [WETH]: { stateDiff: {} } },
+      ],
+    });
+    await clickRow({ method: "eth_call" }, await lastRowOf("eth_call"));
+    await narrowDetails();
+    await click(".rpc-details-tab", "Params");
+    const overridden = await until(detailsBody, (text) =>
+      /State override/.test(text),
+    );
+    check(
+      "an eth_call at block 0x1312918 with a state override reads Block 19,999,000 and State override 2 addresses",
+      /Block\s+19,999,000 · 0x1312918\s+State override\s+2 addresses/.test(
+        overridden,
+      ) && (await noOverflow()),
+      json(overridden),
+    );
+    await shot("30-call-block-override-320");
+
     // The Contract tab at 320 px: the header of a Contract fetched via proxy
     // and the buttons wrap; Forget fetched ABI asks first, then removes it
     // for the rest of the Panel session

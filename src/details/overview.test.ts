@@ -5,6 +5,7 @@ import {
   formatOverviewChain,
   formatOverviewStatus,
   getCallLine,
+  getChainMethodCallLine,
   OverviewSegment,
 } from "./overview.ts";
 import { InnerCall } from "../decoding/multicall.ts";
@@ -116,6 +117,28 @@ describe("getCallLine", () => {
     );
   });
 
+  it("shows eth_estimateGas's gas after the decoded call", () => {
+    expect(
+      text(
+        getCallLine({
+          ...balanceOf,
+          decoding: { ...balanceOf.decoding!, returnValues: undefined },
+          result: "51,234 gas",
+        } as CallLineInput),
+      ),
+    ).toBe("balanceOf(account: 0xd8dA…6045) → 51,234 gas");
+    expect(
+      text(
+        getCallLine({
+          ...balanceOf,
+          decoding: undefined,
+          hasContract: false,
+          result: "51,234 gas",
+        }),
+      ),
+    ).toBe("0x70a08231 · no ABI → 51,234 gas");
+  });
+
   describe("for a Multicall", () => {
     const innerCall: InnerCall = { target: HOLDER, callData: BALANCE_OF };
     const multicall = (innerCalls: InnerCall[]): CallLineInput => ({
@@ -150,6 +173,60 @@ describe("getCallLine", () => {
         "aggregate3 · 1 Inner Call",
       );
     });
+  });
+});
+
+describe("getChainMethodCallLine", () => {
+  const getBalance = {
+    method: "eth_getBalance",
+    params: [HOLDER, "latest"],
+    result: "0x2386f26fc10000",
+    chainId: 1,
+    failed: false,
+  };
+
+  it("is the method with its params and the main value of its result", () => {
+    expect(getChainMethodCallLine(getBalance)).toEqual([
+      { text: "eth_getBalance(0xd8dA…6045, latest) → 0.01 ETH" },
+    ]);
+    expect(
+      text(
+        getChainMethodCallLine({
+          ...getBalance,
+          method: "eth_blockNumber",
+          params: [],
+          result: "0x1312d00",
+        }),
+      ),
+    ).toBe("eth_blockNumber() → 20,000,000");
+  });
+
+  it("shortens an address in the result", () => {
+    expect(
+      text(
+        getChainMethodCallLine({
+          ...getBalance,
+          method: "eth_getCode",
+          result: `0xef0100${HOLDER.slice(2)}`,
+        }),
+      ),
+    ).toBe("eth_getCode(0xd8dA…6045, latest) → Delegated to 0xd8dA…6045");
+  });
+
+  it("has no result before the RPC Response and ✗ when it failed", () => {
+    expect(
+      text(getChainMethodCallLine({ ...getBalance, result: undefined })),
+    ).toBe("eth_getBalance(0xd8dA…6045, latest)");
+    expect(getChainMethodCallLine({ ...getBalance, failed: true })).toEqual([
+      { text: "eth_getBalance(0xd8dA…6045, latest)" },
+      { text: " ✗", tone: "failed" },
+    ]);
+  });
+
+  it("is nothing for another method", () => {
+    expect(
+      getChainMethodCallLine({ ...getBalance, method: "eth_getLogs" }),
+    ).toEqual([]);
   });
 });
 

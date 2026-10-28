@@ -76,8 +76,18 @@ import {
   formatOverviewChain,
   formatOverviewStatus,
   getCallLine,
+  getChainMethodCallLine,
   OverviewSegment,
 } from "../details/overview.ts";
+import {
+  formatBlockParam,
+  formatChainMethodResult,
+  formatChainMethodResultInline,
+  formatStateOverride,
+  getNamedParams,
+  ValueLine,
+  ValuePart,
+} from "../details/chainMethods.ts";
 import { RpcRequestChain } from "../chains/endpointChains.ts";
 
 interface RequestDetailsProps {
@@ -381,6 +391,21 @@ const Segments = ({ segments }: { segments: OverviewSegment[] }) =>
     </span>
   ));
 
+// A formatted value: what copies or links has copy and ↗, the raw form and
+// hints muted beside the main value
+const ValueParts = ({ parts }: { parts: ValuePart[] }) =>
+  parts.map((part, index) => (
+    <span key={index} className={cx({ "rpc-details-muted": part.muted })}>
+      {part.kind === "value" ? (
+        <DetailsValue value={part.value} explorer={part.explorer}>
+          {part.text === part.value ? undefined : part.text}
+        </DetailsValue>
+      ) : (
+        part.text
+      )}
+    </span>
+  ));
+
 // What happened on one screen: what was called, where, and how it ended
 const Overview = (props: {
   request: RpcRequest;
@@ -405,6 +430,10 @@ const Overview = (props: {
     innerCalls,
   } = props;
   const status = getRpcRequestStatus(request);
+  const { method, params } = request.requestBody;
+  const chainId = chain.kind === "known" ? chain.chainId : undefined;
+  const failed = isFailedRpcRequestStatus(status);
+  const result = failed ? undefined : request.response?.result;
   const callLine = callParams
     ? getCallLine({
         data: callParams.data,
@@ -412,9 +441,10 @@ const Overview = (props: {
         innerCalls,
         hasContract,
         contractPending,
-        failed: isFailedRpcRequestStatus(status),
+        failed,
+        result: formatChainMethodResultInline(method, result, chainId),
       })
-    : [];
+    : getChainMethodCallLine({ method, params, result, chainId, failed });
 
   const fields: [string, ReactNode][] = [
     ["Chain", <Segments segments={[formatOverviewChain(chain)]} />],
@@ -550,6 +580,12 @@ const Params = (props: {
     return <div className="rpc-details-muted">No params</div>;
   }
 
+  const { method, params } = request.requestBody;
+  const namedParams = getNamedParams(method, params);
+  // eth_call's and eth_estimateGas's block and state override follow the call
+  const [, block, stateOverride] = callParams ? (params as unknown[]) : [];
+  const overriddenAddresses = formatStateOverride(stateOverride);
+
   const selector = callParams?.data && (
     <DetailsValue value={callParams.data.slice(0, 10).toLowerCase()} />
   );
@@ -562,6 +598,17 @@ const Params = (props: {
             ? [["Function", decoding.signature] as [string, ReactNode]]
             : []),
           ...(selector ? [["Selector", selector] as [string, ReactNode]] : []),
+          ...(block !== undefined
+            ? [
+                [
+                  "Block",
+                  <ValueParts parts={formatBlockParam(block).parts} />,
+                ] as [string, ReactNode],
+              ]
+            : []),
+          ...(overriddenAddresses
+            ? [["State override", overriddenAddresses] as [string, ReactNode]]
+            : []),
         ]}
       />
       {decoding?.status === "decoded" && (
@@ -612,14 +659,46 @@ const Params = (props: {
       ) : (
         decodedInput && <Section title="Decoded input">{decodedInput}</Section>
       )}
+      {namedParams && namedParams.length > 0 && (
+        <Section title="Params">
+          <Fields
+            fields={namedParams.map(({ name, parts }) => [
+              name,
+              <ValueParts parts={parts} />,
+            ])}
+          />
+        </Section>
+      )}
       <RawSection
         title="Raw params"
         code={() => formatCode(request.requestBody.params)}
-        hasDecodedView={!!innerCalls || decoding?.status === "decoded"}
+        hasDecodedView={
+          !!innerCalls ||
+          decoding?.status === "decoded" ||
+          !!namedParams?.length
+        }
       />
     </>
   );
 };
+
+// The lines of a scalar Chain method's result; labelled when the value reads
+// several ways
+const ValueLines = ({ lines }: { lines: ValueLine[] }) =>
+  lines.some(({ label }) => label) ? (
+    <Fields
+      fields={lines.map(({ label, parts }) => [
+        label ?? "",
+        <ValueParts parts={parts} />,
+      ])}
+    />
+  ) : (
+    lines.map(({ parts }, index) => (
+      <div key={index} className="rpc-details-field-value">
+        <ValueParts parts={parts} />
+      </div>
+    ))
+  );
 
 // The calls that return a transaction hash
 const TRANSACTION_HASH_METHODS = [
@@ -748,6 +827,7 @@ const Response = (props: {
 }) => {
   const { request, decoding, revert, innerCalls } = props;
   const { response } = request;
+  const chainId = useContext(DetailsChainContext);
   const status = getRpcRequestStatus(request);
   const resultCountMismatch = useMemo(
     () => getResultCountMismatch(request),
@@ -842,8 +922,19 @@ const Response = (props: {
     );
   }
 
+  const valueLines = formatChainMethodResult(
+    request.requestBody.method,
+    result,
+    chainId,
+  );
+
   return (
     <>
+      {valueLines && (
+        <Section title="Value">
+          <ValueLines lines={valueLines} />
+        </Section>
+      )}
       {decoding?.status === "decoded" && decoding.returnValues && (
         <Section title="Decoded return value">
           <DecodedValues
@@ -863,7 +954,8 @@ const Response = (props: {
         title="Raw result"
         code={rawResult}
         hasDecodedView={
-          decoding?.status === "decoded" && !!decoding.returnValues
+          !!valueLines ||
+          (decoding?.status === "decoded" && !!decoding.returnValues)
         }
       />
     </>

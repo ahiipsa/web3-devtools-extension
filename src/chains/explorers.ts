@@ -47,7 +47,8 @@ const EXPLORERS: Record<number, string> = {
   1284: "https://moonscan.io",
 };
 
-// What an Explorer can look up; a block number in decimal or 0x hex
+// What an Explorer can look up; a block by its hash, or by its number in
+// decimal or 0x hex
 export type ExplorerTarget =
   | { kind: "address"; value: string }
   | { kind: "transaction"; value: string }
@@ -65,6 +66,9 @@ const getPath = (target: ExplorerTarget) => {
     case "transaction":
       return `tx/${target.value}`;
     case "block": {
+      if (/^0x[0-9a-f]{64}$/i.test(target.value)) {
+        return `block/${target.value}`;
+      }
       const number = toDecimal(target.value);
       return number === undefined ? undefined : `block/${number}`;
     }
