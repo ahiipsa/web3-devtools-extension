@@ -1830,9 +1830,9 @@ async function smoke() {
     );
     check(
       "Response shows no Add ABI",
-      !(await ev(`document.querySelector(".rpc-details")?.innerText`)).includes(
-        "Add ABI",
-      ),
+      !(
+        (await ev(`document.querySelector(".rpc-details")?.innerText`)) ?? ""
+      ).includes("Add ABI"),
     );
     check(
       "Response shows no decoded returnData tuple[] and folds Raw result",
@@ -1875,7 +1875,7 @@ async function smoke() {
     await click(".rpc-details-tab", "Response");
     const rawResultListed = (results) =>
       results?.length === 2 &&
-      /^#1 InnerToken 0x7777…7777\s+balanceOf\(account: 0x28C6c06298d514Db089934071355E5743bf21d60\)\s+✓ /.test(
+      /^#1 InnerToken 0x7777…7777\s+balanceOf\(account: 0x28C6c06298d514Db089934071355E5743bf21d60\)\s+✓ 1000000$/.test(
         results[0],
       ) &&
       new RegExp(
