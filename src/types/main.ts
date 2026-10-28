@@ -42,6 +42,20 @@ export type RpcRequestStatus =
   // An RPC Response paired by id, but with neither result nor error
   | { kind: "invalid-response" };
 
+// Where an RPC Request sat in its Batch: 1-based index and the Batch's size
+export interface BatchPosition {
+  index: number;
+  size: number;
+}
+
+// The start of the HTTP response body, kept to show why an RPC Request failed
+export interface HttpResponseBody {
+  // The body cut to its first HTTP_RESPONSE_BODY_LIMIT characters
+  text: string;
+  // The full body's length in characters
+  length: number;
+}
+
 export interface RpcRequest {
   id: string;
   url: string;
@@ -55,4 +69,8 @@ export interface RpcRequest {
   httpStatus: number;
   // Whether the HTTP response body held any RPC Response at all.
   hasRpcResponseBody: boolean;
+  // Only for an RPC Request sent in a Batch
+  batchPosition?: BatchPosition;
+  // Only for an HTTP failure, no response or invalid response
+  httpResponseBody?: HttpResponseBody;
 }
