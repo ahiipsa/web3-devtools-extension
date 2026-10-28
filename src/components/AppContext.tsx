@@ -54,6 +54,8 @@ const abiFetcher = createAbiFetcher({
 export interface ContractTabTarget {
   requestId: string;
   address: `0x${string}`;
+  // Add ABI on an Inner Call: its position in the Multicall, from 0
+  innerCallIndex?: number;
 }
 
 interface AppContext {

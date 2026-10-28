@@ -4,7 +4,8 @@ import {
   deleteContract,
   getContract,
   getContracts,
-  parseAbiJson,
+  formatAbiSummary,
+  parseAbiInput,
   saveContract,
   saveFetchedContract,
 } from "./contract.ts";
@@ -195,17 +196,136 @@ describe("saveFetchedContract", () => {
   });
 });
 
-describe("parseAbiJson", () => {
+describe("parseAbiInput", () => {
   it("parses a pasted JSON ABI", () => {
-    expect(parseAbiJson(JSON.stringify(erc20Abi))).toEqual(erc20Abi);
+    expect(parseAbiInput(JSON.stringify(erc20Abi))).toEqual(erc20Abi);
+  });
+
+  it("takes the ABI out of a Foundry or Hardhat build artifact", () => {
+    const artifact = { abi: erc20Abi, bytecode: { object: "0x6080" } };
+    expect(parseAbiInput(JSON.stringify(artifact, null, 2))).toEqual(erc20Abi);
+  });
+
+  it("takes the ABI out of an Etherscan getabi response", () => {
+    const response = {
+      status: "1",
+      message: "OK",
+      result: JSON.stringify(erc20Abi),
+    };
+    expect(parseAbiInput(JSON.stringify(response))).toEqual(erc20Abi);
+  });
+
+  it("parses human-readable lines, one per line, skipping blank ones", () => {
+    const abi = parseAbiInput(
+      [
+        "function balanceOf(address owner) view returns (uint256)",
+        "",
+        "  event Transfer(address indexed from, address indexed to, uint256 value)",
+        "error InsufficientBalance(uint256 available)",
+      ].join("\n"),
+    );
+    expect(abi).toEqual([
+      {
+        type: "function",
+        name: "balanceOf",
+        stateMutability: "view",
+        inputs: [{ type: "address", name: "owner" }],
+        outputs: [{ type: "uint256" }],
+      },
+      {
+        type: "event",
+        name: "Transfer",
+        inputs: [
+          { type: "address", name: "from", indexed: true },
+          { type: "address", name: "to", indexed: true },
+          { type: "uint256", name: "value" },
+        ],
+      },
+      {
+        type: "error",
+        name: "InsufficientBalance",
+        inputs: [{ type: "uint256", name: "available" }],
+      },
+    ]);
+  });
+
+  it("resolves structs declared on their own lines", () => {
+    const abi = parseAbiInput(
+      "struct Call { address target; bytes callData; }\nfunction run(Call call)",
+    );
+    expect(abi).toEqual([
+      {
+        type: "function",
+        name: "run",
+        stateMutability: "nonpayable",
+        inputs: [
+          {
+            type: "tuple",
+            name: "call",
+            components: [
+              { type: "address", name: "target" },
+              { type: "bytes", name: "callData" },
+            ],
+          },
+        ],
+        outputs: [],
+      },
+    ]);
+  });
+
+  it("names the line of a human-readable signature that does not parse", () => {
+    expect(() =>
+      parseAbiInput(
+        "function balanceOf(address) view returns (uint256)\n\nfunction transfer(to, uint256)",
+      ),
+    ).toThrow('Line 3: Unknown type. Type "to" is not a valid ABI type.');
+  });
+
+  it("names the line of a JSON syntax error when the parser gives its position", () => {
+    vi.spyOn(JSON, "parse").mockImplementationOnce(() => {
+      throw new SyntaxError("Unexpected token x in JSON at position 13");
+    });
+    expect(() => parseAbiInput('[\n  {"a":1},\n  x]')).toThrow(
+      "Line 3: ABI is not valid JSON",
+    );
+    vi.restoreAllMocks();
   });
 
   it.each([
     ["not JSON", "{ nope", "ABI is not valid JSON"],
-    ["not an array", '{"type":"function"}', "ABI must be a JSON array"],
+    [
+      "an object without an abi array",
+      '{"type":"function"}',
+      'ABI must be a JSON array or an object with an "abi" array',
+    ],
     ["an empty array", "[]", "ABI has no entries"],
+    ["structs alone", "struct S { uint256 a; }", "ABI has no entries"],
     ["an entry without a type", '[{"name":"foo"}]', "ABI entry 0 has no type"],
   ])("rejects %s", (_case, input, message) => {
-    expect(() => parseAbiJson(input)).toThrow(message);
+    expect(() => parseAbiInput(input)).toThrow(message);
+  });
+});
+
+describe("formatAbiSummary", () => {
+  it("counts functions, events and errors", () => {
+    expect(
+      formatAbiSummary(
+        parseAbiInput(
+          [
+            "constructor(uint256 supply)",
+            "function a()",
+            "function b()",
+            "event E()",
+            "error X()",
+            "error Y()",
+            "error Z()",
+          ].join("\n"),
+        ),
+      ),
+    ).toBe("2 functions · 1 event · 3 errors");
+  });
+
+  it("says 0 for what the ABI lacks", () => {
+    expect(formatAbiSummary(erc20Abi)).toBe("1 function · 0 events · 0 errors");
   });
 });

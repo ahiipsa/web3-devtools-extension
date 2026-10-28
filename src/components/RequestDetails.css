@@ -141,6 +141,29 @@
   margin-top: 2px;
 }
 
+/* The Contract tab: where the ABI comes from, Fetch ABI on the right; both
+   wrap in a narrow details pane */
+.rpc-contract-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 8px;
+  margin-bottom: 8px;
+}
+
+.rpc-contract-source,
+.rpc-contract-address {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.rpc-contract-abi.ant-input {
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-size: 12px;
+  resize: vertical;
+}
+
 /* The Revert, then the RPC error it came in */
 .rpc-details-revert {
   margin-bottom: 4px;

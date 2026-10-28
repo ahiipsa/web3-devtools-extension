@@ -58,6 +58,7 @@ import { useAbiFetchState } from "../hooks/useAbiFetchState.ts";
 import { formatAbiFetchState } from "../abiSources/formatAbiFetchState.ts";
 import { trimContractAddress } from "../utils/text.ts";
 import { formatAddress, formatShortAddress } from "../details/formatAddress.ts";
+import { formatInnerCallTargetTitle } from "../details/contractTab.ts";
 import {
   isRawSectionOpen,
   loadRawSectionFolds,
@@ -126,8 +127,8 @@ export const RequestDetails = ({ request, onClose }: RequestDetailsProps) => {
     contractTabTarget?.requestId === request.id
       ? contractTabTarget.address
       : callParams?.to;
-  const showContractFor = (address: `0x${string}`) =>
-    showContractTab({ requestId: request.id, address });
+  const showContractFor = (address: `0x${string}`, innerCallIndex?: number) =>
+    showContractTab({ requestId: request.id, address, innerCallIndex });
 
   const tabListRef = useRef<HTMLDivElement>(null);
   const shownTabRef = useRef<HTMLButtonElement>(null);
@@ -225,25 +226,37 @@ export const RequestDetails = ({ request, onClose }: RequestDetailsProps) => {
           )}
           {shownTab === "Contract" && callParams && contractTabAddress && (
             <>
-              {normalizeAddress(contractTabAddress) !==
-                normalizeAddress(callParams.to) && (
-                <div className="flex flex-row flex-wrap items-center gap-x-2 mb-2">
-                  <span className="rpc-details-muted break-all">
-                    Inner Call target {contractTabAddress}
-                  </span>
-                  <Button
-                    size="small"
-                    type="link"
-                    onClick={() => showContractFor(callParams.to)}
-                  >
-                    Back to {trimContractAddress(callParams.to)}
-                  </Button>
-                </div>
-              )}
+              {contractTabTarget?.requestId === request.id &&
+                contractTabTarget.innerCallIndex !== undefined &&
+                normalizeAddress(contractTabAddress) !==
+                  normalizeAddress(callParams.to) && (
+                  <div className="flex flex-row flex-wrap items-center gap-x-2 mb-2">
+                    <span className="rpc-details-muted break-all">
+                      {formatInnerCallTargetTitle(
+                        contractTabTarget.innerCallIndex,
+                        contract?.name ?? trimContractAddress(callParams.to),
+                        callParams.to,
+                      )}
+                    </span>
+                    <Button
+                      size="small"
+                      type="link"
+                      onClick={() => showContractFor(callParams.to)}
+                    >
+                      Back to{" "}
+                      {contract?.name ?? trimContractAddress(callParams.to)}
+                    </Button>
+                  </div>
+                )}
               <ContractForm
                 key={normalizeAddress(contractTabAddress)}
                 contractAddress={contractTabAddress}
                 endpoint={request.url}
+                builtIn={findBuiltInContractFor(
+                  contractTabAddress,
+                  callParams,
+                  innerCalls,
+                )}
               />
             </>
           )}
@@ -251,6 +264,24 @@ export const RequestDetails = ({ request, onClose }: RequestDetailsProps) => {
       </div>
     </DetailsChainContext.Provider>
   );
+};
+
+// The built-in ABI the calls to an address decode with while it has no
+// Contract: `to` by the RPC Request's calldata, an Inner Call target by its
+// Inner Calls'
+const findBuiltInContractFor = (
+  address: `0x${string}`,
+  callParams: ContractCall,
+  innerCalls: InnerCall[] | undefined,
+) => {
+  const target = normalizeAddress(address);
+  if (target === normalizeAddress(callParams.to)) {
+    return findBuiltInContract(callParams.data);
+  }
+  return innerCalls
+    ?.filter((innerCall) => normalizeAddress(innerCall.target) === target)
+    .map((innerCall) => findBuiltInContract(innerCall.callData))
+    .find(Boolean);
 };
 
 const Section = (props: { title: string; children: ReactNode }) => (
@@ -475,7 +506,7 @@ const InnerCalls = (props: {
   innerCalls: InnerCall[];
   endpoint: string;
   findContract: FindContract;
-  onAddAbi: (address: `0x${string}`) => void;
+  onAddAbi: (address: `0x${string}`, innerCallIndex?: number) => void;
 }) => {
   const { innerCalls, endpoint, findContract, onAddAbi } = props;
 
@@ -501,7 +532,7 @@ const InnerCalls = (props: {
             <AbiFetch
               endpoint={endpoint}
               target={innerCall.target}
-              onAddAbi={onAddAbi}
+              onAddAbi={(target) => onAddAbi(target, index)}
             />
           )}
         </li>
@@ -519,7 +550,7 @@ const Params = (props: {
   decoding: Decoding | undefined;
   innerCalls: InnerCall[] | undefined;
   findContract: FindContract;
-  onAddAbi: (address: `0x${string}`) => void;
+  onAddAbi: (address: `0x${string}`, innerCallIndex?: number) => void;
 }) => {
   const {
     request,

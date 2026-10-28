@@ -1115,6 +1115,13 @@ async function smoke() {
   // The details pane's tab body only, without the table
   const detailsBody = () =>
     ev(`document.querySelector(".rpc-details-body")?.innerText ?? ""`);
+  // The Contract tab's row above the form: where the ABI comes from
+  const contractHeader = () =>
+    ev(`document.querySelector(".rpc-contract-header")?.innerText ?? ""`);
+  const storedContract = (address) =>
+    ev(
+      `chrome.storage.local.get("contracts").then((s) => s.contracts?.["${address}"] ?? null)`,
+    );
   // A check that something happened only once, or not at all, cannot wait
   // for a state: it gives the Panel this long to do it anyway
   const DUPLICATE_WINDOW = 500;
@@ -1233,17 +1240,66 @@ async function smoke() {
         `document.querySelector(".rpc-details-tab[aria-selected=true]")?.innerText`,
       )) === "Contract" &&
         /No verified ABI on Sourcify/.test(await detailsBody()) &&
-        !/Inner Call target/.test(await detailsBody()),
+        !/Inner Call #/.test(await detailsBody()),
+    );
+    check(
+      "the Contract tab shows the address whole in checksum case, Name and ABI",
+      /Fetch ABI\s+Address\s+0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48\s+Name\s+ABI\s+Reset\s+Save$/.test(
+        await detailsBody(),
+      ),
+      json((await detailsBody()).slice(0, 120)),
     );
     await click(".rpc-details input");
     await type("USDC");
+    // A human-readable line with a missing parameter type is not saved
     await click(".rpc-details textarea");
-    await type(JSON.stringify(BALANCE_OF_ABI));
+    await type("function transfer(to, uint256)");
     await click("button", "Save");
-    await until(() =>
-      ev(
-        `chrome.storage.local.get("contracts").then((s) => !!s.contracts?.["${TOKEN}"])`,
-      ),
+    const abiError = await until(detailsBody, (text) =>
+      /Line 1: Unknown type/.test(text),
+    );
+    await sleep(DUPLICATE_WINDOW);
+    check(
+      "a human-readable line with a missing parameter type shows an error and does not save",
+      /Line 1: Unknown type\. Type "to" is not a valid ABI type\./.test(
+        abiError,
+      ) && (await storedContract(TOKEN)) === null,
+      json(abiError.slice(-160)),
+    );
+    // A Foundry build artifact saves its ABI as a JSON array
+    await click("button", "Reset");
+    await click(".rpc-details input");
+    await type("USDC");
+    await click(".rpc-details textarea");
+    await type(
+      JSON.stringify({ abi: BALANCE_OF_ABI, bytecode: { object: "0x6080" } }),
+    );
+    const artifactSummary = await until(detailsBody, (text) =>
+      /1 function · 0 events · 0 errors/.test(text),
+    );
+    check(
+      "a pasted Foundry artifact shows the ABI summary",
+      /1 function · 0 events · 0 errors/.test(artifactSummary),
+    );
+    await click("button", "Save");
+    const savedArtifact = await until(() => storedContract(TOKEN));
+    check(
+      "a Foundry artifact is saved as a JSON ABI array",
+      // Storage sorts the keys of each entry
+      Array.isArray(savedArtifact?.abi) &&
+        json(savedArtifact.abi.map((entry) => entry.name)) ===
+          json(["balanceOf"]),
+      json(savedArtifact),
+    );
+    check(
+      "a Contract the user saved says Saved by you, with Save, Reset and Delete",
+      (await until(contractHeader, (text) => text === "Saved by you")) ===
+        "Saved by you" &&
+        json(
+          await ev(
+            `[...document.querySelectorAll(".rpc-details-body form .ant-btn")].map((b) => b.innerText.trim())`,
+          ),
+        ) === json(["Reset", "Save", "Delete"]),
     );
     await click(".rpc-details-tab", "Params");
     const params = await textSoon(
@@ -1516,10 +1572,14 @@ async function smoke() {
     await clickRow({ contract: "WETH9" });
     await click(".rpc-details-tab", "Contract");
     check(
-      "the Contract tab says From Sourcify",
-      /From Sourcify/.test(
-        await textSoon((text) => /From Sourcify/.test(text)),
-      ),
+      "the Contract tab says Sourcify, with Save as mine, Reset and Forget fetched ABI",
+      (await until(contractHeader, (text) => text === "Sourcify")) ===
+        "Sourcify" &&
+        json(
+          await ev(
+            `[...document.querySelectorAll(".rpc-details-body form .ant-btn")].map((b) => b.innerText.trim())`,
+          ),
+        ) === json(["Reset", "Save as mine", "Forget fetched ABI"]),
     );
     await shot("05-from-sourcify");
     check(
@@ -1586,10 +1646,9 @@ async function smoke() {
     await clickRow({ contract: "LinkToken" });
     await click(".rpc-details-tab", "Contract");
     check(
-      "the Contract tab says From Etherscan",
-      /From Etherscan/.test(
-        await textSoon((text) => /From Etherscan/.test(text)),
-      ),
+      "the Contract tab says Etherscan",
+      (await until(contractHeader, (text) => text === "Etherscan")) ===
+        "Etherscan",
     );
     await shot("07-from-etherscan");
     await app.rpc(callTo(11, UNVERIFIED));
@@ -1622,10 +1681,14 @@ async function smoke() {
     );
     await clickRow({ contract: "FiatTokenV2_2" });
     await click(".rpc-details-tab", "Contract");
-    const viaProxy = /From Sourcify, via proxy/;
+    const viaProxy = (text) =>
+      text.toLowerCase() ===
+      `sourcify · via proxy · implementation ${IMPLEMENTATION}`;
+    const viaProxyHeader = await until(contractHeader, viaProxy);
     check(
-      "the Contract tab says From Sourcify, via proxy",
-      viaProxy.test(await textSoon((text) => viaProxy.test(text))),
+      "the Contract tab says Sourcify · via proxy · implementation <address>",
+      viaProxy(viaProxyHeader),
+      json(viaProxyHeader),
     );
     await shot("08-via-proxy");
     await app.rpc(callTo(13, SLOT_PROXY));
@@ -1760,7 +1823,8 @@ async function smoke() {
     await click(".rpc-details-tab", "Params");
     await click(".rpc-details-inner-call button", "Add ABI");
     const innerContractTabShown = (text) =>
-      text.includes(`Inner Call target ${INNER_UNVERIFIED}`) &&
+      text.includes("Inner Call #2 of Multicall3 0xcA11…CA11") &&
+      /Back to Multicall3/.test(text) &&
       /No verified ABI on Sourcify/.test(text) &&
       /Fetch ABI/.test(text);
     const innerContractTab = await textSoon(innerContractTabShown);
@@ -1771,11 +1835,47 @@ async function smoke() {
       )) === "Contract" && innerContractTabShown(innerContractTab),
     );
     await shot("10-inner-call-contract");
+    // Three human-readable lines are saved as a JSON ABI array
+    await click(".rpc-details input");
+    await type("Probe");
+    await click(".rpc-details textarea");
+    await type(
+      "function probe(uint256 amount) returns (bool)\nevent Probed(address indexed by)\nerror NotProbed()",
+    );
+    await click("button", "Save");
+    const probe = await until(() => storedContract(INNER_UNVERIFIED));
+    check(
+      "three human-readable lines are saved as a JSON ABI array",
+      Array.isArray(probe?.abi) &&
+        json(probe.abi.map((entry) => `${entry.type} ${entry.name}`)) ===
+          json(["function probe", "event Probed", "error NotProbed"]),
+      json(probe),
+    );
+    await click("button", "Back to Multicall3");
+    const multicallHeader = await until(contractHeader, (text) =>
+      text.startsWith("Built-in Multicall3 ABI"),
+    );
+    check(
+      "Back to Multicall3 shows the aggregator's built-in ABI, filled in, without Forget",
+      multicallHeader.startsWith("Built-in Multicall3 ABI") &&
+        (await ev(`document.querySelector(".rpc-details input")?.value`)) ===
+          "Multicall3" &&
+        /aggregate3/.test(
+          await ev(`document.querySelector(".rpc-details textarea")?.value`),
+        ) &&
+        json(
+          await ev(
+            `[...document.querySelectorAll(".rpc-details-body form .ant-btn")].map((b) => b.innerText.trim())`,
+          ),
+        ) === json(["Reset", "Save as mine"]),
+      json(multicallHeader),
+    );
+    await shot("10b-built-in-multicall3");
     await clickRow({ contract: "Multicall3" }, 0);
     check(
       "selecting another RPC Request resets the Contract tab to its `to`",
-      !/Inner Call target/.test(
-        await textSoon((text) => !/Inner Call target/.test(text)),
+      !/Inner Call #/.test(
+        await textSoon((text) => !/Inner Call #/.test(text)),
       ),
     );
 
@@ -1853,10 +1953,9 @@ async function smoke() {
     await clickRow({ contract: "DownToken" });
     await click(".rpc-details-tab", "Contract");
     check(
-      "the Contract tab says From Etherscan after a Sourcify failure",
-      /From Etherscan/.test(
-        await textSoon((text) => /From Etherscan/.test(text)),
-      ),
+      "the Contract tab says Etherscan after a Sourcify failure",
+      (await until(contractHeader, (text) => text === "Etherscan")) ===
+        "Etherscan",
     );
     await shot("14-sourcify-down");
     await key("Escape");
@@ -1963,7 +2062,9 @@ async function smoke() {
       );
       check(
         `on ${chain} the Overview starts with the decoded call line and the Chain`,
-        /^balanceOf\(account: 0x28C6…1d60\) → 1000000$/.test(overview?.callLine) &&
+        /^balanceOf\(account: 0x28C6…1d60\) → 1000000$/.test(
+          overview?.callLine,
+        ) &&
           overview.fields[0] ===
             `Chain ${path === "/base" ? "Base · 8453" : "Localhost · 31337"}` &&
           overview.fields.at(-1).startsWith("Contract WETH9 "),
@@ -2264,6 +2365,43 @@ async function smoke() {
       "an RPC Request sent alone shows no Batch field",
       !fieldNames(alone).includes("Batch") && alone.callLine === null,
       json(alone),
+    );
+    // The Contract tab at 320 px: the header of a Contract fetched via proxy
+    // and the buttons wrap; Forget fetched ABI asks first, then removes it
+    // for the rest of the Panel session
+    await clickRow({ contract: "FiatTokenV2_2" });
+    await narrowDetails();
+    await click(".rpc-details-tab", "Contract");
+    await until(contractHeader, (text) => /via proxy/.test(text));
+    check(
+      "the Contract tab of a proxy fits a 320 px details pane",
+      await noOverflow(),
+    );
+    await shot("25-contract-proxy-320");
+    await click("button", "Forget fetched ABI");
+    const forgetText = await until(detailsBody, (text) =>
+      /Forget the fetched ABI\?/.test(text),
+    );
+    check(
+      "Forget fetched ABI asks first, fitting 320 px",
+      /Forget the fetched ABI\? It is fetched again the next time DevTools opens\.\s+Forget\s+Keep/.test(
+        forgetText,
+      ) && (await noOverflow()),
+      json(forgetText.slice(-140)),
+    );
+    await shot("26-forget-320");
+    const sourcifyAsked = app.sourcifyUrls.length;
+    await click("button", "Forget");
+    const forgotten = await until(contractHeader, (text) =>
+      /No ABI for this address/.test(text),
+    );
+    await sleep(DUPLICATE_WINDOW);
+    check(
+      "a forgotten fetched Contract is removed and not fetched again this session",
+      /No ABI for this address\s+Fetch ABI/.test(forgotten) &&
+        (await storedContract(PROXY)) === null &&
+        app.sourcifyUrls.length === sourcifyAsked,
+      json(forgotten),
     );
     await shot("15-end");
     // Both bars, for a human to compare by eye

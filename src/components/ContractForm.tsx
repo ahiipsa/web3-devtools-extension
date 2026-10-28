@@ -1,54 +1,81 @@
 import {
-  ContractProxy,
   deleteContract,
-  parseAbiJson,
+  formatAbiSummary,
+  parseAbiInput,
   saveContract,
 } from "../dal/contract.ts";
-import { useEffect, useState } from "react";
+import { useContext, useEffect, useMemo, useState } from "react";
 import { useContractQuery } from "../hooks/useContractQuery.ts";
 import { Button, Form, FormProps, Input, message } from "antd";
 import { useAbiFetchState } from "../hooks/useAbiFetchState.ts";
+import { BuiltInContract } from "../decoding/multicall.ts";
 import {
-  ABI_SOURCE_NAMES,
-  formatAbiFetchState,
-} from "../abiSources/formatAbiFetchState.ts";
+  getContractTabHeader,
+  getContractTabKind,
+} from "../details/contractTab.ts";
+import { formatAddress } from "../details/formatAddress.ts";
+import { AppContext } from "./AppContext.tsx";
+import { DetailsValue } from "./DetailsValue.tsx";
 
 interface ContractInfoProps {
   contractAddress: `0x${string}`;
   // The Endpoint of the RPC Request, whose Chain the ABI is fetched for; the
   // address is its `to` or one of its Inner Call targets
   endpoint: string;
+  // The built-in ABI that decodes the calls to the address while it has no
+  // Contract: Multicall3 for a Multicall
+  builtIn?: BuiltInContract;
 }
-
-// Follows "From <ABI Source>"
-const formatContractProxy = (proxy: ContractProxy | undefined) => {
-  switch (proxy?.abi) {
-    case "implementation":
-      return ", via proxy";
-    case "proxy":
-      return ", proxy's own ABI: its implementation has no verified ABI";
-    default:
-      return "";
-  }
-};
 
 type FieldType = {
   contractName: string;
   abi: string;
 };
 
+const ABI_PLACEHOLDER = [
+  'A JSON ABI array, a build artifact with an "abi" array (Hardhat, Foundry, Etherscan), or human-readable lines:',
+  "function balanceOf(address owner) view returns (uint256)",
+  "event Transfer(address indexed from, address indexed to, uint256 value)",
+  "error InsufficientBalance(uint256 available)",
+].join("\n");
+
+// The summary under the ABI field once it parses; a parse error takes its
+// place as the field's validation message
+const getAbiSummary = (value: string | undefined) => {
+  if (!value?.trim()) {
+    return undefined;
+  }
+  try {
+    return formatAbiSummary(parseAbiInput(value));
+  } catch {
+    return undefined;
+  }
+};
+
+const errorMessage = (error: unknown) =>
+  error instanceof Error ? error.message : String(error);
+
 export const ContractForm = (props: ContractInfoProps) => {
-  const { contractAddress, endpoint } = props;
+  const { contractAddress, endpoint, builtIn } = props;
+  const { settings } = useContext(AppContext);
 
   const contractQuery = useContractQuery({
     contractAddress,
   });
 
   const contract = contractQuery.data;
+  const kind = getContractTabKind(contract, builtIn);
   const abiFetch = useAbiFetchState(endpoint, contractAddress);
-  const abiFetchLabel = formatAbiFetchState(abiFetch.state);
+  const header = getContractTabHeader({
+    contract,
+    builtIn,
+    fetchState: abiFetch.state,
+    hasEtherscanKey: !!settings.etherscanApiKey.trim(),
+  });
 
-  const [form] = Form.useForm();
+  const [form] = Form.useForm<FieldType>();
+  const abiValue = Form.useWatch("abi", form);
+  const abiSummary = useMemo(() => getAbiSummary(abiValue), [abiValue]);
 
   // Inline confirmation instead of a browser confirm() dialog
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -64,33 +91,38 @@ export const ContractForm = (props: ContractInfoProps) => {
 
   const [messageApi, messageContextHolder] = message.useMessage();
 
+  const shown = contract ?? builtIn;
   const initialValues: FieldType = {
-    contractName: contract?.name || "",
-    abi: contract ? JSON.stringify(contract.abi, null, 2) : "",
+    contractName: shown?.name || "",
+    abi: shown ? JSON.stringify(shown.abi, null, 2) : "",
   };
 
+  // Saving makes the Contract the user's own: no ABI Source, no proxy
   const onFinish: FormProps<FieldType>["onFinish"] = async (values) => {
     try {
       await saveContract({
         address: contractAddress,
         name: values.contractName,
-        abi: parseAbiJson(values.abi),
+        abi: parseAbiInput(values.abi),
       });
       messageApi.success("Contract saved");
     } catch (error) {
-      messageApi.error(
-        `Failed to save Contract: ${error instanceof Error ? error.message : String(error)}`,
-      );
+      messageApi.error(`Failed to save Contract: ${errorMessage(error)}`);
     }
   };
 
+  // A fetched Contract is only forgotten until DevTools reopens: the ABI is
+  // fetched once per Chain and address per Panel session
   const onDelete = async () => {
+    const fetched = kind === "fetched";
     try {
       await deleteContract(contractAddress);
-      messageApi.success("Contract deleted");
+      messageApi.success(
+        fetched ? "Fetched ABI forgotten" : "Contract deleted",
+      );
     } catch (error) {
       messageApi.error(
-        `Failed to delete Contract: ${error instanceof Error ? error.message : String(error)}`,
+        `Failed to ${fetched ? "forget the fetched ABI" : "delete Contract"}: ${errorMessage(error)}`,
       );
     } finally {
       setConfirmingDelete(false);
@@ -100,40 +132,35 @@ export const ContractForm = (props: ContractInfoProps) => {
   return (
     <>
       {messageContextHolder}
-      {contract?.source && ABI_SOURCE_NAMES[contract.source] && (
-        <div
-          className="rpc-details-muted mb-2"
-          title={
-            contract.proxy
-              ? `Implementation ${contract.proxy.implementation}`
-              : undefined
-          }
-        >
-          From {ABI_SOURCE_NAMES[contract.source]}
-          {formatContractProxy(contract.proxy)}
-        </div>
-      )}
-      {/* Only for an address without a Contract; the form stays usable */}
-      {contractQuery.isSuccess && !contract && (
-        <div className="flex flex-row items-center gap-4 mb-4">
-          {abiFetchLabel && (
-            <span
-              className={
-                abiFetch.state.kind === "failed"
-                  ? "rpc-details-failed"
-                  : "rpc-details-muted"
-              }
+      {contractQuery.isSuccess && (
+        <div className="rpc-contract-header">
+          <span className="rpc-contract-source">
+            {header.segments.map(({ text, tone }, index) => (
+              <span
+                key={index}
+                className={
+                  tone === "failed" ? "rpc-details-failed" : "rpc-details-muted"
+                }
+              >
+                {text}
+              </span>
+            ))}
+            {header.implementation && (
+              <DetailsValue
+                value={formatAddress(header.implementation)}
+                explorer="address"
+              />
+            )}
+          </span>
+          {header.fetchAbi && (
+            <Button
+              size="small"
+              disabled={header.fetchAbi === "disabled"}
+              onClick={() => void abiFetch.fetchAbi()}
             >
-              {abiFetchLabel}
-            </span>
+              Fetch ABI
+            </Button>
           )}
-          <Button
-            size="small"
-            disabled={abiFetch.state.kind === "fetching"}
-            onClick={() => void abiFetch.fetchAbi()}
-          >
-            Fetch ABI
-          </Button>
         </div>
       )}
       <Form
@@ -145,8 +172,17 @@ export const ContractForm = (props: ContractInfoProps) => {
         autoComplete="off"
       >
         <div className="flex flex-col gap-2">
+          <Form.Item label="Address">
+            <span className="rpc-contract-address">
+              <DetailsValue
+                value={formatAddress(contractAddress)}
+                explorer="address"
+              />
+            </span>
+          </Form.Item>
+
           <Form.Item<FieldType>
-            label="Contract Name"
+            label="Name"
             name="contractName"
             rules={[{ required: true }]}
           >
@@ -156,22 +192,28 @@ export const ContractForm = (props: ContractInfoProps) => {
           <Form.Item<FieldType>
             label="ABI"
             name="abi"
+            extra={abiSummary}
             rules={[
               { required: true, message: "Required" },
               {
-                // parseAbiJson's message is shown under the field
+                // parseAbiInput's message is shown under the field
                 validator: async (_rule, value) => {
                   if (value) {
-                    parseAbiJson(value);
+                    parseAbiInput(value);
                   }
                 },
               },
             ]}
           >
-            <Input.TextArea />
+            <Input.TextArea
+              className="rpc-contract-abi"
+              rows={14}
+              spellCheck={false}
+              placeholder={ABI_PLACEHOLDER}
+            />
           </Form.Item>
           <Form.Item label={null}>
-            <div className="flex flex-row gap-4">
+            <div className="flex flex-row flex-wrap gap-2">
               {/* Discards unsaved edits; disabled while there are none */}
               <Form.Item<FieldType> noStyle shouldUpdate>
                 {({ getFieldValue, isFieldsTouched }) => {
@@ -190,22 +232,25 @@ export const ContractForm = (props: ContractInfoProps) => {
                 }}
               </Form.Item>
               <Button type="primary" htmlType="submit">
-                Save
+                {kind === "fetched" || kind === "built-in"
+                  ? "Save as mine"
+                  : "Save"}
               </Button>
-              {contract && !confirmingDelete && (
+              {(kind === "own" || kind === "fetched") && !confirmingDelete && (
                 <Button danger onClick={() => setConfirmingDelete(true)}>
-                  Delete
+                  {kind === "fetched" ? "Forget fetched ABI" : "Delete"}
                 </Button>
               )}
             </div>
-            {contract && confirmingDelete && (
-              <div className="flex flex-row items-center gap-4 mt-4">
+            {(kind === "own" || kind === "fetched") && confirmingDelete && (
+              <div className="flex flex-row flex-wrap items-center gap-x-4 gap-y-2 mt-4">
                 <span>
-                  Delete this Contract? Its RPC Requests will no longer be
-                  decoded.
+                  {kind === "fetched"
+                    ? "Forget the fetched ABI? It is fetched again the next time DevTools opens."
+                    : "Delete this Contract? Its RPC Requests will no longer be decoded."}
                 </span>
                 <Button danger type="primary" onClick={onDelete}>
-                  Yes, delete
+                  {kind === "fetched" ? "Forget" : "Yes, delete"}
                 </Button>
                 <Button onClick={() => setConfirmingDelete(false)}>Keep</Button>
               </div>
