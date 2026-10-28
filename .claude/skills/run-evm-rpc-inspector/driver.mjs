@@ -1112,6 +1112,9 @@ async function smoke() {
   const callsContractSoon = (contract, fn) =>
     until(() => callsContract(contract, fn));
   const textSoon = (test) => until(app.text, test);
+  // The details pane's tab body only, without the table
+  const detailsBody = () =>
+    ev(`document.querySelector(".rpc-details-body")?.innerText ?? ""`);
   // A check that something happened only once, or not at all, cannot wait
   // for a state: it gives the Panel this long to do it anyway
   const DUPLICATE_WINDOW = 500;
@@ -1208,6 +1211,30 @@ async function smoke() {
         "https://sourcify.dev/server/v2/contract/1/0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48?fields=abi,compilation,proxyResolution",
       app.sourcifyUrls.join(", "),
     );
+    // Params of a call without a Contract: the fetch state and Add ABI, which
+    // opens the Contract tab for the called address
+    await click(".rpc-details-tab", "Params");
+    const paramsNoContract = await until(
+      detailsBody,
+      (text) =>
+        /No verified ABI on Sourcify/.test(text) && /Add ABI/.test(text),
+    );
+    check(
+      "Params of a call without a Contract shows the fetch state and Add ABI",
+      /^Decoded input\s+Selector\s+0x70a08231\s+No verified ABI on Sourcify\s+Add ABI\s+▼\s*Raw params/.test(
+        paramsNoContract,
+      ),
+      json(paramsNoContract),
+    );
+    await click(".rpc-details button", "Add ABI");
+    check(
+      "Add ABI opens the Contract tab for the called address",
+      (await ev(
+        `document.querySelector(".rpc-details-tab[aria-selected=true]")?.innerText`,
+      )) === "Contract" &&
+        /No verified ABI on Sourcify/.test(await detailsBody()) &&
+        !/Inner Call target/.test(await detailsBody()),
+    );
     await click(".rpc-details input");
     await type("USDC");
     await click(".rpc-details textarea");
@@ -1228,6 +1255,25 @@ async function smoke() {
       "Contract saved, input decoded with named arguments",
       /balanceOf\(address account\)/.test(params) &&
         /account\s+address\s+0x28C6/i.test(params),
+    );
+    check(
+      "decoded Params read Function, Selector, then the arguments; Raw params folded",
+      /^Decoded input\s+Function\s+balanceOf\(address account\)\s+Selector\s+0x70a08231\s+account\s+address\s+0x28C6/.test(
+        await detailsBody(),
+      ) &&
+        (await ev(
+          `document.querySelector(".rpc-details-fold")?.getAttribute("aria-expanded")`,
+        )) === "false",
+      json((await detailsBody()).slice(0, 120)),
+    );
+    const addressValue = await ev(
+      `(() => { const v = document.querySelector(".rpc-details-decoded-value .rpc-value"); return v && [v.innerText.split("\\n")[0], !!v.querySelector("button[aria-label^=Copy]"), !!v.querySelector(".rpc-value-explorer")] })()`,
+    );
+    check(
+      "an address argument is whole, in checksum case, with copy and ↗",
+      json(addressValue?.slice(1)) === json([true, true]) &&
+        /^0x28C6c06298d514Db089934071355E5743bf21d60/.test(addressValue[0]),
+      json(addressValue),
     );
     await shot("03-params-decoded");
     await click(".rpc-details-tab", "Response");
@@ -1956,6 +2002,14 @@ async function smoke() {
     await clickRow({ method: "eth_blockNumber" });
     await click(".rpc-details-tab", "Params");
     check(
+      "eth_blockNumber shows No params, without Raw params",
+      (
+        await until(detailsBody, (text) => text.trim() === "No params")
+      ).trim() === "No params" && (await rawParams()) == null,
+      json(await detailsBody()),
+    );
+    await clickRow({ method: "eth_getBalance" });
+    check(
       "Raw params is open without a decoded view",
       (await rawParams()) === "true",
     );
@@ -2083,6 +2137,33 @@ async function smoke() {
     await until(detailsInnerCalls, innerResultsListed);
     check("Inner Call results fit a 320 px details pane", await noOverflow());
     await shot("19-inner-call-results-320");
+
+    // Params at 320 px: a decoded input, and a call without a Contract
+    await clickRow({ contract: "Vault" }, 0);
+    await narrowDetails();
+    await click(".rpc-details-tab", "Params");
+    const vaultParams = await responseSoon((text) => /Function/.test(text));
+    check(
+      "decoded Params fit a 320 px details pane, Function before Selector",
+      /^Decoded input\s+Function\s+withdraw\(.*\)\s+Selector\s+0x/.test(
+        vaultParams,
+      ) && (await noOverflow()),
+      json(vaultParams.slice(0, 80)),
+    );
+    await shot("20-params-decoded-320");
+    // USDC: its Contract was deleted above
+    await clickRow({ method: "eth_call" }, 0);
+    await narrowDetails();
+    await click(".rpc-details-tab", "Params");
+    const unverifiedParams = await responseSoon((text) =>
+      /No verified ABI on Sourcify/.test(text),
+    );
+    check(
+      "the fetch state and Add ABI fit a 320 px details pane",
+      /Add ABI/.test(unverifiedParams) && (await noOverflow()),
+      json(unverifiedParams),
+    );
+    await shot("21-params-abi-fetch-320");
     await shot("15-end");
     // Both bars, for a human to compare by eye
     if (bars)

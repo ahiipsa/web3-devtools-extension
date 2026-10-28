@@ -132,8 +132,8 @@
   user-select: text;
 }
 
-/* Fetch state and Add ABI, for a target without a Contract */
-.rpc-details-inner-call-abi {
+/* Fetch state and Add ABI, for a called address without a Contract */
+.rpc-details-abi-fetch {
   display: flex;
   flex-wrap: wrap;
   align-items: center;

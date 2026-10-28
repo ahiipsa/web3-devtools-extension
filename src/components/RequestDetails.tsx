@@ -53,6 +53,7 @@ import {
 import { getRpcRequestRevert, Revert } from "../decoding/decodeRevert.ts";
 import { formatRevert, formatRpcError } from "../decoding/formatRevert.ts";
 import { getReturnData } from "../decoding/decodeRpcRequest.ts";
+import { hasRpcParams } from "../details/hasRpcParams.ts";
 import { formatHttpResponseBodyCut } from "../details/formatHttpResponseBody.ts";
 import { useAbiFetchState } from "../hooks/useAbiFetchState.ts";
 import { formatAbiFetchState } from "../abiSources/formatAbiFetchState.ts";
@@ -367,8 +368,8 @@ const Overview = (props: {
   return <Fields fields={fields} />;
 };
 
-// For an Inner Call target without a Contract
-const InnerCallAbiFetch = (props: {
+// For a called address without a Contract: `to` or an Inner Call target
+const AbiFetch = (props: {
   endpoint: string;
   target: `0x${string}`;
   onAddAbi: (address: `0x${string}`) => void;
@@ -377,7 +378,7 @@ const InnerCallAbiFetch = (props: {
   const { state } = useAbiFetchState(endpoint, target);
   const label = formatAbiFetchState(state);
   return (
-    <div className="rpc-details-inner-call-abi">
+    <div className="rpc-details-abi-fetch">
       {label && (
         <span
           className={
@@ -428,7 +429,7 @@ const InnerCalls = (props: {
             {formatInnerCallFunction(innerCall)}
           </div>
           {!findContract(innerCall.target) && (
-            <InnerCallAbiFetch
+            <AbiFetch
               endpoint={endpoint}
               target={innerCall.target}
               onAddAbi={onAddAbi}
@@ -459,40 +460,48 @@ const Params = (props: {
     onAddAbi,
   } = props;
 
+  if (!hasRpcParams(request.requestBody.params)) {
+    return <div className="rpc-details-muted">No params</div>;
+  }
+
+  const selector = callParams?.data && (
+    <DetailsValue value={callParams.data.slice(0, 10).toLowerCase()} />
+  );
+
   const decodedInput = callParams && (
     <>
-      {callParams.data && (
-        <Fields
-          fields={[
-            [
-              "Selector",
-              <DetailsValue
-                value={callParams.data.slice(0, 10).toLowerCase()}
-              />,
-            ],
-          ]}
-        />
-      )}
-      {decoding?.status === "decoded" && (
+      {decoding?.status === "decoded" ? (
         <>
-          <Fields fields={[["Function", decoding.signature]]} />
+          <Fields
+            fields={[
+              ["Function", decoding.signature],
+              ["Selector", selector],
+            ]}
+          />
           <DecodedValues values={decoding.args} empty="No arguments" />
         </>
+      ) : (
+        selector && <Fields fields={[["Selector", selector]]} />
       )}
       {decoding?.status === "mismatch" && (
         <DecodingMismatch>
           The Contract&apos;s ABI does not match this RPC Request
         </DecodingMismatch>
       )}
-      {!decoding && (
-        <div className="rpc-details-muted">
-          {!callParams.data
-            ? "This RPC Request sends no calldata"
-            : hasContract
-              ? "Not decoded"
-              : "Add the Contract's ABI in the Contract tab to decode"}
-        </div>
-      )}
+      {!decoding &&
+        (!callParams.data ? (
+          <div className="rpc-details-muted">
+            This RPC Request sends no calldata
+          </div>
+        ) : hasContract ? (
+          <div className="rpc-details-muted">Not decoded</div>
+        ) : (
+          <AbiFetch
+            endpoint={request.url}
+            target={callParams.to}
+            onAddAbi={onAddAbi}
+          />
+        ))}
     </>
   );
 
