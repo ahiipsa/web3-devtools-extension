@@ -6,7 +6,8 @@ import globals from "globals";
 import tseslint from "typescript-eslint";
 
 export default defineConfig([
-  globalIgnores(["build/", "release/", "node_modules/"]),
+  // Only TypeScript is linted; flat config would also pick up .js and .mjs
+  globalIgnores(["build/", "release/", "node_modules/", "**/*.{js,mjs,cjs}"]),
   {
     files: ["**/*.{ts,tsx}"],
     extends: [

@@ -137,9 +137,7 @@ export const RequestTable = ({ filter, scrollRef }: RequestTableProps) => {
     loadColumnSizing(localStorage),
   );
 
-  // The Panel is not built with React Compiler, so nothing is lost when it
-  // skips this component
-  // eslint-disable-next-line react-hooks/incompatible-library -- see above
+  // eslint-disable-next-line react-hooks/incompatible-library -- the Panel is not built with React Compiler; drop this if it ever is
   const table = useReactTable({
     ...rpcRequestTableOptions,
     data: filteredData,

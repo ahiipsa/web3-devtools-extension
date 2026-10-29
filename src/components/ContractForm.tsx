@@ -83,9 +83,10 @@ export const ContractForm = (props: ContractInfoProps) => {
 
   // Inline confirmation instead of a browser confirm() dialog
   const [confirmingDelete, setConfirmingDelete] = useState(false);
-  const [confirmingDeleteOf, setConfirmingDeleteOf] = useState(contract);
-  if (contract !== confirmingDeleteOf) {
-    setConfirmingDeleteOf(contract);
+  // Another Contract cancels a pending delete confirmation
+  const [prevContract, setPrevContract] = useState(contract);
+  if (contract !== prevContract) {
+    setPrevContract(contract);
     setConfirmingDelete(false);
   }
 
