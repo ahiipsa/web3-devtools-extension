@@ -95,7 +95,8 @@ try {
     )
     .map(([method]) => Number(method.match(/· (\d+)/)?.[1] ?? 0));
   await app.clickRow(MULTICALL, innerCalls.indexOf(Math.max(...innerCalls)));
-  // The page's own console errors would show as a badge in the DevTools toolbar
+  // The page's own console errors would show as a badge in the DevTools toolbar;
+  // requestClearMessages takes the TargetManager in Chromium 156's DevTools
   await app.devtools.evaluate(
     `(async () => { const { ConsoleModel, TargetManager } = await import("./core/sdk/sdk.js"); ConsoleModel.ConsoleModel.requestClearMessages(TargetManager.TargetManager.instance()); return 1 })()`,
   );

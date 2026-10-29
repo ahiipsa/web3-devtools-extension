@@ -575,9 +575,9 @@ const LEGACY = `(async () => (await import("./ui/legacy/legacy.js")).InspectorVi
 
 // The switches launchPersistentContext adds itself, for a Chromium started
 // without Playwright (--use-mock-keychain spares a keychain prompt). Copied
-// from chromiumSwitches.ts of the pinned playwright-core (1.64.1), which
-// bundles it into lib/coreBundle.js without exporting it: re-copy on a bump.
-// Used only on the macOS background path
+// from chromiumSwitches.ts of the pinned playwright-core (1.64.1), minus the
+// Edge-only entries; it is bundled into lib/coreBundle.js without an export:
+// re-copy on a bump. Used only on the macOS background path
 const PLAYWRIGHT_DISABLED_FEATURES = [
   "AvoidUnnecessaryBeforeUnloadCheckSync",
   "DestroyProfileOnBrowserClose",
