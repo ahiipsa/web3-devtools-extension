@@ -21,6 +21,9 @@ export type Revert =
       // The Contract whose ABI decoded it, when not the first ABI tried:
       // an error raised deeper in the call and bubbled up
       from?: string;
+      // The other stored Contracts whose ABIs decode it too, in store order,
+      // when `from` is neither the called address nor an Inner Call target
+      alsoFrom?: string[];
     }
   // Revert data nothing decodes
   | { kind: "raw"; data: Hex };
@@ -86,7 +89,7 @@ export interface ErrorLookup {
 }
 
 // The stored Contracts declaring the error: the called address's, then the
-// preferred ones, then the rest in store order
+// preferred ones, then the rest in store order; `known` for the first two
 const findErrorContracts = (
   selector: `0x${string}`,
   { index, address, preferred = [] }: ErrorLookup,
@@ -98,7 +101,10 @@ const findErrorContracts = (
     const position = order.indexOf(normalizeAddress(contract.address));
     return position === -1 ? order.length : position;
   };
-  return [...(index.get(selector) ?? [])].sort((a, b) => rank(a) - rank(b));
+  return (index.get(selector) ?? [])
+    .map((contract) => ({ contract, rank: rank(contract) }))
+    .sort((a, b) => a.rank - b.rank)
+    .map(({ contract, rank }) => ({ contract, known: rank < order.length }));
 };
 
 // Decodes revert data as Error(string), Panic(uint256) or a custom error the
@@ -123,8 +129,11 @@ export function decodeRevert(
   ) {
     return revert;
   }
-  // The first ABI whose error decodes by Selector and arguments wins
-  for (const contract of findErrorContracts(selector, lookup)) {
+  // The first ABI whose error decodes by Selector and arguments wins; one
+  // found only by Selector in the store is credited with the others that
+  // decode it too, since common errors are declared by many Contracts
+  const candidates = findErrorContracts(selector, lookup);
+  for (const [position, { contract, known }] of candidates.entries()) {
     const other = decodeWithAbi(data, contract.abi);
     if (other.kind !== "custom") {
       continue;
@@ -132,7 +141,22 @@ export function decodeRevert(
     const own =
       lookup.address &&
       normalizeAddress(contract.address) === normalizeAddress(lookup.address);
-    return own ? other : { ...other, from: formatContractName(contract) };
+    if (own) {
+      return other;
+    }
+    const from = formatContractName(contract);
+    const alsoFrom = known
+      ? []
+      : candidates
+          .slice(position + 1)
+          .filter(
+            (candidate) =>
+              decodeWithAbi(data, candidate.contract.abi).kind === "custom",
+          )
+          .map((candidate) => formatContractName(candidate.contract));
+    return alsoFrom.length > 0
+      ? { ...other, from, alsoFrom }
+      : { ...other, from };
   }
   return revert;
 }

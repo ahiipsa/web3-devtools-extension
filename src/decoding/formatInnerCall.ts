@@ -4,7 +4,11 @@ import {
   formatDecodedValue,
   formatInlineValues,
 } from "./formatDecodedValue.ts";
-import { formatRevert, formatRevertSource } from "./formatRevert.ts";
+import {
+  formatRevert,
+  formatRevertSource,
+  RevertSource,
+} from "./formatRevert.ts";
 import { DecodedValue } from "./decodeRpcRequest.ts";
 
 // The function's name, else the Selector
@@ -44,7 +48,7 @@ export type InnerCallOutcome =
   | { kind: "succeeded"; value: string; decoded: boolean }
   // Its Revert, none for empty revert data, and the other Contract whose ABI
   // decoded it
-  | { kind: "failed"; revert?: string; revertSource?: string }
+  | { kind: "failed"; revert?: string; revertSource?: RevertSource }
   // No result paired with it
   | { kind: "none" };
 

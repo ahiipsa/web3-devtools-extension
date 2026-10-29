@@ -53,9 +53,19 @@ describe("formatRevertSource", () => {
   };
 
   it("names the other Contract whose ABI decoded the error", () => {
-    expect(formatRevertSource({ ...custom, from: "UniswapV2Pair" })).toBe(
-      "from UniswapV2Pair",
-    );
+    expect(formatRevertSource({ ...custom, from: "UniswapV2Pair" })).toEqual({
+      text: "from UniswapV2Pair",
+    });
+  });
+
+  it("counts the other Contracts that declare the error too, all named in its tooltip", () => {
+    expect(
+      formatRevertSource({
+        ...custom,
+        from: "USDC",
+        alsoFrom: ["DAI", "WETH9"],
+      }),
+    ).toEqual({ text: "from USDC +2", title: "Declared by USDC, DAI, WETH9" });
   });
 
   it("is nothing for a Revert the first ABI decoded", () => {

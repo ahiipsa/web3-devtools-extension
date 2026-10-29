@@ -395,9 +395,10 @@ const StatusLabel = (props: { status: RpcRequestStatus; revert?: Revert }) => {
 };
 
 const Segments = ({ segments }: { segments: OverviewSegment[] }) =>
-  segments.map(({ text, tone }, index) => (
+  segments.map(({ text, tone, title }, index) => (
     <span
       key={index}
+      title={title}
       className={cx({
         "rpc-details-muted": tone === "muted",
         "rpc-details-failed": tone === "failed",
@@ -761,7 +762,12 @@ const DecodedRevert = (props: {
           <>
             <div className="rpc-details-failed rpc-details-decoded-value">
               {revert.signature}
-              {source && <span className="rpc-details-muted"> {source}</span>}
+              {source && (
+                <span className="rpc-details-muted" title={source.title}>
+                  {" "}
+                  {source.text}
+                </span>
+              )}
             </div>
             <DecodedValues values={revert.args} empty="No arguments" />
           </>
@@ -820,9 +826,12 @@ const InnerCallResults = (props: {
                   <div className="rpc-details-failed rpc-details-decoded-value">
                     ✗{outcome.revert !== undefined && ` ${outcome.revert}`}
                     {outcome.revertSource && (
-                      <span className="rpc-details-muted">
+                      <span
+                        className="rpc-details-muted"
+                        title={outcome.revertSource.title}
+                      >
                         {" "}
-                        {outcome.revertSource}
+                        {outcome.revertSource.text}
                       </span>
                     )}
                   </div>

@@ -2,7 +2,11 @@ import { describe, expect, it, vi } from "vitest";
 import { Abi, encodeFunctionData, getAddress, parseAbi } from "viem";
 import { RpcRequest } from "../types/main.ts";
 import { Contract } from "../dal/contract.ts";
-import { AbiSourceOutcomes, ContractAbi } from "./abiSources.ts";
+import {
+  AbiSourceOutcomes,
+  ContractAbi,
+  fetchContractAbi,
+} from "./abiSources.ts";
 import { createAbiFetcher } from "./abiFetcher.ts";
 import { createEndpointChains } from "../chains/endpointChains.ts";
 
@@ -807,6 +811,58 @@ describe("Setting an Etherscan API key", () => {
     await flush();
 
     expect(deps.fetchAbi).toHaveBeenCalledTimes(1);
+  });
+
+  it("re-fetches a proxy found on Sourcify whose implementation needs a paid plan, saving nothing before", async () => {
+    // Sourcify has the proxy, which names DAI as its implementation; only a
+    // paid key gets DAI's ABI from Etherscan
+    const PAID_KEY = "PAID";
+    const fetchAbi = (chainId: number, address: string) =>
+      fetchContractAbi(
+        {
+          sourcify: async (_chainId, address) =>
+            address === WETH
+              ? {
+                  kind: "found",
+                  name: "FiatTokenProxy",
+                  abi: ABI,
+                  implementation: DAI,
+                }
+              : { kind: "not-found" },
+          etherscan: async (chainId, _address, apiKey) =>
+            apiKey === PAID_KEY
+              ? { kind: "found", name: "FiatTokenV2_2", abi: ABI }
+              : { kind: "paid-plan", chainId },
+          getEtherscanApiKey: async () => apiKey,
+          readImplementation: async () => undefined,
+        },
+        chainId,
+        address as `0x${string}`,
+      );
+    let apiKey = "FREE";
+    const { fetcher, deps, contracts } = setup({ fetchAbi });
+    fetcher.setEtherscanApiKey(apiKey);
+    fetcher.observe([chainIdOn(ENDPOINT, "0x1"), callOn(ENDPOINT, WETH)], true);
+    await flush();
+    expect(deps.saveFetchedContract).not.toHaveBeenCalled();
+    expect(fetcher.getState(ENDPOINT, WETH)).toEqual({
+      kind: "missed",
+      outcomes: {
+        sourcify: { kind: "not-found" },
+        etherscan: { kind: "paid-plan", chainId: 1 },
+      },
+    });
+
+    apiKey = PAID_KEY;
+    fetcher.setEtherscanApiKey(apiKey);
+    await flush();
+    await flush();
+
+    expect(contracts[WETH]).toMatchObject({
+      name: "FiatTokenV2_2",
+      source: "etherscan",
+      proxy: { implementation: DAI, abi: "implementation" },
+    });
   });
 
   it("does not re-fetch while automatic fetching is off", async () => {

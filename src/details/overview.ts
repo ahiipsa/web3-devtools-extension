@@ -20,6 +20,8 @@ import {
 export interface OverviewSegment {
   text: string;
   tone?: "muted" | "failed";
+  // Shown on hover
+  title?: string;
 }
 
 // On one line: a struct's JSON joined up and every address short, also
@@ -168,7 +170,15 @@ export function formatOverviewStatus(
   return [
     // Most nodes already put an Error(string) in the message
     { text: status.message.includes(decoded) ? text : `${text} — ${decoded}` },
-    ...(source ? [{ text: ` ${source}`, tone: "muted" as const }] : []),
+    ...(source
+      ? [
+          {
+            text: ` ${source.text}`,
+            tone: "muted" as const,
+            ...(source.title && { title: source.title }),
+          },
+        ]
+      : []),
   ];
 }
 

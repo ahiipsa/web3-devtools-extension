@@ -180,7 +180,30 @@ describe("getInnerCallOutcome", () => {
     ).toEqual({
       kind: "failed",
       revert: "InsufficientLiquidity()",
-      revertSource: "from UniswapV2Pair",
+      revertSource: { text: "from UniswapV2Pair" },
+    });
+  });
+
+  it("counts the other Contracts that declare a failed Inner Call's error too", () => {
+    expect(
+      getInnerCallOutcome({
+        ...decoded,
+        success: false,
+        returnData: RETURNED,
+        revert: {
+          kind: "custom",
+          name: "InsufficientLiquidity",
+          signature: "InsufficientLiquidity()",
+          args: [],
+          from: "UniswapV2Pair",
+          alsoFrom: ["Other"],
+        },
+      }),
+    ).toMatchObject({
+      revertSource: {
+        text: "from UniswapV2Pair +1",
+        title: "Declared by UniswapV2Pair, Other",
+      },
     });
   });
 

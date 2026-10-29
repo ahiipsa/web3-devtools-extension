@@ -482,18 +482,26 @@ describe("fetchContractAbi", () => {
     );
   });
 
-  it("falls back to the proxy's own ABI when Etherscan needs a paid plan for the implementation", async () => {
+  it("misses with the implementation's outcomes when Etherscan needs a paid plan for it, saving no proxy's own ABI", async () => {
     const { sources, fetch } = setupProxy({
       sourcify: { [PROXY]: proxyFound("FiatTokenProxy", IMPLEMENTATION) },
       apiKey: "KEY",
     });
-    sources.etherscan.mockResolvedValue({ kind: "paid-plan", chainId: 1 });
+    sources.etherscan.mockResolvedValue({ kind: "paid-plan", chainId: 8453 });
 
-    expect(await fetch()).toMatchObject({
-      kind: "found",
-      name: "FiatTokenProxy",
-      proxy: { implementation: IMPLEMENTATION, abi: "proxy" },
-    });
+    expect(await fetch()).toEqual(
+      missed({ kind: "not-found" }, { kind: "paid-plan", chainId: 8453 }),
+    );
+  });
+
+  it("keeps a miss when Etherscan needs a paid plan for an address that is no proxy", async () => {
+    const { sources, fetch } = setupProxy({ sourcify: {}, apiKey: "KEY" });
+    sources.etherscan.mockResolvedValue({ kind: "paid-plan", chainId: 8453 });
+
+    expect(await fetch(ADDRESS)).toEqual(
+      missed({ kind: "not-found" }, { kind: "paid-plan", chainId: 8453 }),
+    );
+    expect(sources.readImplementation).toHaveBeenCalledWith(ADDRESS);
   });
 
   it("does not follow a proxy that names itself as its implementation", async () => {

@@ -122,8 +122,9 @@ export interface ContractAbiSources extends AbiSources {
 // one the ABI Source names; only when it says nothing about proxies, the
 // one the EIP-1967 slots on the Endpoint hold. A failed read of the slots
 // counts as no proxy. A failure to fetch the address's own ABI ends the
-// fetch; a failure to fetch the implementation's ABI is the outcome, so no
-// proxy's own ABI gets saved for good. Without either ABI, the miss is the
+// fetch; a failure to fetch the implementation's ABI, or Etherscan needing
+// a paid plan for it, is the outcome, so no proxy's own ABI gets saved for
+// good. Without either ABI, the miss is the
 // implementation's, whose ABI would be saved.
 export async function fetchContractAbi(
   sources: ContractAbiSources,
@@ -167,7 +168,14 @@ export async function fetchContractAbi(
       proxy: { implementation, abi: "implementation" },
     };
   }
-  if (own.kind === "found" && !hasFailure(fetchedImplementation.outcomes)) {
+  // An implementation Etherscan has on a paid plan: a key on one would find
+  // it, so the proxy's own ABI, nearly useless, is not saved in its place
+  const implementationOutcomes = fetchedImplementation.outcomes;
+  if (
+    own.kind === "found" &&
+    !hasFailure(implementationOutcomes) &&
+    implementationOutcomes.etherscan.kind !== "paid-plan"
+  ) {
     return { ...own, proxy: { implementation, abi: "proxy" } };
   }
   return fetchedImplementation;

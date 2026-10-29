@@ -153,14 +153,30 @@ describe("formatAbiFetchState", () => {
     ]);
   });
 
-  it("offers the settings only when Etherscan says the key is invalid", () => {
+  it("offers the settings when Etherscan says the key is invalid", () => {
     expect(
       formatAbiFetchState(missed(SOURCIFY_DOWN, { kind: "invalid-key" }))
         ?.openSettings,
     ).toBe(true);
+  });
+
+  it("offers the settings beside the hint to add a key while Sourcify is down", () => {
     expect(
-      formatAbiFetchState(missed(SOURCIFY_MISS, { kind: "rate-limit" }))
+      formatAbiFetchState(missed(SOURCIFY_DOWN, { kind: "not-asked" }))
         ?.openSettings,
-    ).toBeUndefined();
+    ).toBe(true);
+  });
+
+  it.each<[string, AbiFetchState]>([
+    [
+      "Etherscan is rate limited",
+      missed(SOURCIFY_MISS, { kind: "rate-limit" }),
+    ],
+    [
+      "Sourcify missed without a key",
+      missed(SOURCIFY_MISS, { kind: "not-asked" }),
+    ],
+  ])("offers no settings when %s", (_, state) => {
+    expect(formatAbiFetchState(state)?.openSettings).toBeUndefined();
   });
 });

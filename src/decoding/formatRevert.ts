@@ -34,11 +34,29 @@ export const formatRevert = (revert: Revert) => {
 };
 
 // Which other Contract's ABI decoded a bubbled-up custom error, shown muted
-// after it; none when the first ABI tried decoded it
-export const formatRevertSource = (revert: Revert) =>
-  revert.kind === "custom" && revert.from !== undefined
-    ? `from ${revert.from}`
-    : undefined;
+// after it, and a tooltip naming every Contract that declares it
+export interface RevertSource {
+  text: string;
+  title?: string;
+}
+
+// None when the first ABI tried decoded the error; a count of the other
+// Contracts that declare it too, as common errors are declared by many
+export const formatRevertSource = (
+  revert: Revert,
+): RevertSource | undefined => {
+  if (revert.kind !== "custom" || revert.from === undefined) {
+    return undefined;
+  }
+  const { from, alsoFrom = [] } = revert;
+  if (alsoFrom.length === 0) {
+    return { text: `from ${from}` };
+  }
+  return {
+    text: `from ${from} +${alsoFrom.length}`,
+    title: `Declared by ${[from, ...alsoFrom].join(", ")}`,
+  };
+};
 
 export const formatRpcError = ({
   code,

@@ -286,6 +286,26 @@ describe("formatOverviewStatus", () => {
     ]);
   });
 
+  it("counts the other Contracts that declare the Revert too, all named in its tooltip", () => {
+    expect(
+      formatOverviewStatus(error, {
+        kind: "custom",
+        name: "InsufficientLiquidity",
+        signature: "InsufficientLiquidity()",
+        args: [],
+        from: "Vault",
+        alsoFrom: ["Pool"],
+      }),
+    ).toEqual([
+      { text: "error 3: execution reverted — InsufficientLiquidity()" },
+      {
+        text: " from Vault +1",
+        tone: "muted",
+        title: "Declared by Vault, Pool",
+      },
+    ]);
+  });
+
   it("names the other Contract whose ABI decoded the Revert, muted", () => {
     expect(
       formatOverviewStatus(error, {

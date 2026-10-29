@@ -223,6 +223,55 @@ describe("decodeRevert with the ABIs of other known Contracts", () => {
     ).toMatchObject({ from: "Other" });
   });
 
+  it("names the other stored Contracts whose ABIs decode the error too, in store order", () => {
+    const declaring = (address: `0x${string}`, name: string): Contract => ({
+      address,
+      name,
+      abi: poolAbi,
+    });
+    const index = buildErrorIndex([
+      declaring("0x0000000000000000000000000000000000000002", "USDC"),
+      { address: OTHER, name: "Token", abi: tokenAbi },
+      declaring("0x0000000000000000000000000000000000000003", "DAI"),
+      // Same Selector, but its arguments do not decode
+      {
+        address: "0x0000000000000000000000000000000000000004",
+        name: "Odd",
+        abi: parseAbi(["error InsufficientLiquidity(uint256)"]),
+      },
+      declaring("0x0000000000000000000000000000000000000005", "WETH9"),
+    ]);
+    expect(decodeRevert(insufficientLiquidity, undefined, { index })).toEqual({
+      kind: "custom",
+      name: "InsufficientLiquidity",
+      signature: "InsufficientLiquidity()",
+      args: [],
+      from: "USDC",
+      alsoFrom: ["DAI", "WETH9"],
+    });
+  });
+
+  it("names no other Contract when only one declares the error", () => {
+    const index = buildErrorIndex([
+      pool,
+      { address: OTHER, name: "Token", abi: tokenAbi },
+    ]);
+    expect(
+      decodeRevert(insufficientLiquidity, undefined, { index }),
+    ).not.toHaveProperty("alsoFrom");
+  });
+
+  it("credits an Inner Call target alone, though other stored Contracts declare the error", () => {
+    const other: Contract = { address: OTHER, name: "Other", abi: poolAbi };
+    const index = buildErrorIndex([other, pool]);
+    expect(
+      decodeRevert(insufficientLiquidity, undefined, {
+        index,
+        preferred: [POOL],
+      }),
+    ).not.toHaveProperty("alsoFrom");
+  });
+
   it("skips a Selector match whose arguments do not decode", () => {
     const data = encodeErrorResult({
       abi: tokenAbi,

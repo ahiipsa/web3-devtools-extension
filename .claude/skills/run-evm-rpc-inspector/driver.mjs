@@ -107,16 +107,19 @@ const vaultRevert = (callData) => {
           args: [5n, amount],
         });
 };
+// Verified on the fake Sourcify as VaultV2, with the Vault's ABI; its
+// eth_calls succeed, so it is only one more Contract declaring the error
+export const VAULT_V2 = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 // Unverified; every eth_call to it reverts with the Vault's
 // InsufficientBalance(5, 9), as if bubbled up from a Vault it called
 export const BUBBLER = "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
-export const withdrawCall = (id, amount) => ({
+export const withdrawCall = (id, amount, to = VAULT) => ({
   jsonrpc: "2.0",
   id,
   method: "eth_call",
   params: [
     {
-      to: VAULT,
+      to,
       data: encodeFunctionData({
         abi: VAULT_ABI,
         functionName: "withdraw",
@@ -159,6 +162,7 @@ export const SOURCIFY = {
     compilation: { name: "SlotToken" },
   },
   [VAULT]: { abi: VAULT_ABI, compilation: { name: "Vault" } },
+  [VAULT_V2]: { abi: VAULT_ABI, compilation: { name: "VaultV2" } },
 };
 
 // The mock node's eth_getStorageAt, by `${address}:${slot}`; any other slot
@@ -901,6 +905,18 @@ export async function launch() {
     clickRow: async (match, n = 0) => {
       const selector = await api.until(() => api.rowSelector(match, n));
       if (!selector) throw new Error(`no row ${JSON.stringify(match)} #${n}`);
+      // A row scrolled only just into view can sit under the table's footer,
+      // so the click would land on its neighbour: it is centred in the table, without scrolling anything around it
+      await ev(`(() => {
+        const row = document.querySelector(${JSON.stringify(selector)});
+        let table = row.parentElement;
+        while (table && table.scrollHeight <= table.clientHeight)
+          table = table.parentElement;
+        if (!table) return;
+        const box = table.getBoundingClientRect();
+        const r = row.getBoundingClientRect();
+        table.scrollTop += r.top - box.top - (box.height - r.height) / 2;
+      })()`);
       await api.click(selector);
     },
     // Real key press, delivered to whatever has focus, DevTools' own listeners included.
@@ -2096,6 +2112,35 @@ async function smoke() {
       // Closes the popover
       await click(".rpc-table-settings-button");
     };
+    // Without a key, Sourcify's failure comes with a hint to add one and a
+    // ⚙ to the key field
+    await ev(
+      `chrome.storage.local.get("settings").then(({ settings }) => chrome.storage.local.set({ settings: { ...settings, etherscanApiKey: "" } })).then(() => 1)`,
+    );
+    await app.rpc(callTo(17, SOURCIFY_DOWN));
+    await clickRow({ contract: "0x3333…3333" });
+    await click(".rpc-details-tab", "Params");
+    const noKey =
+      "Sourcify is unavailable (HTTP 500) · add an Etherscan API key to try Etherscan";
+    check(
+      "without a key, Sourcify's 500 comes with the hint to add one",
+      (await until(detailsBody, (text) => text.includes(noKey))).includes(
+        noKey,
+      ),
+      json((await detailsBody()).slice(-160)),
+    );
+    await click(".rpc-details-abi-fetch .rpc-details-settings-button");
+    check(
+      "⚙ beside the hint to add a key opens the settings with the key field focused",
+      (await until(() =>
+        ev(
+          `!!document.activeElement?.closest(".rpc-table-settings-field") && !!document.querySelector(".rpc-table-settings")?.checkVisibility()`,
+        ),
+      )) === true,
+    );
+    await shot("15-no-key-settings");
+    await click(".rpc-table-settings-button");
+
     await setEtherscanApiKey(BAD_ETHERSCAN_KEY);
     await app.rpc(callTo(16, SOURCIFY_DOWN));
     await clickRow({ contract: "0x3333…3333" });
@@ -2471,6 +2516,46 @@ async function smoke() {
       json(bubbledOverview),
     );
     await shot("16-revert-bubbled-320");
+
+    // A second stored Contract declaring the same error: the Vault, first in
+    // store order, is credited with a count of the other
+    await app.rpc(withdrawCall(46, 3n, VAULT_V2));
+    check(
+      "an eth_call to VaultV2 decodes as VaultV2 / withdraw",
+      await callsContractSoon("VaultV2", "withdraw"),
+    );
+    await clickRow({ contract: "0xbBbB…BBbB" });
+    await click(".rpc-details-tab", "Response");
+    const revertSource = () =>
+      ev(`(() => {
+        const source = document.querySelector(".rpc-details-revert .rpc-details-muted");
+        return source && { text: source.innerText.trim(), title: source.title };
+      })()`);
+    const counted = await until(
+      revertSource,
+      (source) => source?.text === "from Vault +1",
+    );
+    check(
+      "a bubbled-up error two stored Contracts declare reads from Vault +1, both named in its tooltip",
+      json(counted) ===
+        json({ text: "from Vault +1", title: "Declared by Vault, VaultV2" }),
+      json(counted),
+    );
+    await click(".rpc-details-tab", "Overview");
+    const countedStatus = await until(
+      () =>
+        ev(
+          `[...document.querySelectorAll(".rpc-details-body .rpc-details-muted")].map((part) => ({ text: part.innerText.trim(), title: part.title })).find((part) => part.text.startsWith("from "))`,
+        ),
+      (source) => source?.text === "from Vault +1",
+    );
+    check(
+      "the Overview's Status reads from Vault +1 with the same tooltip",
+      json(countedStatus) ===
+        json({ text: "from Vault +1", title: "Declared by Vault, VaultV2" }),
+      json(countedStatus),
+    );
+    await shot("16-revert-bubbled-counted");
 
     await app.rpc({ jsonrpc: "2.0", id: 43, method: "eth_gasPrice" }, "/bad");
     await clickRow({ method: "eth_gasPrice" });

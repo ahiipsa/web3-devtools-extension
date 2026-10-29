@@ -15,7 +15,8 @@ export const ABI_SOURCE_NAMES: Record<AbiSourceName, string> = {
 // A failure part is failed, a miss part muted
 export interface AbiFetchLabel {
   segments: OverviewSegment[];
-  // Etherscan rejected the key: a ⚙ beside opens the settings at its field
+  // Etherscan rejected the key, or one would help: a ⚙ beside opens the
+  // settings at its field
   openSettings?: true;
 }
 
@@ -70,6 +71,11 @@ const formatOutcomes = ({
   ];
 };
 
+// Etherscan rejected the key, or Sourcify is down and no key was entered
+const offersSettings = ({ sourcify, etherscan }: AbiSourceOutcomes) =>
+  etherscan.kind === "invalid-key" ||
+  (sourcify.kind === "failed" && etherscan.kind === "not-asked");
+
 // What Params, an Inner Call and the Contract tab show for an address
 // without a Contract; nothing while idle
 export const formatAbiFetchState = (
@@ -82,9 +88,7 @@ export const formatAbiFetchState = (
       // What the ABI Sources answered, not what they would answer now
       return {
         segments: formatOutcomes(state.outcomes),
-        ...(state.outcomes.etherscan.kind === "invalid-key" && {
-          openSettings: true,
-        }),
+        ...(offersSettings(state.outcomes) && { openSettings: true }),
       };
     case "failed":
       return { segments: [failed(`Fetch failed: ${state.reason}`)] };
