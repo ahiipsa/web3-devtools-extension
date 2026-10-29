@@ -3,6 +3,7 @@ import { parseAbi } from "viem";
 import {
   ContractTabHeader,
   formatInnerCallTargetTitle,
+  getContractTabActions,
   getContractTabHeader,
   getContractTabKind,
 } from "./contractTab.ts";
@@ -18,6 +19,27 @@ const IDLE = { kind: "idle" } as const;
 
 const text = (header: ContractTabHeader) =>
   header.segments.map((segment) => segment.text).join("");
+
+describe("getContractTabActions", () => {
+  it("says Forget fetches the ABI again when DevTools opens while fetching is automatic", () => {
+    expect(getContractTabActions("fetched", true).remove?.question).toBe(
+      "Forget the fetched ABI? It is fetched again the next time DevTools opens.",
+    );
+  });
+
+  it("says Fetch ABI fetches it again while fetching is not automatic", () => {
+    expect(getContractTabActions("fetched", false).remove?.question).toBe(
+      "Forget the fetched ABI? Fetch ABI fetches it again.",
+    );
+  });
+
+  it("keeps Delete's question whatever the setting", () => {
+    const question =
+      "Delete this Contract? Its RPC Requests will no longer be decoded.";
+    expect(getContractTabActions("own", true).remove?.question).toBe(question);
+    expect(getContractTabActions("own", false).remove?.question).toBe(question);
+  });
+});
 
 describe("getContractTabKind", () => {
   it("tells an own, a fetched, a built-in and no Contract apart", () => {

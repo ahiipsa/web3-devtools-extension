@@ -1,4 +1,4 @@
-// The symbol of each Chain's native currency, for every Chain in
+// The symbol of each Chain's Native currency, for every Chain in
 // chainNames.ts, built in for the same reason as the names
 const NATIVE_CURRENCIES: Record<number, string> = {
   1: "ETH",
@@ -39,7 +39,7 @@ const NATIVE_CURRENCIES: Record<number, string> = {
   7777777: "ETH",
   480: "ETH",
   34443: "ETH",
-  252: "frxETH",
+  252: "FRAX",
   80094: "BERA",
   146: "S",
   250: "FTM",
@@ -49,6 +49,7 @@ const NATIVE_CURRENCIES: Record<number, string> = {
   1337: "ETH",
 };
 
-// The symbol, or `native` for a Chain not in the table or not yet known
+// The Native currency's symbol, or `native` for a Chain not in the table or
+// not yet known
 export const getNativeCurrency = (chainId: number | undefined): string =>
   (chainId !== undefined && NATIVE_CURRENCIES[chainId]) || "native";

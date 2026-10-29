@@ -11,7 +11,7 @@ import { useAbiFetchState } from "../hooks/useAbiFetchState.ts";
 import { EtherscanApiKeyButton } from "./EtherscanApiKeyButton.tsx";
 import { BuiltInContract } from "../decoding/multicall.ts";
 import {
-  CONTRACT_TAB_ACTIONS,
+  getContractTabActions,
   getContractTabHeader,
   getContractTabKind,
 } from "../details/contractTab.ts";
@@ -64,7 +64,10 @@ export const ContractForm = (props: ContractInfoProps) => {
   });
 
   const contract = contractQuery.data;
-  const actions = CONTRACT_TAB_ACTIONS[getContractTabKind(contract, builtIn)];
+  const actions = getContractTabActions(
+    getContractTabKind(contract, builtIn),
+    settings.fetchAbisAutomatically,
+  );
   const { remove } = actions;
   const abiFetch = useAbiFetchState(endpoint, contractAddress);
   const header = getContractTabHeader({

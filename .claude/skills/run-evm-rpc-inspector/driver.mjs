@@ -2870,6 +2870,28 @@ async function smoke() {
       json(forgetText.slice(-140)),
     );
     await shot("26-forget-320");
+    // With automatic fetching off, only Fetch ABI fetches it again
+    await click("button", "Keep");
+    const setFetchAutomatically = (on) =>
+      ev(
+        `chrome.storage.local.get("settings").then(({ settings }) => chrome.storage.local.set({ settings: { ...settings, fetchAbisAutomatically: ${on} } })).then(() => 1)`,
+      );
+    await setFetchAutomatically(false);
+    await click("button", "Forget fetched ABI");
+    const forgetManualText = await until(detailsBody, (text) =>
+      /Forget the fetched ABI\? Fetch ABI fetches it again\./.test(text),
+    );
+    check(
+      "with automatic fetching off, Forget's confirmation says Fetch ABI fetches it again",
+      /Forget the fetched ABI\? Fetch ABI fetches it again\.\s+Forget\s+Keep/.test(
+        forgetManualText,
+      ),
+      json(forgetManualText.slice(-140)),
+    );
+    await setFetchAutomatically(true);
+    await until(detailsBody, (text) =>
+      /It is fetched again the next time DevTools opens\./.test(text),
+    );
     const sourcifyAsked = app.sourcifyUrls.length;
     await click("button", "Forget");
     const forgotten = await until(contractHeader, (text) =>

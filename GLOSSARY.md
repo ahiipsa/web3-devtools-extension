@@ -24,6 +24,10 @@ _Avoid_: RPC URL, node, provider
 The EVM network an Endpoint serves, identified by its chain id. An RPC Request's Chain is its Endpoint's Chain when it was sent; an Endpoint can switch Chains, e.g. a restarted local fork.
 _Avoid_: Network, chainId
 
+**Native currency**:
+The coin a Chain pays gas and keeps balances in (ETH, POL, BNB…); `native` when the Chain is unknown.
+_Avoid_: Gas token, base currency
+
 **Method Category**:
 The group an RPC Request falls into by its `method`: Calls, Transactions, Logs, Chain or Other. Every method belongs to exactly one Method Category. Wallet actions (accounts, signing) are Other.
 _Avoid_: Request type, kind
