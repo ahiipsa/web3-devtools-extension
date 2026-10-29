@@ -909,10 +909,10 @@ export async function launch() {
       // so the click would land on its neighbour: it is centred in the table, without scrolling anything around it
       await ev(`(() => {
         const row = document.querySelector(${JSON.stringify(selector)});
-        let table = row.parentElement;
+        let table = row?.parentElement;
         while (table && table.scrollHeight <= table.clientHeight)
           table = table.parentElement;
-        if (!table) return;
+        if (!table || table === document.body || table === document.documentElement) return;
         const box = table.getBoundingClientRect();
         const r = row.getBoundingClientRect();
         table.scrollTop += r.top - box.top - (box.height - r.height) / 2;
@@ -2117,6 +2117,9 @@ async function smoke() {
     await ev(
       `chrome.storage.local.get("settings").then(({ settings }) => chrome.storage.local.set({ settings: { ...settings, etherscanApiKey: "" } })).then(() => 1)`,
     );
+    // The settings field cannot be typed empty; the Panel reads the store
+    // a moment later
+    await app.sleep(DUPLICATE_WINDOW);
     await app.rpc(callTo(17, SOURCIFY_DOWN));
     await clickRow({ contract: "0x3333…3333" });
     await click(".rpc-details-tab", "Params");
