@@ -97,7 +97,7 @@ try {
   await app.clickRow(MULTICALL, innerCalls.indexOf(Math.max(...innerCalls)));
   // The page's own console errors would show as a badge in the DevTools toolbar
   await app.devtools.evaluate(
-    `(async () => { (await import("./core/sdk/sdk.js")).ConsoleModel.ConsoleModel.requestClearMessages(); return 1 })()`,
+    `(async () => { const { ConsoleModel, TargetManager } = await import("./core/sdk/sdk.js"); ConsoleModel.ConsoleModel.requestClearMessages(TargetManager.TargetManager.instance()); return 1 })()`,
   );
   await app.click(".rpc-details-tab", "Params");
   await shot("4-multicall");

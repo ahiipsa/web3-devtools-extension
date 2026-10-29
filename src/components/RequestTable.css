@@ -136,7 +136,7 @@
   height: 20px;
   margin: 1px 3px;
   padding: 0 2px 0 8px;
-  border-radius: 100px;
+  border-radius: 9999px;
   box-sizing: border-box;
   background: var(--rpc-toolbar-input-bg);
 }

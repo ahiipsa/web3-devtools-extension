@@ -29,7 +29,7 @@ The list is cleared when the page navigates or reloads, or with the "Clear" butt
 
 ## Development
 
-Requires Node.js 18+.
+Requires Node.js 22.12+, 24 or 26+ (the range of Vitest 5).
 
 ```sh
 npm install

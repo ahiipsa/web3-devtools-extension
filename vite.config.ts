@@ -1,7 +1,7 @@
 import { defineConfig, Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
-import pkg from "./package.json";
+import pkg from "./package.json" with { type: "json" };
 import { buildManifest } from "./manifest.ts";
 
 const manifest = (): Plugin => ({
@@ -20,7 +20,7 @@ export default defineConfig({
   build: {
     outDir: "build",
     sourcemap: false,
-    rollupOptions: {
+    rolldownOptions: {
       input: {
         main: "./index.html",
         devtools: "./devtools.html",

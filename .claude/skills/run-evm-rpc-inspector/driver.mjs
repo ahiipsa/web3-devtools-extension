@@ -26,9 +26,8 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { createRequire } from "node:module";
 import os, { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import readline from "node:readline";
 import {
@@ -575,17 +574,62 @@ const interceptAbiSources = async (panel) => {
 const LEGACY = `(async () => (await import("./ui/legacy/legacy.js")).InspectorView.InspectorView.instance())()`;
 
 // The switches launchPersistentContext adds itself, for a Chromium started
-// without Playwright (--use-mock-keychain spares a keychain prompt). Not
-// public API: read only on the macOS background path, from the pinned version
-const playwrightSwitches = () => {
-  const require = createRequire(import.meta.url);
-  return require(
-    join(
-      dirname(require.resolve("playwright-core")),
-      "lib/server/chromium/chromiumSwitches.js",
-    ),
-  ).chromiumSwitches;
-};
+// without Playwright (--use-mock-keychain spares a keychain prompt). Copied
+// from chromiumSwitches.ts of the pinned playwright-core (1.64.1), which
+// bundles it into lib/coreBundle.js without exporting it: re-copy on a bump.
+// Used only on the macOS background path
+const PLAYWRIGHT_DISABLED_FEATURES = [
+  "AvoidUnnecessaryBeforeUnloadCheckSync",
+  "DestroyProfileOnBrowserClose",
+  "DialMediaRouteProvider",
+  "GlobalMediaControls",
+  "HttpsUpgrades",
+  "LensOverlay",
+  "MediaRouter",
+  "PaintHolding",
+  "ThirdPartyStoragePartitioning",
+  "BlockOriginHeaderModificationOnRedirect",
+  "AvoidCorsURLLoaderRestartOnRedirect",
+  "Translate",
+  "AutoDeElevate",
+  "OptimizationHints",
+  "NetworkTimeServiceQuerying",
+  "AimEnabled",
+];
+const PLAYWRIGHT_SWITCHES = [
+  "--disable-field-trial-config",
+  "--disable-background-networking",
+  "--disable-background-timer-throttling",
+  "--disable-backgrounding-occluded-windows",
+  "--disable-back-forward-cache",
+  "--disable-breakpad",
+  "--disable-client-side-phishing-detection",
+  "--disable-component-extensions-with-background-pages",
+  "--disable-component-update",
+  "--no-default-browser-check",
+  "--disable-default-apps",
+  "--disable-dev-shm-usage",
+  "--disable-extensions",
+  `--disable-features=${PLAYWRIGHT_DISABLED_FEATURES.join(",")}`,
+  "--enable-features=CDPScreenshotNewSurface",
+  "--allow-pre-commit-input",
+  "--disable-hang-monitor",
+  "--disable-ipc-flooding-protection",
+  "--disable-popup-blocking",
+  "--disable-prompt-on-repost",
+  "--disable-renderer-backgrounding",
+  "--force-color-profile=srgb",
+  "--metrics-recording-only",
+  "--no-first-run",
+  "--password-store=basic",
+  "--use-mock-keychain",
+  "--no-service-autorun",
+  "--export-tagged-pdf",
+  "--disable-search-engine-choice-screen",
+  "--unsafely-disable-devtools-self-xss-warnings",
+  "--disable-infobars",
+  "--disable-sync",
+];
 // The window launchPersistentContext opens for a 1200×800 viewport on macOS;
 // WINDOW_SIZE=w,h overrides it (a hidden window resized later stops painting)
 const WINDOW_SIZE = `--window-size=${process.env.WINDOW_SIZE ?? "1202,870"}`;
@@ -682,7 +726,7 @@ const openInBackground = async (profile, args) => {
     "-a",
     executable.replace(/\.app\/.*$/, ".app"),
     "--args",
-    ...playwrightSwitches(),
+    ...PLAYWRIGHT_SWITCHES,
     "--enable-use-zoom-for-dsf=false",
     "--no-sandbox",
     `--user-data-dir=${profile}`,
@@ -782,6 +826,10 @@ export async function launch({ realAbiSources = false } = {}) {
   const devtools = await connectTarget(cdpPort, (u) =>
     u.startsWith("devtools://devtools/bundled/devtools_app"),
   );
+  // A hidden app's DevTools window turns `visibilityState` "hidden" (Chromium
+  // 156), which stops requestAnimationFrame in the Panel; focus emulation
+  // keeps the window visible and focused, as Playwright does for its pages
+  await devtools.send("Emulation.setFocusEmulationEnabled", { enabled: true });
   // The extension's devtools page registers the Panel a moment after DevTools loads
   let panelId;
   for (let i = 0; i < 50 && !panelId; i++) {
