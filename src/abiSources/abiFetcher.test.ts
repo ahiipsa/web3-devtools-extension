@@ -357,7 +357,7 @@ describe("Fetching a Contract's ABI", () => {
     fetcher.observe([chainIdOn(ENDPOINT, "0x1"), callOn(ENDPOINT, WETH)], true);
     await flush();
 
-    expect(contracts[WETH].name).toBe("0xc02a...6cc2");
+    expect(contracts[WETH].name).toBe("0xC02a…6Cc2");
   });
 
   it("is fetching while Sourcify has not answered", async () => {

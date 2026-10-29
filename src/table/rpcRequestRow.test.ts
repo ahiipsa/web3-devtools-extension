@@ -121,8 +121,27 @@ describe("buildRpcRequestRow", () => {
   it("shortens the address of an unlabelled Contract", () => {
     const row = buildRpcRequestRow(rpcRequest(), noContracts);
 
-    expect(row.contractLabel).toBe("0x0000...00aa");
+    expect(row.contractLabel).toBe("0x0000…00AA");
     expect(row.functionName).toBeUndefined();
+  });
+
+  it("shows the old fallback name of a fetched Contract as its short address", () => {
+    const row = buildRpcRequestRow(rpcRequest(), () => ({
+      ...token,
+      name: "0x0000...00aa",
+    }));
+
+    expect(row.contractLabel).toBe("0x0000…00AA");
+    expect(row.contractName).toBe("0x0000…00AA");
+  });
+
+  it("leaves a name the user typed like an address cut as it is", () => {
+    const row = buildRpcRequestRow(rpcRequest(), () => ({
+      ...token,
+      name: "0xabc...",
+    }));
+
+    expect(row.contractLabel).toBe("0xabc...");
   });
 
   it("has no Contract for an RPC Request that calls none", () => {

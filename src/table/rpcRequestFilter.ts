@@ -47,6 +47,7 @@ const matchesSearch = (row: RpcRequestRow, search: string) => {
         row.chainId?.toString(),
         row.request.url,
         row.contractAddress,
+        row.contractLabel,
         row.contractName,
         row.functionName,
         row.functionSelector,

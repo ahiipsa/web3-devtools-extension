@@ -84,6 +84,24 @@ describe("matchesRpcRequestFilter", () => {
     );
   });
 
+  it("searches the short address the Contract column shows", () => {
+    const unlabelledRow = buildRpcRequestRow(
+      rpcRequest("eth_call"),
+      () => undefined,
+    );
+
+    expect(unlabelledRow.contractLabel).toBe("0x0000…00AA");
+    for (const text of ["0x0000…00AA", "0x0000…00aa", "0000…00a"]) {
+      expect(matchesRpcRequestFilter(unlabelledRow, search(text))).toBe(true);
+    }
+    expect(
+      matchesRpcRequestFilter(
+        unlabelledRow,
+        search(TOKEN.toUpperCase().replace("0X", "0x")),
+      ),
+    ).toBe(true);
+  });
+
   it("searches the selector, with or without a Contract for the address", () => {
     const undecodedRow = buildRpcRequestRow(
       rpcRequest("eth_call"),

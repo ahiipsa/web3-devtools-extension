@@ -57,8 +57,11 @@ import { formatHttpResponseBodyCut } from "../details/formatHttpResponseBody.ts"
 import { useAbiFetchState } from "../hooks/useAbiFetchState.ts";
 import { formatAbiFetchState } from "../abiSources/formatAbiFetchState.ts";
 import { EtherscanApiKeyButton } from "./EtherscanApiKeyButton.tsx";
-import { trimContractAddress } from "../utils/text.ts";
-import { formatAddress, formatShortAddress } from "../details/formatAddress.ts";
+import {
+  formatAddress,
+  formatContractName,
+  formatShortAddress,
+} from "../details/formatAddress.ts";
 import { formatInnerCallTargetTitle } from "../details/contractTab.ts";
 import {
   isRawSectionOpen,
@@ -118,6 +121,7 @@ export const RequestDetails = ({ request, onClose }: RequestDetailsProps) => {
   const contractQuery = useContractQuery({ contractAddress: callParams?.to });
   // Without a Contract, a Multicall still decodes with the built-in aggregator ABI
   const contract = contractQuery.data ?? findBuiltInContract(callParams?.data);
+  const contractName = contract && formatContractName(contract);
   const decoding = useMemo(
     () => (contract ? decodeRpcRequest(request, contract.abi) : undefined),
     [contract, request],
@@ -206,7 +210,7 @@ export const RequestDetails = ({ request, onClose }: RequestDetailsProps) => {
             <Overview
               request={request}
               callParams={callParams}
-              contractName={contract?.name}
+              contractName={contractName}
               hasContract={!!contract}
               contractPending={contractQuery.isPending}
               chain={requestChain}
@@ -245,7 +249,7 @@ export const RequestDetails = ({ request, onClose }: RequestDetailsProps) => {
                     <span className="rpc-details-muted break-all">
                       {formatInnerCallTargetTitle(
                         contractTabTarget.innerCallIndex,
-                        contract?.name ?? trimContractAddress(callParams.to),
+                        contractName || formatShortAddress(callParams.to),
                         callParams.to,
                       )}
                     </span>
@@ -255,7 +259,7 @@ export const RequestDetails = ({ request, onClose }: RequestDetailsProps) => {
                       onClick={() => showContractFor(callParams.to)}
                     >
                       Back to{" "}
-                      {contract?.name ?? trimContractAddress(callParams.to)}
+                      {contractName || formatShortAddress(callParams.to)}
                     </Button>
                   </div>
                 )}

@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { formatAddress, formatShortAddress } from "./formatAddress.ts";
+import {
+  formatAddress,
+  formatContractName,
+  formatShortAddress,
+} from "./formatAddress.ts";
 
 describe("formatAddress", () => {
   it("writes a whole address in checksum case", () => {
@@ -18,5 +22,37 @@ describe("formatShortAddress", () => {
     expect(
       formatShortAddress("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"),
     ).toBe("0xA0b8…eB48");
+  });
+});
+
+describe("formatContractName", () => {
+  const USDC = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48";
+
+  it("shows the name the Contract has", () => {
+    expect(formatContractName({ address: USDC, name: "FiatTokenProxy" })).toBe(
+      "FiatTokenProxy",
+    );
+  });
+
+  it("shows the old fallback name of a fetched Contract as its short address", () => {
+    expect(formatContractName({ address: USDC, name: "0xa0b8...eb48" })).toBe(
+      "0xA0b8…eB48",
+    );
+  });
+
+  it("knows the old fallback name cut from the address in checksum case", () => {
+    expect(formatContractName({ address: USDC, name: "0xA0b8...eB48" })).toBe(
+      "0xA0b8…eB48",
+    );
+  });
+
+  it("leaves a name like an address cut that is not its own", () => {
+    for (const name of ["0xabc...", "0xa0b8...eb49", "0xa0b8..eb48"]) {
+      expect(formatContractName({ address: USDC, name })).toBe(name);
+    }
+  });
+
+  it("leaves an empty name empty", () => {
+    expect(formatContractName({ address: USDC, name: "" })).toBe("");
   });
 });

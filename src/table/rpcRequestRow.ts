@@ -7,7 +7,10 @@ import {
   getRpcRequestStatus,
   isFailedRpcRequestStatus,
 } from "../capture/getRpcRequestStatus.ts";
-import { trimContractAddress } from "../utils/text.ts";
+import {
+  formatContractName,
+  formatShortAddress,
+} from "../details/formatAddress.ts";
 import { findAbiFunction } from "../decoding/findAbiFunction.ts";
 import {
   findDecodingContract,
@@ -131,15 +134,16 @@ export function buildRpcRequestRow(
     callParams &&
     findDecodingContract(findContract, callParams.to, callParams.data);
   const status = getRpcRequestStatus(request);
+  const contractName = (contract && formatContractName(contract)) || undefined;
 
   return {
     request,
     method: request.requestBody.method,
     ...getChainFields(chain),
     contractLabel:
-      callParams && (contract?.name || trimContractAddress(callParams.to)),
+      callParams && (contractName ?? formatShortAddress(callParams.to)),
     contractAddress: callParams?.to,
-    contractName: contract?.name || undefined,
+    contractName,
     functionName:
       contract && callParams?.data
         ? getFunctionName(contract.abi, callParams.data)

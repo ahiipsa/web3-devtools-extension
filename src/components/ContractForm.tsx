@@ -15,7 +15,7 @@ import {
   getContractTabHeader,
   getContractTabKind,
 } from "../details/contractTab.ts";
-import { formatAddress } from "../details/formatAddress.ts";
+import { formatAddress, formatContractName } from "../details/formatAddress.ts";
 import { AppContext } from "./AppContext.tsx";
 import { DetailsValue } from "./DetailsValue.tsx";
 import { errorMessage } from "../utils/text.ts";
@@ -94,7 +94,7 @@ export const ContractForm = (props: ContractInfoProps) => {
 
   const shown = contract ?? builtIn;
   const initialValues: FieldType = {
-    contractName: shown?.name || "",
+    contractName: shown ? formatContractName(shown) : "",
     abi: shown ? JSON.stringify(shown.abi, null, 2) : "",
   };
 

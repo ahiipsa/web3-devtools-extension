@@ -1659,7 +1659,15 @@ async function smoke() {
 
     // An address verified on Etherscan only misses while there is no key
     await app.rpc(callTo(10, LINK));
-    await clickRow({ contract: "0x5149...86ca" });
+    await clickRow({ contract: "0x5149…86CA" });
+    check(
+      "the Contract cell of an address without a Contract reads its short address in checksum case",
+      (await app.rowCells()).some((cells) => cells[2] === "0x5149…86CA") ||
+        (await app.rowTitles()).some((title) =>
+          title.includes("Contract: 0x5149…86CA\n"),
+        ),
+      json(await app.rowCells()),
+    );
     await click(".rpc-details-tab", "Contract");
     check(
       "without a key an address verified on Etherscan only reads no verified ABI on Sourcify",
@@ -1710,7 +1718,7 @@ async function smoke() {
     );
     await shot("07-from-etherscan");
     await app.rpc(callTo(11, UNVERIFIED));
-    await clickRow({ contract: "0x2222...2222" });
+    await clickRow({ contract: "0x2222…2222" });
     await click(".rpc-details-tab", "Contract");
     const missOnBoth = /No verified ABI on Sourcify or Etherscan/;
     check(
@@ -2051,7 +2059,7 @@ async function smoke() {
     // Each ABI Source's outcome side by side: a Chain Etherscan serves only
     // on a paid plan
     await app.rpc(callTo(15, PAID_PLAN_TARGET), "/paid");
-    await clickRow({ contract: "0x1212...1212" });
+    await clickRow({ contract: "0x1212…1212" });
     await click(".rpc-details-tab", "Params");
     const paidPlan =
       "No verified ABI on Sourcify · Etherscan needs a paid plan for Base";
@@ -2082,7 +2090,7 @@ async function smoke() {
     };
     await setEtherscanApiKey(BAD_ETHERSCAN_KEY);
     await app.rpc(callTo(16, SOURCIFY_DOWN));
-    await clickRow({ contract: "0x3333...3333" });
+    await clickRow({ contract: "0x3333…3333" });
     await click(".rpc-details-tab", "Params");
     const bothFailed = "Sourcify: HTTP 500 · Etherscan API key is invalid";
     check(
@@ -2498,7 +2506,7 @@ async function smoke() {
     );
     await shot("21-params-abi-fetch-320");
     // The paid-plan state, one of the longest, wraps at 320 px
-    await clickRow({ contract: "0x1212...1212" });
+    await clickRow({ contract: "0x1212…1212" });
     await narrowDetails();
     await click(".rpc-details-tab", "Params");
     const paidPlanParams = await until(detailsBody, (text) =>

@@ -8,7 +8,10 @@ export const useContractQuery = (params: {
   const { contractAddress } = params;
 
   const query = useQuery({
-    queryKey: ["contract", contractAddress && normalizeAddress(contractAddress)],
+    queryKey: [
+      "contract",
+      contractAddress && normalizeAddress(contractAddress),
+    ],
     queryFn: async () => {
       if (contractAddress) {
         return getContract(contractAddress);

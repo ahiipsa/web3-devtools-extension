@@ -1,7 +1,8 @@
 import { RpcRequest } from "../types/main.ts";
 import { Contract, normalizeAddress } from "../dal/contract.ts";
 import { getContractCallParams } from "../utils/requestUtils.ts";
-import { errorMessage, trimContractAddress } from "../utils/text.ts";
+import { errorMessage } from "../utils/text.ts";
+import { formatShortAddress } from "../details/formatAddress.ts";
 import { getInnerCallTargets } from "../decoding/multicall.ts";
 import { EndpointChains } from "../chains/endpointChains.ts";
 import { AbiSourceName, AbiSourceOutcomes, ContractAbi } from "./abiSources.ts";
@@ -158,7 +159,7 @@ export function createAbiFetcher(deps: AbiFetcherDeps) {
       }
       await deps.saveFetchedContract({
         address,
-        name: result.name || trimContractAddress(address),
+        name: result.name || formatShortAddress(address),
         abi: result.abi,
         source: result.source,
         ...(result.proxy && { proxy: result.proxy }),

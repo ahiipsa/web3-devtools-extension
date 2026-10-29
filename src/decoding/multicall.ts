@@ -5,6 +5,7 @@ import { getContractCallParams } from "../utils/requestUtils.ts";
 import { findAbiFunction } from "./findAbiFunction.ts";
 import { decodeCall, Decoding, getReturnData } from "./decodeRpcRequest.ts";
 import { decodeRevert, Revert } from "./decodeRevert.ts";
+import { formatContractName } from "../details/formatAddress.ts";
 
 // Multicall3's aggregator functions; Multicall2's are the same functions
 // with the same Selectors
@@ -219,7 +220,7 @@ export function getInnerCalls(
       target,
       callData,
       ...(value !== undefined && { value }),
-      contractName: contract?.name || undefined,
+      contractName: (contract && formatContractName(contract)) || undefined,
       decoding:
         contract &&
         decodeCall(
