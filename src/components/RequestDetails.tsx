@@ -35,11 +35,10 @@ import {
 import { formatDuration } from "../table/rpcRequestRow.ts";
 import { getDetailsTabs, getShownDetailsTab } from "../details/detailsTabs.ts";
 import { getTabListScrollDelta } from "../details/tabListWheel.ts";
-import { useErrorIndex, useFindContract } from "../hooks/useFindContract.ts";
+import { useKnownContracts } from "../hooks/useFindContract.ts";
 import {
   findBuiltInContract,
   findBuiltInContractAt,
-  getInnerCallTargets,
   getInnerCalls,
   getResultCountMismatch,
   InnerCall,
@@ -131,22 +130,22 @@ export const RequestDetails = ({ request, onClose }: RequestDetailsProps) => {
     () => (contract ? decodeRpcRequest(request, contract.abi) : undefined),
     [contract, request],
   );
-  const findContract = useFindContract();
-  const errorIndex = useErrorIndex();
+  const { findContract, errorIndex } = useKnownContracts();
+  const innerCalls = useMemo(
+    () => getInnerCalls(request, findContract, errorIndex),
+    [request, findContract, errorIndex],
+  );
   // A custom error `to`'s ABI does not declare may have bubbled up from a
   // Multicall's Inner Call target, else from any other stored Contract
+  const to = callParams?.to;
   const revert = useMemo(
     () =>
       getRpcRequestRevert(request, contract?.abi, {
         index: errorIndex,
-        address: callParams?.to,
-        preferred: getInnerCallTargets(request),
+        address: to,
+        preferred: innerCalls?.map(({ target }) => target),
       }),
-    [contract, request, errorIndex, callParams?.to],
-  );
-  const innerCalls = useMemo(
-    () => getInnerCalls(request, findContract, errorIndex),
-    [request, findContract, errorIndex],
+    [contract, request, errorIndex, to, innerCalls],
   );
 
   // By default the Contract tab is for `to`; Add ABI picks `to` or an Inner

@@ -299,6 +299,21 @@ describe("formatOverviewStatus", () => {
       { text: "error 3: execution reverted — InsufficientLiquidity()" },
       { text: " from UniswapV2Pair", tone: "muted" },
     ]);
+    expect(
+      formatOverviewStatus(
+        { ...error, message: "execution reverted: InsufficientLiquidity()" },
+        {
+          kind: "custom",
+          name: "InsufficientLiquidity",
+          signature: "InsufficientLiquidity()",
+          args: [],
+          from: "UniswapV2Pair",
+        },
+      ),
+    ).toEqual([
+      { text: "error 3: execution reverted: InsufficientLiquidity()" },
+      { text: " from UniswapV2Pair", tone: "muted" },
+    ]);
   });
 
   it("is the label for any other Status", () => {

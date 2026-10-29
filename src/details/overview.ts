@@ -161,13 +161,13 @@ export function formatOverviewStatus(
   }
   const text = `${label}: ${status.message}`;
   const decoded = revert && revert.kind !== "raw" && formatRevert(revert);
-  // Most nodes already put an Error(string) in the message
-  if (!decoded || status.message.includes(decoded)) {
+  if (!decoded) {
     return [{ text }];
   }
   const source = formatRevertSource(revert);
   return [
-    { text: `${text} — ${decoded}` },
+    // Most nodes already put an Error(string) in the message
+    { text: status.message.includes(decoded) ? text : `${text} — ${decoded}` },
     ...(source ? [{ text: ` ${source}`, tone: "muted" as const }] : []),
   ];
 }

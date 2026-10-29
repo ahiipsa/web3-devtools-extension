@@ -34,21 +34,24 @@ const useContracts = () => {
   return contracts;
 };
 
-// A lookup shared by everything that looks up many addresses at once
-export const useFindContract = (): FindContract => {
+// A lookup shared by everything that looks up many addresses at once, and
+// the stored Contracts' custom errors by Selector, rebuilt only when the
+// Contract store changes
+export const useKnownContracts = (): {
+  findContract: FindContract;
+  errorIndex: ErrorIndex;
+} => {
   const contracts = useContracts();
-  return useCallback(
+  const findContract = useCallback<FindContract>(
     (address) => contracts?.[normalizeAddress(address)],
     [contracts],
   );
-};
-
-// The stored Contracts' custom errors by Selector, rebuilt only when the
-// Contract store changes
-export const useErrorIndex = (): ErrorIndex => {
-  const contracts = useContracts();
-  return useMemo(
+  const errorIndex = useMemo(
     () => buildErrorIndex(Object.values(contracts ?? {})),
     [contracts],
   );
+  return { findContract, errorIndex };
 };
+
+export const useFindContract = (): FindContract =>
+  useKnownContracts().findContract;

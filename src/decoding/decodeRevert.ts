@@ -60,8 +60,14 @@ export const buildErrorIndex = (contracts: readonly Contract[]): ErrorIndex => {
         .map(getErrorSelector),
     );
     for (const selector of selectors) {
-      if (selector) {
-        index.set(selector, [...(index.get(selector) ?? []), contract]);
+      if (!selector) {
+        continue;
+      }
+      const contracts = index.get(selector);
+      if (contracts) {
+        contracts.push(contract);
+      } else {
+        index.set(selector, [contract]);
       }
     }
   }
@@ -72,26 +78,27 @@ export const buildErrorIndex = (contracts: readonly Contract[]): ErrorIndex => {
 // does not decode it
 export interface ErrorLookup {
   index: ErrorIndex;
-  // The address whose ABI is the first, not tried again
+  // The called address: its stored Contract, when the first ABI was not it
+  // (still loading, or a built-in ABI), is tried first and is no other
   address?: `0x${string}`;
   // Tried before the rest, in order: a Multicall's Inner Call targets
   preferred?: readonly `0x${string}`[];
 }
 
-// The stored Contracts declaring the error, preferred ones first
+// The stored Contracts declaring the error: the called address's, then the
+// preferred ones, then the rest in store order
 const findErrorContracts = (
   selector: `0x${string}`,
   { index, address, preferred = [] }: ErrorLookup,
 ) => {
-  const skip = address && normalizeAddress(address);
-  const order = preferred.map(normalizeAddress);
+  const order = [...(address ? [address] : []), ...preferred].map(
+    normalizeAddress,
+  );
   const rank = (contract: Contract) => {
     const position = order.indexOf(normalizeAddress(contract.address));
     return position === -1 ? order.length : position;
   };
-  return (index.get(selector) ?? [])
-    .filter((contract) => normalizeAddress(contract.address) !== skip)
-    .sort((a, b) => rank(a) - rank(b));
+  return [...(index.get(selector) ?? [])].sort((a, b) => rank(a) - rank(b));
 };
 
 // Decodes revert data as Error(string), Panic(uint256) or a custom error the
@@ -119,9 +126,13 @@ export function decodeRevert(
   // The first ABI whose error decodes by Selector and arguments wins
   for (const contract of findErrorContracts(selector, lookup)) {
     const other = decodeWithAbi(data, contract.abi);
-    if (other.kind === "custom") {
-      return { ...other, from: formatContractName(contract) };
+    if (other.kind !== "custom") {
+      continue;
     }
+    const own =
+      lookup.address &&
+      normalizeAddress(contract.address) === normalizeAddress(lookup.address);
+    return own ? other : { ...other, from: formatContractName(contract) };
   }
   return revert;
 }

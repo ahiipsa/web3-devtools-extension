@@ -183,6 +183,27 @@ describe("decodeRevert with the ABIs of other known Contracts", () => {
     });
   });
 
+  it("tries the called address's stored Contract first while its own ABI is not at hand", () => {
+    const router: Contract = {
+      address: ROUTER,
+      name: "Router",
+      abi: parseAbi(["error InsufficientLiquidity()"]),
+    };
+    const index = buildErrorIndex([pool, router]);
+    // Still loading, or decoded with a built-in ABI
+    expect(
+      decodeRevert(insufficientLiquidity, undefined, {
+        index,
+        address: getAddress(ROUTER),
+      }),
+    ).toEqual({
+      kind: "custom",
+      name: "InsufficientLiquidity",
+      signature: "InsufficientLiquidity()",
+      args: [],
+    });
+  });
+
   it("prefers an Inner Call target's ABI over an unrelated stored Contract", () => {
     const other: Contract = {
       address: OTHER,
