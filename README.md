@@ -42,7 +42,7 @@ Load the `build/` folder as an unpacked extension (see [Install](#install)), and
 npm test        # unit tests (Vitest)
 npm run lint
 npm run build   # typecheck and production build into build/
-npm run icons   # regenerate public/icons/*.png and store/icon-128.png from assets/ (needs rsvg-convert: brew install librsvg)
+npm run icons   # regenerate public/icons/*.png, the store icon and promo tiles (needs rsvg-convert: brew install librsvg)
 ```
 
 Project layout:
@@ -51,7 +51,7 @@ Project layout:
 - `manifest.ts`: source of the generated `manifest.json`; the version comes from `package.json`
 - `public/`: popup and icons, copied into the build as-is
 - `assets/icon.svg`: source of the PNG icons in `public/icons/`, regenerated with `npm run icons`; `assets/store-icon.svg` pads it into the store icon
-- `store/`: the Chrome Web Store listing (`listing.md`), its icon and screenshots, and `screenshots.mjs`, which retakes them
+- `store/`: the Chrome Web Store listing (`listing.md`), its icon, promo tiles and screenshots, and `screenshots.mjs`, which retakes them
 - `GLOSSARY.md` and `docs/adr/`: domain language and architecture decisions
 
 ## Release

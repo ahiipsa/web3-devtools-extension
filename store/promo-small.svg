@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="440" height="280" viewBox="0 0 440 280">
+  <!-- Chrome Web Store small promo tile; the artwork is assets/icon.svg's -->
+  <rect width="440" height="280" fill="#4f46e5"/>
+  <g transform="translate(156 32) scale(1)">
+    <g fill="none" stroke="#fff" stroke-width="10" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M42 26c-10 0-12 6-12 14v12c0 6-4 12-10 12 6 0 10 6 10 12v12c0 8 2 14 12 14"/>
+      <path d="M86 26c10 0 12 6 12 14v12c0 6 4 12 10 12-6 0-10 6-10 12v12c0 8-2 14-12 14"/>
+    </g>
+    <path d="M64 36l15 28-15 28-15-28z" fill="#fff"/>
+  </g>
+  <g fill="#fff" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" text-anchor="middle">
+    <text x="220" y="196" font-size="34" font-weight="bold">EVM RPC Inspector</text>
+    <text x="220" y="232" font-size="18" fill-opacity="0.85">Decode JSON-RPC calls in Chrome DevTools</text>
+  </g>
+</svg>

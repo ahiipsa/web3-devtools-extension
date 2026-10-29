@@ -8,7 +8,7 @@
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "watch": "vite build --watch",
     "test": "vitest run",
-    "icons": "set -e; for size in 16 48 128; do rsvg-convert -w $size -h $size assets/icon.svg -o public/icons/icon-$size.png; done; rsvg-convert -w 128 -h 128 assets/store-icon.svg -o store/icon-128.png",
+    "icons": "set -e; for size in 16 48 128; do rsvg-convert -w $size -h $size assets/icon.svg -o public/icons/icon-$size.png; done; rsvg-convert -w 128 -h 128 assets/store-icon.svg -o store/icon-128.png; for tile in small marquee; do rsvg-convert store/promo-$tile.svg -o store/promo-$tile.png; done",
     "release": "npm run build && rm -rf release && mkdir release && cd build && zip -qr ../release/evm-rpc-inspector-$npm_package_version.zip ."
   },
   "dependencies": {

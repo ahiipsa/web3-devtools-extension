@@ -36,6 +36,12 @@ Open source under the MIT license: https://github.com/ahiipsa/web3-devtools-exte
 
 **Store icon**: `store/icon-128.png` (128×128, 96×96 artwork with 16 px transparent padding; regenerate with `npm run icons`)
 
+**Small promo tile**: `store/promo-small.png` (440×280)
+
+**Marquee promo tile**: `store/promo-marquee.png` (1400×560, optional; shown only if the store features the extension)
+
+Both tiles are rendered from `store/promo-*.svg` by `npm run icons`; the marquee shows `store/screenshots/1-table.png`, so rerun it after retaking the screenshots.
+
 **Screenshots** (1280×800, in this order; retake with `WINDOW_SIZE=1440,870 node store/screenshots.mjs` after `npm run build`):
 
 1. `store/screenshots/1-table.png`: the RPC Requests of curve.finance, decoded
