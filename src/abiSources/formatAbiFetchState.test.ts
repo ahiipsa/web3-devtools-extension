@@ -167,6 +167,14 @@ describe("formatAbiFetchState", () => {
     ).toBe(true);
   });
 
+  it("offers the settings when Etherscan needs a paid plan, which a paid key fixes", () => {
+    expect(
+      formatAbiFetchState(
+        missed(SOURCIFY_MISS, { kind: "paid-plan", chainId: 8453 }),
+      )?.openSettings,
+    ).toBe(true);
+  });
+
   it.each<[string, AbiFetchState]>([
     [
       "Etherscan is rate limited",
@@ -178,5 +186,52 @@ describe("formatAbiFetchState", () => {
     ],
   ])("offers no settings when %s", (_, state) => {
     expect(formatAbiFetchState(state)?.openSettings).toBeUndefined();
+  });
+
+  describe("for a proxy's implementation", () => {
+    const IMPLEMENTATION = "0x43506849d7c04f9138d1a2050bbf3a0c054402dd";
+    const implementationMissed = (
+      sourcify: SourcifyOutcome,
+      etherscan: EtherscanOutcome,
+    ): AbiFetchState => ({
+      kind: "missed",
+      outcomes: { sourcify, etherscan },
+      implementation: IMPLEMENTATION,
+    });
+
+    it("says the outcomes are the implementation's, its address on hover", () => {
+      expect(
+        formatAbiFetchState(
+          implementationMissed(SOURCIFY_MISS, {
+            kind: "paid-plan",
+            chainId: 8453,
+          }),
+        ),
+      ).toEqual({
+        segments: [
+          { text: "Implementation: ", tone: "muted", title: "0x4350…02dd" },
+          { text: "No verified ABI on Sourcify", tone: "muted" },
+          { text: " · ", tone: "muted" },
+          { text: "Etherscan needs a paid plan for Base", tone: "muted" },
+        ],
+        openSettings: true,
+      });
+    });
+
+    it("prefixes a failure too", () => {
+      expect(
+        text(implementationMissed(SOURCIFY_DOWN, { kind: "not-asked" })),
+      ).toBe(
+        "Implementation: Sourcify is unavailable (HTTP 503) · add an Etherscan API key to try Etherscan",
+      );
+    });
+
+    it("does not prefix the miss of an address that is no proxy", () => {
+      expect(
+        text(missed(SOURCIFY_MISS, { kind: "paid-plan", chainId: 8453 })),
+      ).toBe(
+        "No verified ABI on Sourcify · Etherscan needs a paid plan for Base",
+      );
+    });
   });
 });

@@ -251,6 +251,42 @@ describe("decodeRevert with the ABIs of other known Contracts", () => {
     });
   });
 
+  it("counts the other Contracts by name: a proxy and its implementation under one name are one", () => {
+    const declaring = (address: `0x${string}`, name: string): Contract => ({
+      address,
+      name,
+      abi: poolAbi,
+    });
+    const proxy = declaring(
+      "0x0000000000000000000000000000000000000002",
+      "FiatTokenV2_2",
+    );
+    const implementation = declaring(
+      "0x0000000000000000000000000000000000000003",
+      "FiatTokenV2_2",
+    );
+    expect(
+      decodeRevert(insufficientLiquidity, undefined, {
+        index: buildErrorIndex([proxy, implementation]),
+      }),
+    ).toEqual({
+      kind: "custom",
+      name: "InsufficientLiquidity",
+      signature: "InsufficientLiquidity()",
+      args: [],
+      from: "FiatTokenV2_2",
+    });
+    expect(
+      decodeRevert(insufficientLiquidity, undefined, {
+        index: buildErrorIndex([
+          proxy,
+          declaring("0x0000000000000000000000000000000000000004", "DAI"),
+          implementation,
+        ]),
+      }),
+    ).toMatchObject({ from: "FiatTokenV2_2", alsoFrom: ["DAI"] });
+  });
+
   it("names no other Contract when only one declares the error", () => {
     const index = buildErrorIndex([
       pool,

@@ -31,7 +31,12 @@ const NOT_FOUND: AbiSourceResult = { kind: "not-found" };
 const missed = (
   sourcify: SourcifyOutcome,
   etherscan: EtherscanOutcome,
-): ContractAbi => ({ kind: "missed", outcomes: { sourcify, etherscan } });
+  implementation?: `0x${string}`,
+): ContractAbi => ({
+  kind: "missed",
+  outcomes: { sourcify, etherscan },
+  ...(implementation && { implementation }),
+});
 const sourcifyFailed = (reason: string): SourcifyOutcome => ({
   kind: "failed",
   reason,
@@ -323,7 +328,7 @@ describe("fetchContractAbi", () => {
     sources.sourcify.mockRejectedValue(new Error("HTTP 503"));
 
     expect(await fetch()).toEqual(
-      missed(sourcifyFailed("HTTP 503"), { kind: "not-found" }),
+      missed(sourcifyFailed("HTTP 503"), { kind: "not-found" }, IMPLEMENTATION),
     );
   });
 
@@ -395,7 +400,7 @@ describe("fetchContractAbi", () => {
     });
 
     expect(await fetch()).toEqual(
-      missed({ kind: "not-found" }, { kind: "not-asked" }),
+      missed({ kind: "not-found" }, { kind: "not-asked" }, IMPLEMENTATION),
     );
   });
 
@@ -410,7 +415,7 @@ describe("fetchContractAbi", () => {
     );
 
     expect(await fetch()).toEqual(
-      missed({ kind: "not-found" }, { kind: "rate-limit" }),
+      missed({ kind: "not-found" }, { kind: "rate-limit" }, IMPLEMENTATION),
     );
   });
 
@@ -466,7 +471,7 @@ describe("fetchContractAbi", () => {
     });
 
     expect(await fetch()).toEqual(
-      missed(sourcifyFailed("HTTP 500"), { kind: "not-asked" }),
+      missed(sourcifyFailed("HTTP 500"), { kind: "not-asked" }, IMPLEMENTATION),
     );
   });
 
@@ -478,11 +483,11 @@ describe("fetchContractAbi", () => {
     sources.etherscan.mockResolvedValue({ kind: "invalid-key" });
 
     expect(await fetch()).toEqual(
-      missed({ kind: "not-found" }, { kind: "invalid-key" }),
+      missed({ kind: "not-found" }, { kind: "invalid-key" }, IMPLEMENTATION),
     );
   });
 
-  it("misses with the implementation's outcomes when Etherscan needs a paid plan for it, saving no proxy's own ABI", async () => {
+  it("misses with the implementation's outcomes and address when Etherscan needs a paid plan for it, saving no proxy's own ABI", async () => {
     const { sources, fetch } = setupProxy({
       sourcify: { [PROXY]: proxyFound("FiatTokenProxy", IMPLEMENTATION) },
       apiKey: "KEY",
@@ -490,7 +495,11 @@ describe("fetchContractAbi", () => {
     sources.etherscan.mockResolvedValue({ kind: "paid-plan", chainId: 8453 });
 
     expect(await fetch()).toEqual(
-      missed({ kind: "not-found" }, { kind: "paid-plan", chainId: 8453 }),
+      missed(
+        { kind: "not-found" },
+        { kind: "paid-plan", chainId: 8453 },
+        IMPLEMENTATION,
+      ),
     );
   });
 

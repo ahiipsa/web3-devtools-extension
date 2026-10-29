@@ -297,6 +297,17 @@ const MULTICALL_FETCH_RESULT = encodeResults([
   { success: true, returnData: INNER_RAW_RESULT },
 ]);
 
+// The same to WETH and BUBBLER: the call to BUBBLER fails with the Vault's
+// InsufficientBalance(5, 9), as if bubbled up from a Vault it called
+export const MULTICALL_BUBBLED_CALL = aggregate3Call(48, WETH, BUBBLER);
+const MULTICALL_BUBBLED_RESULT = encodeResults([
+  { success: true, returnData: "0x" + pad("f4240") }, // 1000000
+  {
+    success: false,
+    returnData: vaultRevert(`0x2e1a7d4d${(9).toString(16).padStart(64, "0")}`),
+  },
+]);
+
 // What `traffic` sends: a single request, a batch, a call to TOKEN, a revert
 // and one POST that is not JSON-RPC (the Panel must skip it). Five RPC Requests.
 export const TRAFFIC = [
@@ -389,7 +400,9 @@ const startNode = () =>
                   result:
                     r.id === MULTICALL_FETCH_CALL.id
                       ? MULTICALL_FETCH_RESULT
-                      : MULTICALL_RESULT,
+                      : r.id === MULTICALL_BUBBLED_CALL.id
+                        ? MULTICALL_BUBBLED_RESULT
+                        : MULTICALL_RESULT,
                 }
               : r.method === "eth_getCode"
                 ? { result: CODE[String(r.params?.[0]).toLowerCase()] ?? "0x" }
@@ -2198,6 +2211,17 @@ async function smoke() {
       json((await detailsBody()).slice(-160)),
     );
     await shot("14-paid-plan");
+    // A paid key fixes it: ⚙ to the key field
+    await click(".rpc-details-abi-fetch .rpc-details-settings-button");
+    check(
+      "⚙ beside the paid-plan miss opens the settings with the key field focused",
+      (await until(() =>
+        ev(
+          `!!document.activeElement?.closest(".rpc-table-settings-field") && !!document.querySelector(".rpc-table-settings")?.checkVisibility()`,
+        ),
+      )) === true,
+    );
+    await click(".rpc-table-settings-button");
     await key("Escape");
 
     // A key Etherscan rejects: Sourcify's failure and Etherscan's side by
@@ -2662,6 +2686,39 @@ async function smoke() {
       json(countedStatus),
     );
     await shot("16-revert-bubbled-counted");
+
+    // The same error from a Multicall's Inner Call to BUBBLER: neither
+    // target declares it, so the Vault is credited with a count of the other
+    await app.rpc(MULTICALL_BUBBLED_CALL);
+    const bubbledMulticall = await until(async () => {
+      let n = 0;
+      while (await app.rowSelector({ contract: "Multicall3" }, n + 1)) n++;
+      return n >= 2 ? n : undefined;
+    });
+    await clickRow({ contract: "Multicall3" }, bubbledMulticall);
+    await click(".rpc-details-tab", "Response");
+    const innerFailure = () =>
+      ev(`(() => {
+        const failure = document.querySelectorAll(".rpc-details-inner-call")[1]?.querySelector(".rpc-details-failed");
+        const source = failure?.querySelector(".rpc-details-muted");
+        return failure && { text: failure.innerText.trim(), title: source?.title };
+      })()`);
+    const innerCounted = await until(innerFailure, (failure) =>
+      /^✗ InsufficientBalance\(.*\) from Vault \+1$/.test(failure?.text ?? ""),
+    );
+    check(
+      "a failed Inner Call's error two stored Contracts declare reads ✗ <error> from Vault +1",
+      /^✗ InsufficientBalance\(.*\) from Vault \+1$/.test(
+        innerCounted?.text ?? "",
+      ),
+      json(innerCounted),
+    );
+    check(
+      "its tooltip reads Declared by Vault, VaultV2",
+      innerCounted?.title === "Declared by Vault, VaultV2",
+      json(innerCounted),
+    );
+    await shot("16-revert-inner-call-counted");
 
     await app.rpc({ jsonrpc: "2.0", id: 43, method: "eth_gasPrice" }, "/bad");
     await clickRow({ method: "eth_gasPrice" });

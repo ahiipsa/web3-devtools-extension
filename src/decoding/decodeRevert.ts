@@ -21,8 +21,9 @@ export type Revert =
       // The Contract whose ABI decoded it, when not the first ABI tried:
       // an error raised deeper in the call and bubbled up
       from?: string;
-      // The other stored Contracts whose ABIs decode it too, in store order,
-      // when `from` is neither the called address nor an Inner Call target
+      // The names of the other stored Contracts whose ABIs decode it too,
+      // each once and none `from`, in store order, when `from` is neither the
+      // called address nor an Inner Call target
       alsoFrom?: string[];
     }
   // Revert data nothing decodes
@@ -145,15 +146,20 @@ export function decodeRevert(
       return other;
     }
     const from = formatContractName(contract);
+    // By name: a proxy and its implementation are saved under one
     const alsoFrom = known
       ? []
-      : candidates
-          .slice(position + 1)
-          .filter(
-            (candidate) =>
-              decodeWithAbi(data, candidate.contract.abi).kind === "custom",
-          )
-          .map((candidate) => formatContractName(candidate.contract));
+      : [
+          ...new Set(
+            candidates
+              .slice(position + 1)
+              .filter(
+                (candidate) =>
+                  decodeWithAbi(data, candidate.contract.abi).kind === "custom",
+              )
+              .map((candidate) => formatContractName(candidate.contract)),
+          ),
+        ].filter((name) => name !== from);
     return alsoFrom.length > 0
       ? { ...other, from, alsoFrom }
       : { ...other, from };

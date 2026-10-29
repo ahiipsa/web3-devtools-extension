@@ -8,12 +8,13 @@ import { EndpointChains } from "../chains/endpointChains.ts";
 import { AbiSourceName, AbiSourceOutcomes, ContractAbi } from "./abiSources.ts";
 
 // What the Contract tab shows for an address without a Contract: a miss
-// keeps what each ABI Source answered; "failed" is a failure outside them,
-// such as an unknown Chain
+// keeps what each ABI Source answered, and the implementation's address
+// when they answered for a proxy's implementation; "failed" is a failure
+// outside them, such as an unknown Chain
 export type AbiFetchState =
   | { kind: "idle" }
   | { kind: "fetching" }
-  | { kind: "missed"; outcomes: AbiSourceOutcomes }
+  | Extract<ContractAbi, { kind: "missed" }>
   | { kind: "failed"; reason: string };
 
 export interface AbiFetcherDeps {

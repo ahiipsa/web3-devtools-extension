@@ -851,6 +851,7 @@ describe("Setting an Etherscan API key", () => {
         sourcify: { kind: "not-found" },
         etherscan: { kind: "paid-plan", chainId: 1 },
       },
+      implementation: DAI,
     });
 
     apiKey = PAID_KEY;

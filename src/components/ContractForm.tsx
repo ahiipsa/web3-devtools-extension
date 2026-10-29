@@ -135,9 +135,10 @@ export const ContractForm = (props: ContractInfoProps) => {
       {contractQuery.isSuccess && (
         <div className="rpc-contract-header">
           <span className="rpc-contract-source">
-            {header.segments.map(({ text, tone }, index) => (
+            {header.segments.map(({ text, tone, title }, index) => (
               <span
                 key={index}
+                title={title}
                 className={
                   tone === "failed" ? "rpc-details-failed" : "rpc-details-muted"
                 }

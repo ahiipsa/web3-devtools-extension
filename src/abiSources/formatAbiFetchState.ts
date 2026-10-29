@@ -6,6 +6,7 @@ import {
 } from "./abiSources.ts";
 import { OverviewSegment } from "../details/overview.ts";
 import { getChainName } from "../chains/chainNames.ts";
+import { formatShortAddress } from "../details/formatAddress.ts";
 
 export const ABI_SOURCE_NAMES: Record<AbiSourceName, string> = {
   sourcify: "Sourcify",
@@ -71,9 +72,11 @@ const formatOutcomes = ({
   ];
 };
 
-// Etherscan rejected the key, or Sourcify is down and no key was entered
+// Etherscan rejected the key or needs a paid one, or Sourcify is down and
+// no key was entered
 const offersSettings = ({ sourcify, etherscan }: AbiSourceOutcomes) =>
   etherscan.kind === "invalid-key" ||
+  etherscan.kind === "paid-plan" ||
   (sourcify.kind === "failed" && etherscan.kind === "not-asked");
 
 // What Params, an Inner Call and the Contract tab show for an address
@@ -85,9 +88,20 @@ export const formatAbiFetchState = (
     case "fetching":
       return { segments: [muted("Fetching ABI…")] };
     case "missed":
-      // What the ABI Sources answered, not what they would answer now
+      // What the ABI Sources answered, not what they would answer now; for
+      // a proxy's implementation, said to be its
       return {
-        segments: formatOutcomes(state.outcomes),
+        segments: [
+          ...(state.implementation
+            ? [
+                {
+                  ...muted("Implementation: "),
+                  title: formatShortAddress(state.implementation),
+                },
+              ]
+            : []),
+          ...formatOutcomes(state.outcomes),
+        ],
         ...(offersSettings(state.outcomes) && { openSettings: true }),
       };
     case "failed":
