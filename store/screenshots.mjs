@@ -14,6 +14,7 @@ const DEVTOOLS_WIDTH = 1170;
 const raw = mkdtempSync(join(tmpdir(), "evm-rpc-store-"));
 
 const app = await launch({ realAbiSources: true });
+// DevTools internals, as in the driver
 const LEGACY = `(await import("./ui/legacy/legacy.js")).InspectorView.InspectorView.instance()`;
 
 const shot = async (name) => {
@@ -57,6 +58,8 @@ const open = async (url, settle = 15_000) => {
 };
 
 try {
+  // Docked right, DevTools are the sidebar of the window's root split; the
+  // extra px is the split's resizer
   await app.devtools.evaluate(
     `(async () => { ${LEGACY}.parentWidget().setSidebarSize(${DEVTOOLS_WIDTH + 1}); return 1 })()`,
   );
@@ -75,16 +78,26 @@ try {
   await shot("5-contract");
 
   await open("https://app.ens.domains/vitalik.eth");
-  const multicalls = await app.rowCells();
-  const widest = multicalls
-    .map((cells, i) => [Number(cells[0].match(/· (\d+)/)?.[1] ?? 0), i])
-    .sort((a, b) => b[0] - a[0])[0][1];
-  const n = multicalls
-    .slice(0, widest)
-    .filter((c) => c[2] === "Multicall3").length;
-  await app.clickRow(
-    { method: "eth_call", contract: "Multicall3", fn: "aggregate3" },
-    n,
+  // The aggregate3 call with the most Inner Calls: its Method cell reads
+  // `eth_call · <Inner Calls>`, and Method, Contract and Function are the 1st,
+  // 3rd and 4th cells
+  const MULTICALL = {
+    method: "eth_call",
+    contract: "Multicall3",
+    fn: "aggregate3",
+  };
+  const innerCalls = (await app.rowCells())
+    .filter(
+      ([method, , contract, fn]) =>
+        method.split(" ")[0] === MULTICALL.method &&
+        contract === MULTICALL.contract &&
+        fn === MULTICALL.fn,
+    )
+    .map(([method]) => Number(method.match(/· (\d+)/)?.[1] ?? 0));
+  await app.clickRow(MULTICALL, innerCalls.indexOf(Math.max(...innerCalls)));
+  // The page's own console errors would show as a badge in the DevTools toolbar
+  await app.devtools.evaluate(
+    `(async () => { (await import("./core/sdk/sdk.js")).ConsoleModel.ConsoleModel.requestClearMessages(); return 1 })()`,
   );
   await app.click(".rpc-details-tab", "Params");
   await shot("4-multicall");

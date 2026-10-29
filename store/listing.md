@@ -24,12 +24,12 @@ FEATURES
 • Fetches verified ABIs from Sourcify automatically, and from Etherscan with your own API key. Proxies (EIP-1967 and those Sourcify resolves) decode with their implementation's ABI.
 • Opens up Multicall3 and Multicall2: every inner call with its target contract, function, arguments and result.
 • Decodes reverts: Error(string), Panic codes and custom errors, including errors bubbled up from other known contracts.
-• Shows the chain by name, and links addresses, transactions and blocks to the chain's block explorer.
+• Shows the chain by name, and links addresses, transactions and blocks to the chain's explorer, such as Etherscan.
 • Add your own ABI: a JSON array, a Hardhat or Foundry artifact, an Etherscan getabi response or human-readable lines such as "function balanceOf(address) view returns (uint256)".
-• Filter by text, by errors and by kind (calls, transactions, logs, chain, other), and move through the list with the keyboard, like the Network tab.
+• Filter by text, by errors and by method category (calls, transactions, logs, chain, other), and move through the list with the keyboard, like the Network tab.
 
 PRIVACY
-The extension needs only the "storage" permission and requests no host access. Captured traffic stays in memory and is never sent anywhere. To fetch an ABI, only the contract address and chain id are sent to Sourcify, and to Etherscan if you enter a key; both are public on chain. Automatic fetching can be turned off. No analytics, no tracking.
+The extension needs only the "storage" permission and requests no host access. Captured traffic stays in memory and is never sent anywhere. To decode calls, the extension sends contract addresses and the chain id, which are public on chain, to Sourcify, and to Etherscan with your API key if you enter one. It also asks the page's own RPC endpoint for its chain id and, to find a proxy's implementation, reads the proxy's EIP-1967 slots there. Automatic ABI fetching can be turned off. No analytics, no tracking.
 
 Open source under the MIT license: https://github.com/ahiipsa/web3-devtools-extension
 ```
@@ -66,7 +66,11 @@ Saves the user's contracts (address, name and ABI) and the panel's settings (aut
 
 **Remote code**: No, I am not using remote code. (All JavaScript ships in the package; Sourcify and Etherscan return JSON ABIs only.)
 
-**Data usage**: tick none of the categories. Captured traffic stays in memory on the device. The only data that leaves it are contract addresses and chain ids, which are public on chain, to Sourcify and Etherscan, and one `eth_chainId` request to the page's own RPC endpoint (see `PRIVACY.md`).
+**Data usage**: tick **Website content** only, and nothing else. Captured traffic stays in memory on the device, but the contract addresses taken from it leave the device, so a reviewer may count them as website content even though they are public on chain; ticking it costs nothing and avoids a rejection. What leaves the device (see `PRIVACY.md`):
+
+- to Sourcify: contract addresses and chain ids;
+- to Etherscan, only with the user's key: contract addresses, chain ids and the key itself, sent to the service that issued it (not "Authentication information" collected by the developer);
+- to the page's own RPC endpoint: one `eth_chainId`, and for a possible proxy up to two `eth_getStorageAt` reads of its EIP-1967 slots and one beacon `implementation()` call.
 
 **Certifications**: tick all three (no sale of data, no use unrelated to the single purpose, no use for creditworthiness or lending).
 
