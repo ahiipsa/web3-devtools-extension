@@ -213,12 +213,12 @@ describe("formatHiddenWithDetails", () => {
     expect(
       formatHiddenWithDetails(
         row("1", {
-          contractLabel: "0x1234...5678",
+          contractLabel: "0x1234…5678",
           functionSelector: "0x12345678",
         }),
       ),
     ).toBe(
-      "Contract: 0x1234...5678\nFunction: 0x12345678\nStatus: ok\nEndpoint: rpc.example\nTime: 10 ms",
+      "Contract: 0x1234…5678\nFunction: 0x12345678\nStatus: ok\nEndpoint: rpc.example\nTime: 10 ms",
     );
   });
 

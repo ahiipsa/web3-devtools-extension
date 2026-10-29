@@ -40,14 +40,13 @@ describe("formatContractName", () => {
     );
   });
 
-  it("knows the old fallback name cut from the address in checksum case", () => {
-    expect(formatContractName({ address: USDC, name: "0xA0b8...eB48" })).toBe(
-      "0xA0b8…eB48",
-    );
-  });
-
   it("leaves a name like an address cut that is not its own", () => {
-    for (const name of ["0xabc...", "0xa0b8...eb49", "0xa0b8..eb48"]) {
+    for (const name of [
+      "0xabc...",
+      "0xa0b8...eb49",
+      "0xa0b8..eb48",
+      "0xA0b8...eB48",
+    ]) {
       expect(formatContractName({ address: USDC, name })).toBe(name);
     }
   });
