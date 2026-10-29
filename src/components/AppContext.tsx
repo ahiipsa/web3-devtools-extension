@@ -84,6 +84,8 @@ interface AppContext {
   endpointChains: EndpointChains;
 }
 
+// The extension has no dev server, so Fast Refresh never runs
+// eslint-disable-next-line react-refresh/only-export-components
 export const AppContext = React.createContext<AppContext>({
   requestId: null,
   // eslint-disable-next-line @typescript-eslint/no-unused-vars

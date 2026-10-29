@@ -10,6 +10,8 @@ import { ExplorerTarget, getExplorerUrl } from "../chains/explorers.ts";
 import { copyText } from "../utils/copyText.ts";
 
 // The chain id of the shown RPC Request's Chain, when it is known
+// The extension has no dev server, so Fast Refresh never runs
+// eslint-disable-next-line react-refresh/only-export-components
 export const DetailsChainContext = createContext<number | undefined>(undefined);
 
 const COPY_RESULTS = {
