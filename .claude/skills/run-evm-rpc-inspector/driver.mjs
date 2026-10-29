@@ -175,6 +175,14 @@ const CODE = {
   [DELEGATED]: "0xef0100" + HOLDER.slice(2),
 };
 
+// Unverified everywhere; the smoke calls it on Base (`/paid`), which the
+// fake Etherscan serves only on a paid plan
+export const PAID_PLAN_TARGET = "0x1212121212121212121212121212121212121212";
+// The fake Etherscan rejects this key, echoing it as Etherscan does
+export const BAD_ETHERSCAN_KEY = "BADKEY";
+// The fake Etherscan's answer on Base (8453): the Chain needs a paid plan
+const PAID_PLAN_CHAIN_ID = "8453";
+
 // Verified on the fake Etherscan only; any other address is not verified
 export const LINK = "0x514910771af9ca656af840dff83e8264ecf986ca";
 export const ETHERSCAN = {
@@ -197,10 +205,12 @@ const ANSWERS = {
   eth_sendRawTransaction: { result: TX_HASH },
 };
 
-// Endpoints on another Chain than the node's chain id 1: Base, and a local
-// Chain (Hardhat and Anvil's 31337), which has no Explorer
+// Endpoints on another Chain than the node's chain id 1: Base (twice, so
+// the paid-plan miss stays off /base's rows), and a local Chain (Hardhat
+// and Anvil's 31337), which has no Explorer
 const CHAIN_IDS = {
   "/base": "0x2105",
+  "/paid": "0x2105",
   "/local": "0x7a69",
   "/polygon": "0x89",
   "/unknown": "0xf423f",
@@ -470,8 +480,22 @@ const KEY_CODES = {
   End: 35,
 };
 const MODIFIERS = { alt: 1, ctrl: 2, meta: 4, shift: 8 };
+const etherscanError = (result) => ({
+  status: 200,
+  body: { status: "0", message: "NOTOK", result },
+});
+
 const answerEtherscan = (url) => {
-  const address = new URL(url).searchParams.get("address")?.toLowerCase();
+  const { searchParams } = new URL(url);
+  if (searchParams.get("apikey") === BAD_ETHERSCAN_KEY) {
+    return etherscanError(`Invalid API Key (#err2)|${BAD_ETHERSCAN_KEY}`);
+  }
+  if (searchParams.get("chainid") === PAID_PLAN_CHAIN_ID) {
+    return etherscanError(
+      "Free API access is not supported for this chain. Please upgrade your api plan for full chain coverage. https://etherscan.io/apis",
+    );
+  }
+  const address = searchParams.get("address")?.toLowerCase();
   const fixture = ETHERSCAN[address] ?? {
     ABI: "Contract source code not verified",
     ContractName: "",
@@ -2024,6 +2048,95 @@ async function smoke() {
     );
     await key("Escape");
 
+    // Each ABI Source's outcome side by side: a Chain Etherscan serves only
+    // on a paid plan
+    await app.rpc(callTo(15, PAID_PLAN_TARGET), "/paid");
+    await clickRow({ contract: "0x1212...1212" });
+    await click(".rpc-details-tab", "Params");
+    const paidPlan =
+      "No verified ABI on Sourcify · Etherscan needs a paid plan for Base";
+    check(
+      "a miss on Base says Etherscan needs a paid plan for it",
+      (await until(detailsBody, (text) => text.includes(paidPlan))).includes(
+        paidPlan,
+      ),
+      json((await detailsBody()).slice(-160)),
+    );
+    await shot("14-paid-plan");
+    await key("Escape");
+
+    // A key Etherscan rejects: Sourcify's failure and Etherscan's side by
+    // side, with ⚙ to the key field
+    const setEtherscanApiKey = async (apiKey) => {
+      await click(".rpc-table-settings-button");
+      await click(".rpc-table-settings-field input");
+      await ev(`document.activeElement.select(), true`);
+      await type(apiKey);
+      await until(
+        () =>
+          ev(`chrome.storage.local.get("settings").then((s) => s.settings)`),
+        (settings) => settings?.etherscanApiKey === apiKey,
+      );
+      // Closes the popover
+      await click(".rpc-table-settings-button");
+    };
+    await setEtherscanApiKey(BAD_ETHERSCAN_KEY);
+    await app.rpc(callTo(16, SOURCIFY_DOWN));
+    await clickRow({ contract: "0x3333...3333" });
+    await click(".rpc-details-tab", "Params");
+    const bothFailed = "Sourcify: HTTP 500 · Etherscan API key is invalid";
+    check(
+      "Sourcify's 500 and Etherscan's invalid key show side by side",
+      (await until(detailsBody, (text) => text.includes(bothFailed))).includes(
+        bothFailed,
+      ),
+      json((await detailsBody()).slice(-160)),
+    );
+    const failedParts = await ev(
+      `[...document.querySelectorAll(".rpc-details-abi-fetch .rpc-details-failed")].map((part) => part.innerText)`,
+    );
+    check(
+      "both failures are red",
+      json(failedParts) ===
+        json(["Sourcify: HTTP 500", "Etherscan API key is invalid"]),
+      json(failedParts),
+    );
+    check(
+      "the bad key is nowhere in the Panel's DOM outside the settings field",
+      await ev(`(() => {
+        const body = document.body.cloneNode(true);
+        body
+          .querySelectorAll(".rpc-table-settings-field input")
+          .forEach((input) => input.remove());
+        return !body.outerHTML.includes(${JSON.stringify(BAD_ETHERSCAN_KEY)});
+      })()`),
+    );
+    await shot("15-invalid-key");
+    await click(".rpc-details-abi-fetch .rpc-details-settings-button");
+    const keyFocused = await until(() =>
+      ev(
+        `!!document.activeElement?.closest(".rpc-table-settings-field") && !!document.querySelector(".rpc-table-settings")?.checkVisibility()`,
+      ),
+    );
+    check(
+      "⚙ beside the invalid key opens the settings with the key field focused",
+      keyFocused === true,
+    );
+    await shot("15-invalid-key-settings");
+    // A good key fetches the failure again, from Etherscan
+    await ev(`document.activeElement.select(), true`);
+    await type(KEY);
+    await until(
+      () => ev(`chrome.storage.local.get("settings").then((s) => s.settings)`),
+      (settings) => settings?.etherscanApiKey === KEY,
+    );
+    await click(".rpc-table-settings-button");
+    check(
+      "the invalid-key failure decodes once the key is fixed",
+      await callsContractSoon("DownToken", "balanceOf"),
+    );
+    await key("Escape");
+
     // With a key, Etherscan is asked when Sourcify fails too
     await app.rpc(callTo(14, SOURCIFY_DOWN));
     check(
@@ -2384,6 +2497,19 @@ async function smoke() {
       json(unverifiedParams),
     );
     await shot("21-params-abi-fetch-320");
+    // The paid-plan state, one of the longest, wraps at 320 px
+    await clickRow({ contract: "0x1212...1212" });
+    await narrowDetails();
+    await click(".rpc-details-tab", "Params");
+    const paidPlanParams = await until(detailsBody, (text) =>
+      text.includes(paidPlan),
+    );
+    check(
+      "both ABI Sources' outcomes wrap in a 320 px details pane",
+      paidPlanParams.includes(paidPlan) && (await noOverflow()),
+      json(paidPlanParams.slice(-160)),
+    );
+    await shot("21-params-paid-plan-320");
 
     // The Overview at 320 px: a Revert, a Multicall, a Batch, no Contract
     const overviewOf = async (row, index, test) => {
@@ -2470,8 +2596,20 @@ async function smoke() {
       (await app.rowCells()).filter(
         (cells) => cells[0].split(" ")[0] === method,
       ).length - 1;
+    // The table renders only the rows near the view: a method whose last
+    // row is not in it is reached from the first row with the keyboard
+    const selectedMethod = async () =>
+      (await app.selectedCells())[0]?.split(" ")[0];
     const responseOf = async (method, test) => {
-      await clickRow({ method }, await lastRowOf(method));
+      const last = await lastRowOf(method);
+      if (last >= 0) await clickRow({ method }, last);
+      if ((await selectedMethod()) !== method) {
+        // Keys go to the table once a row in view has the focus
+        await click(".rpc-table-body [role=row][aria-selected=true]");
+        await key("Home");
+        for (let i = 0; i < 100 && (await selectedMethod()) !== method; i++)
+          await key("ArrowDown");
+      }
       await narrowDetails();
       await click(".rpc-details-tab", "Response");
       return until(valueSection, (text) => !!text && test(text));

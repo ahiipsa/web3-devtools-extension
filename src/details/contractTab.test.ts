@@ -105,12 +105,36 @@ describe("getContractTabHeader", () => {
     );
   });
 
-  it("says a miss with the ABI Sources asked", () => {
+  it("says a miss with what each ABI Source answered", () => {
     const result = header({
-      fetchState: { kind: "not-found", sources: ["sourcify", "etherscan"] },
+      fetchState: {
+        kind: "missed",
+        outcomes: {
+          sourcify: { kind: "not-found" },
+          etherscan: { kind: "not-found" },
+        },
+      },
     });
     expect(text(result)).toBe("No verified ABI on Sourcify or Etherscan");
     expect(result.fetchAbi).toBe("enabled");
+    expect(result.openSettings).toBeUndefined();
+  });
+
+  it("offers the settings beside an invalid Etherscan API key", () => {
+    const result = header({
+      builtIn,
+      fetchState: {
+        kind: "missed",
+        outcomes: {
+          sourcify: { kind: "failed", reason: "HTTP 503" },
+          etherscan: { kind: "invalid-key" },
+        },
+      },
+    });
+    expect(text(result)).toBe(
+      "Built-in Multicall3 ABI · Sourcify: HTTP 503 · Etherscan API key is invalid",
+    );
+    expect(result.openSettings).toBe(true);
   });
 
   it("shows a failed fetch in red", () => {

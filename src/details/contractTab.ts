@@ -3,6 +3,7 @@ import { BuiltInContract } from "../decoding/multicall.ts";
 import { AbiFetchState } from "../abiSources/abiFetcher.ts";
 import {
   ABI_SOURCE_NAMES,
+  AbiFetchLabel,
   formatAbiFetchState,
 } from "../abiSources/formatAbiFetchState.ts";
 import { OverviewSegment } from "./overview.ts";
@@ -70,25 +71,25 @@ export interface ContractTabHeader {
   implementation?: `0x${string}`;
   // Fetch ABI on the right, for an address without a Contract
   fetchAbi?: "enabled" | "disabled";
+  // A ⚙ after the segments that opens the settings at the Etherscan API key
+  openSettings?: true;
 }
 
 const formatFetchState = (
   state: AbiFetchState,
   hasEtherscanKey: boolean,
-): OverviewSegment | undefined => {
+): AbiFetchLabel | undefined => {
   if (state.kind === "fetching") {
     // The ABI Sources that may be asked: Etherscan only after Sourcify
     return {
-      text: `Fetching ABI from ${hasEtherscanKey ? "Sourcify or Etherscan" : "Sourcify"}…`,
+      segments: [
+        {
+          text: `Fetching ABI from ${hasEtherscanKey ? "Sourcify or Etherscan" : "Sourcify"}…`,
+        },
+      ],
     };
   }
-  const label = formatAbiFetchState(state);
-  if (!label) {
-    return undefined;
-  }
-  return state.kind === "failed"
-    ? { text: label, tone: "failed" }
-    : { text: label };
+  return formatAbiFetchState(state);
 };
 
 export const getContractTabHeader = (input: {
@@ -124,20 +125,23 @@ export const getContractTabHeader = (input: {
   }
 
   const fetchAbi = fetchState.kind === "fetching" ? "disabled" : "enabled";
-  const fetchSegment = formatFetchState(fetchState, hasEtherscanKey);
+  const label = formatFetchState(fetchState, hasEtherscanKey);
+  const openSettings = label?.openSettings;
   if (builtIn) {
     // An address without a Contract is still fetched for; its state follows
     return {
       segments: [
         { text: `Built-in ${builtIn.name} ABI` },
-        ...(fetchSegment ? [{ text: " · " }, fetchSegment] : []),
+        ...(label ? [{ text: " · " }, ...label.segments] : []),
       ],
       fetchAbi,
+      ...(openSettings && { openSettings }),
     };
   }
   return {
-    segments: [fetchSegment ?? { text: "No ABI for this address" }],
+    segments: label?.segments ?? [{ text: "No ABI for this address" }],
     fetchAbi,
+    ...(openSettings && { openSettings }),
   };
 };
 

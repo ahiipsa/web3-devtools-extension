@@ -1,7 +1,7 @@
 import "./RequestTable.css";
 import cx from "classnames";
 import { Fragment, useContext, useEffect, useRef } from "react";
-import { Checkbox, Input, Popover } from "antd";
+import { Checkbox, Input, InputRef, Popover } from "antd";
 import {
   ClearIcon,
   CrossCircleFilledIcon,
@@ -162,12 +162,33 @@ export const RequestToolbar = ({
 };
 
 const SettingsButton = () => {
-  const { settings, updateSettings } = useContext(AppContext);
+  const {
+    settings,
+    updateSettings,
+    settingsOpen,
+    setSettingsOpen,
+    etherscanApiKeyFocus,
+  } = useContext(AppContext);
+  const etherscanApiKeyRef = useRef<InputRef>(null);
+
+  // A ⚙ beside an invalid Etherscan API key opens the settings at its field;
+  // the field mounts with the popover, so a frame later
+  useEffect(() => {
+    if (etherscanApiKeyFocus === 0) {
+      return;
+    }
+    const frame = requestAnimationFrame(() =>
+      etherscanApiKeyRef.current?.focus(),
+    );
+    return () => cancelAnimationFrame(frame);
+  }, [etherscanApiKeyFocus]);
 
   return (
     <Popover
       trigger="click"
       placement="bottomRight"
+      open={settingsOpen}
+      onOpenChange={setSettingsOpen}
       content={
         <div className="rpc-table-settings">
           <Checkbox
@@ -182,6 +203,7 @@ const SettingsButton = () => {
             Etherscan API key
             {/* Masked; saved as typed, used from the next fetch on */}
             <Input.Password
+              ref={etherscanApiKeyRef}
               size="small"
               placeholder="Optional"
               autoComplete="off"

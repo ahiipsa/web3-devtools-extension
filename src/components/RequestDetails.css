@@ -161,6 +161,38 @@
   margin-top: 2px;
 }
 
+/* Both ABI Sources' outcomes wrap anywhere rather than scroll */
+.rpc-details-abi-fetch-state {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* The ⚙ after an invalid Etherscan API key, on the text's line */
+.rpc-details-settings-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  margin-left: 4px;
+  padding: 0;
+  border: none;
+  border-radius: 9999px;
+  background: transparent;
+  color: inherit;
+  vertical-align: middle;
+  cursor: pointer;
+}
+
+.rpc-details-settings-button:hover {
+  background: color-mix(in srgb, currentColor 12%, transparent);
+}
+
+.rpc-details-settings-button svg {
+  width: 16px;
+  height: 16px;
+}
+
 /* The Contract tab: where the ABI comes from, Fetch ABI on the right; both
    wrap in a narrow details pane */
 .rpc-contract-header {

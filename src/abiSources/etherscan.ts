@@ -12,14 +12,47 @@ export const ETHERSCAN_TIMEOUT = 10_000;
 
 const NOT_VERIFIED = "Contract source code not verified";
 
-// Etherscan's explanations for a Chain it does not serve at all ("Missing or
-// unsupported chainid parameter …", "Invalid chainid") or not on the key's
-// plan ("Free API access is not supported for this chain …")
-const UNSUPPORTED_CHAIN =
-  /unsupported chainid|invalid chainid|not supported for this chain/i;
+// Etherscan's explanations of an answer without an ABI that the user can
+// act on; any other explanation is a failure with Etherscan's own text.
+// A Chain it does not serve at all: "Missing or unsupported chainid
+// parameter …", "Invalid chainid"
+const UNSUPPORTED_CHAIN = /unsupported chainid|invalid chainid/i;
+// A Chain it serves, but not on the key's plan: "Free API access is not
+// supported for this chain. Please upgrade your api plan …"
+const PAID_PLAN = /not supported for this chain|upgrade your api plan/i;
+// "Invalid API Key (#err2)|…", "Missing/Invalid API Key"
+const INVALID_KEY = /invalid api.?key/i;
+// "Max rate limit reached", "Max calls per sec rate limit reached (5/sec)",
+// "Max daily rate limit reached …"
+const RATE_LIMIT = /rate limit/i;
 
-// A Chain Etherscan does not serve says nothing about the address
-export type EtherscanResult = AbiSourceResult | { kind: "unsupported-chain" };
+// What Etherscan says beyond whether it has the ABI. A Chain it does not
+// serve, or not on the key's plan, says nothing about the address
+export type EtherscanResult =
+  | AbiSourceResult
+  | { kind: "unsupported-chain" }
+  | { kind: "paid-plan"; chainId: number }
+  | { kind: "invalid-key" }
+  | { kind: "rate-limit" };
+
+const explain = (
+  reason: string,
+  chainId: number,
+): EtherscanResult | undefined => {
+  if (INVALID_KEY.test(reason)) {
+    return { kind: "invalid-key" };
+  }
+  if (RATE_LIMIT.test(reason)) {
+    return { kind: "rate-limit" };
+  }
+  if (PAID_PLAN.test(reason)) {
+    return { kind: "paid-plan", chainId };
+  }
+  if (UNSUPPORTED_CHAIN.test(reason)) {
+    return { kind: "unsupported-chain" };
+  }
+  return undefined;
+};
 
 // Throws an Error whose message is fit to show the user; it never contains
 // the key
@@ -63,8 +96,10 @@ export async function fetchFromEtherscan(
       typeof body?.result === "string" && body.result
         ? body.result
         : body?.message;
-    if (typeof reason === "string" && UNSUPPORTED_CHAIN.test(reason)) {
-      return { kind: "unsupported-chain" };
+    const explained =
+      typeof reason === "string" ? explain(reason, chainId) : undefined;
+    if (explained) {
+      return explained;
     }
     throw fail(
       typeof reason === "string" && reason

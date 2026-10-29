@@ -8,6 +8,7 @@ import { useContext, useEffect, useMemo, useState } from "react";
 import { useContractQuery } from "../hooks/useContractQuery.ts";
 import { Button, Form, FormProps, Input, message } from "antd";
 import { useAbiFetchState } from "../hooks/useAbiFetchState.ts";
+import { EtherscanApiKeyButton } from "./EtherscanApiKeyButton.tsx";
 import { BuiltInContract } from "../decoding/multicall.ts";
 import {
   CONTRACT_TAB_ACTIONS,
@@ -147,6 +148,7 @@ export const ContractForm = (props: ContractInfoProps) => {
                 explorer="address"
               />
             )}
+            {header.openSettings && <EtherscanApiKeyButton />}
           </span>
           {header.fetchAbi && (
             <Button

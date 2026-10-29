@@ -114,25 +114,24 @@ describe("fetchFromEtherscan", () => {
     const fetchFn = respond({
       status: "0",
       message: "NOTOK",
-      result: "Max rate limit reached",
+      result: "Query Timeout occured. Please select a smaller result dataset",
     });
 
     await expect(fetchFromEtherscan(1, ADDRESS, KEY, fetchFn)).rejects.toThrow(
-      /^Max rate limit reached$/,
+      /^Query Timeout occured\. Please select a smaller result dataset$/,
     );
   });
 
   it("fails with the message of an error answer without an explanation", async () => {
-    const fetchFn = respond({ status: "0", message: "Invalid API Key" });
+    const fetchFn = respond({ status: "0", message: "Something went wrong" });
 
     await expect(fetchFromEtherscan(1, ADDRESS, KEY, fetchFn)).rejects.toThrow(
-      /^Invalid API Key$/,
+      /^Something went wrong$/,
     );
   });
 
   it.each([
     "Missing or unsupported chainid parameter (required for v2 api), please see https://api.etherscan.io/v2/chainlist for the list of supported chainids",
-    "Free API access is not supported for this chain. Please upgrade your api plan for full chain coverage. https://etherscan.io/apis",
     "Invalid chainid",
   ])("says the Chain is not supported on %j", async (result) => {
     const fetchFn = respond({ status: "0", message: "NOTOK", result });
@@ -150,6 +149,50 @@ describe("fetchFromEtherscan", () => {
 
     expect(await fetchFromEtherscan(31337, ADDRESS, KEY, fetchFn)).toEqual({
       kind: "unsupported-chain",
+    });
+  });
+
+  it.each([
+    "Free API access is not supported for this chain. Please upgrade your api plan for full chain coverage. https://etherscan.io/apis",
+    "Please upgrade your api plan for full chain coverage",
+  ])("says the Chain needs a paid plan on %j", async (result) => {
+    const fetchFn = respond({ status: "0", message: "NOTOK", result });
+
+    expect(await fetchFromEtherscan(8453, ADDRESS, KEY, fetchFn)).toEqual({
+      kind: "paid-plan",
+      chainId: 8453,
+    });
+  });
+
+  it.each([
+    "Invalid API Key (#err2)|SECRETKEY",
+    "Missing/Invalid API Key",
+    "Invalid API Key",
+  ])("says the key is invalid on %j", async (result) => {
+    const fetchFn = respond({ status: "0", message: "NOTOK", result });
+
+    expect(await fetchFromEtherscan(1, ADDRESS, KEY, fetchFn)).toEqual({
+      kind: "invalid-key",
+    });
+  });
+
+  it("says the key is invalid when only the message says so", async () => {
+    const fetchFn = respond({ status: "0", message: "Invalid API Key" });
+
+    expect(await fetchFromEtherscan(1, ADDRESS, KEY, fetchFn)).toEqual({
+      kind: "invalid-key",
+    });
+  });
+
+  it.each([
+    "Max rate limit reached",
+    "Max calls per sec rate limit reached (5/sec)",
+    "Max daily rate limit reached. 100000 (100%) of 100000 day/limit",
+  ])("says the rate limit is reached on %j", async (result) => {
+    const fetchFn = respond({ status: "0", message: "NOTOK", result });
+
+    expect(await fetchFromEtherscan(1, ADDRESS, KEY, fetchFn)).toEqual({
+      kind: "rate-limit",
     });
   });
 

@@ -56,6 +56,7 @@ import { hasRpcParams } from "../details/hasRpcParams.ts";
 import { formatHttpResponseBodyCut } from "../details/formatHttpResponseBody.ts";
 import { useAbiFetchState } from "../hooks/useAbiFetchState.ts";
 import { formatAbiFetchState } from "../abiSources/formatAbiFetchState.ts";
+import { EtherscanApiKeyButton } from "./EtherscanApiKeyButton.tsx";
 import { trimContractAddress } from "../utils/text.ts";
 import { formatAddress, formatShortAddress } from "../details/formatAddress.ts";
 import { formatInnerCallTargetTitle } from "../details/contractTab.ts";
@@ -492,12 +493,9 @@ const AbiFetch = (props: {
   return (
     <div className="rpc-details-abi-fetch">
       {label && (
-        <span
-          className={
-            state.kind === "failed" ? "rpc-details-failed" : "rpc-details-muted"
-          }
-        >
-          {label}
+        <span className="rpc-details-abi-fetch-state">
+          <Segments segments={label.segments} />
+          {label.openSettings && <EtherscanApiKeyButton />}
         </span>
       )}
       <Button size="small" onClick={() => onAddAbi(target)}>

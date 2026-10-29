@@ -3,12 +3,39 @@ import { AbiSourceResult } from "./sourcify.ts";
 import { EtherscanResult } from "./etherscan.ts";
 
 import { AbiSourceName, ContractProxy } from "../dal/contract.ts";
+import { errorMessage } from "../utils/text.ts";
 
 export type { AbiSourceName };
 
-// The outcome of asking the ABI Sources in turn; a miss lists those asked.
-// `implementation` is as the ABI Source that has the ABI says, see
-// AbiSourceResult
+// What Sourcify answered for an address it has no ABI for
+export type SourcifyOutcome =
+  | { kind: "not-found" }
+  | { kind: "failed"; reason: string };
+
+// What Etherscan answered for an address it has no ABI for; not asked
+// without a key
+export type EtherscanOutcome =
+  | Exclude<EtherscanResult, { kind: "found" }>
+  | { kind: "not-asked" }
+  | { kind: "failed"; reason: string };
+
+// What each ABI Source answered when neither had the ABI
+export interface AbiSourceOutcomes {
+  sourcify: SourcifyOutcome;
+  etherscan: EtherscanOutcome;
+}
+
+// Whether an ABI Source failed rather than said it has no ABI: a network or
+// HTTP error, an invalid key, a rate limit. A Chain Etherscan does not serve,
+// or not on the key's plan, is a miss
+export const hasFailure = ({ sourcify, etherscan }: AbiSourceOutcomes) =>
+  sourcify.kind === "failed" ||
+  etherscan.kind === "failed" ||
+  etherscan.kind === "invalid-key" ||
+  etherscan.kind === "rate-limit";
+
+// The outcome of asking the ABI Sources in turn. `implementation` is as the
+// ABI Source that has the ABI says, see AbiSourceResult
 export type FetchedAbi =
   | {
       kind: "found";
@@ -17,7 +44,7 @@ export type FetchedAbi =
       source: AbiSourceName;
       implementation?: `0x${string}` | null;
     }
-  | { kind: "not-found"; sources: AbiSourceName[] };
+  | { kind: "missed"; outcomes: AbiSourceOutcomes };
 
 // The ABI to save for an address: for a proxy, the implementation's
 export type ContractAbi =
@@ -28,7 +55,7 @@ export type ContractAbi =
       source: AbiSourceName;
       proxy?: ContractProxy;
     }
-  | { kind: "not-found"; sources: AbiSourceName[] };
+  | { kind: "missed"; outcomes: AbiSourceOutcomes };
 
 export interface AbiSources {
   sourcify: (
@@ -45,51 +72,42 @@ export interface AbiSources {
 }
 
 // Asks Sourcify, then Etherscan only when Sourcify has no verified ABI or
-// fails and the user has entered a key. A miss lists only the ABI Sources
-// that answered for the address, not Etherscan on a Chain it does not serve.
-// When Sourcify fails and Etherscan has no ABI to give, Sourcify's failure is
-// thrown; Etherscan's own failure only after a Sourcify miss.
+// fails and the user has entered a key. Without the ABI, keeps what each
+// ABI Source answered; it throws nothing an ABI Source throws
 export async function fetchFromAbiSources(
   sources: AbiSources,
   chainId: number,
   address: `0x${string}`,
 ): Promise<FetchedAbi> {
-  let sourcify: AbiSourceResult | { kind: "failed"; error: unknown };
+  let sourcify: SourcifyOutcome;
   try {
-    sourcify = await sources.sourcify(chainId, address);
+    const result = await sources.sourcify(chainId, address);
+    if (result.kind === "found") {
+      return { ...result, source: "sourcify" };
+    }
+    sourcify = result;
   } catch (error) {
-    sourcify = { kind: "failed", error };
+    sourcify = { kind: "failed", reason: errorMessage(error) };
   }
-  if (sourcify.kind === "found") {
-    return { ...sourcify, source: "sourcify" };
-  }
-  const sourcifyError = sourcify.kind === "failed" ? sourcify : undefined;
 
   const apiKey = (await sources.getEtherscanApiKey()).trim();
   if (!apiKey) {
-    if (sourcifyError) {
-      throw sourcifyError.error;
+    return {
+      kind: "missed",
+      outcomes: { sourcify, etherscan: { kind: "not-asked" } },
+    };
+  }
+  let etherscan: EtherscanOutcome;
+  try {
+    const result = await sources.etherscan(chainId, address, apiKey);
+    if (result.kind === "found") {
+      return { ...result, source: "etherscan" };
     }
-    return { kind: "not-found", sources: ["sourcify"] };
+    etherscan = result;
+  } catch (error) {
+    etherscan = { kind: "failed", reason: errorMessage(error) };
   }
-  const etherscan = await sources
-    .etherscan(chainId, address, apiKey)
-    .catch((error) => {
-      throw sourcifyError ? sourcifyError.error : error;
-    });
-  if (etherscan.kind === "found") {
-    return { ...etherscan, source: "etherscan" };
-  }
-  if (sourcifyError) {
-    throw sourcifyError.error;
-  }
-  return {
-    kind: "not-found",
-    sources:
-      etherscan.kind === "unsupported-chain"
-        ? ["sourcify"]
-        : ["sourcify", "etherscan"],
-  };
+  return { kind: "missed", outcomes: { sourcify, etherscan } };
 }
 
 export interface ContractAbiSources extends AbiSources {
@@ -103,14 +121,19 @@ export interface ContractAbiSources extends AbiSources {
 // implementation's ABI from the same ABI Sources. The implementation is the
 // one the ABI Source names; only when it says nothing about proxies, the
 // one the EIP-1967 slots on the Endpoint hold. A failed read of the slots
-// counts as no proxy. A failure to fetch the
-// implementation's ABI is thrown, so no proxy's own ABI gets saved for good.
+// counts as no proxy. A failure to fetch the address's own ABI ends the
+// fetch; a failure to fetch the implementation's ABI is the outcome, so no
+// proxy's own ABI gets saved for good. Without either ABI, the miss is the
+// implementation's, whose ABI would be saved.
 export async function fetchContractAbi(
   sources: ContractAbiSources,
   chainId: number,
   address: `0x${string}`,
 ): Promise<ContractAbi> {
   const fetched = await fetchFromAbiSources(sources, chainId, address);
+  if (fetched.kind === "missed" && hasFailure(fetched.outcomes)) {
+    return fetched;
+  }
   const own: ContractAbi =
     fetched.kind === "found"
       ? {
@@ -144,11 +167,8 @@ export async function fetchContractAbi(
       proxy: { implementation, abi: "implementation" },
     };
   }
-  if (own.kind === "found") {
+  if (own.kind === "found" && !hasFailure(fetchedImplementation.outcomes)) {
     return { ...own, proxy: { implementation, abi: "proxy" } };
   }
-  return {
-    kind: "not-found",
-    sources: [...new Set([...own.sources, ...fetchedImplementation.sources])],
-  };
+  return fetchedImplementation;
 }

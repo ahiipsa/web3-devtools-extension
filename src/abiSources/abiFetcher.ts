@@ -4,13 +4,15 @@ import { getContractCallParams } from "../utils/requestUtils.ts";
 import { errorMessage, trimContractAddress } from "../utils/text.ts";
 import { getInnerCallTargets } from "../decoding/multicall.ts";
 import { EndpointChains } from "../chains/endpointChains.ts";
-import { AbiSourceName, ContractAbi } from "./abiSources.ts";
+import { AbiSourceName, AbiSourceOutcomes, ContractAbi } from "./abiSources.ts";
 
-// What the Contract tab shows for an address without a Contract
+// What the Contract tab shows for an address without a Contract: a miss
+// keeps what each ABI Source answered; "failed" is a failure outside them,
+// such as an unknown Chain
 export type AbiFetchState =
   | { kind: "idle" }
   | { kind: "fetching" }
-  | { kind: "not-found"; sources: AbiSourceName[] }
+  | { kind: "missed"; outcomes: AbiSourceOutcomes }
   | { kind: "failed"; reason: string };
 
 export interface AbiFetcherDeps {
@@ -67,11 +69,23 @@ const createConcurrencyLimit = (limit: number) => {
 
 const IDLE: AbiFetchState = { kind: "idle" };
 
-// An attempt an Etherscan API key could change: Etherscan was not asked, or
-// the fetch failed (a bad key, a network error)
+// Etherscan answers a new key could change
+const ETHERSCAN_KEY_OUTCOMES = new Set([
+  "not-asked",
+  "paid-plan",
+  "invalid-key",
+  "rate-limit",
+  "failed",
+]);
+
+// An attempt an Etherscan API key could change: Etherscan was not asked,
+// needs a paid plan, rejected the key or its rate, or a fetch failed (a
+// network error)
 const mayFindWithKey = (state: AbiFetchState | undefined) =>
   state?.kind === "failed" ||
-  (state?.kind === "not-found" && !state.sources.includes("etherscan"));
+  (state?.kind === "missed" &&
+    (state.outcomes.sourcify.kind === "failed" ||
+      ETHERSCAN_KEY_OUTCOMES.has(state.outcomes.etherscan.kind)));
 
 // Fetches the ABIs of called addresses without a Contract and saves them as
 // Contracts. All state lives in memory for one Panel session: one automatic
@@ -138,7 +152,7 @@ export function createAbiFetcher(deps: AbiFetcherDeps) {
         setAttempt(key, IDLE);
         return;
       }
-      if (result.kind === "not-found") {
+      if (result.kind === "missed") {
         setAttempt(key, result);
         return;
       }

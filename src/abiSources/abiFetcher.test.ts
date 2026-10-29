@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { Abi, encodeFunctionData, getAddress, parseAbi } from "viem";
 import { RpcRequest } from "../types/main.ts";
 import { Contract } from "../dal/contract.ts";
-import { ContractAbi } from "./abiSources.ts";
+import { AbiSourceOutcomes, ContractAbi } from "./abiSources.ts";
 import { createAbiFetcher } from "./abiFetcher.ts";
 import { createEndpointChains } from "../chains/endpointChains.ts";
 
@@ -10,6 +10,24 @@ const ENDPOINT = "https://rpc.example/mainnet";
 const OTHER_ENDPOINT = "https://rpc.example/polygon";
 const WETH = "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2";
 const DAI = "0x6b175474e89094c44da98b954eedeac495271d0f";
+
+// Sourcify had no ABI and Etherscan was not asked
+const SOURCIFY_MISS: ContractAbi = {
+  kind: "missed",
+  outcomes: {
+    sourcify: { kind: "not-found" },
+    etherscan: { kind: "not-asked" },
+  },
+};
+// Neither ABI Source had the ABI
+const NOT_FOUND_ON_BOTH: AbiSourceOutcomes = {
+  sourcify: { kind: "not-found" },
+  etherscan: { kind: "not-found" },
+};
+const MISS_ON_BOTH: ContractAbi = {
+  kind: "missed",
+  outcomes: NOT_FOUND_ON_BOTH,
+};
 
 const ABI = [
   {
@@ -226,7 +244,7 @@ describe("Fetching a Contract's ABI", () => {
 
   it("fetches the same address again on another Chain", async () => {
     const { fetcher, deps } = setup({
-      fetchAbi: async () => ({ kind: "not-found", sources: ["sourcify"] }),
+      fetchAbi: async () => SOURCIFY_MISS,
     });
 
     fetcher.observe(
@@ -317,19 +335,13 @@ describe("Fetching a Contract's ABI", () => {
 
   it("reports a miss on every ABI Source asked", async () => {
     const { fetcher } = setup({
-      fetchAbi: async () => ({
-        kind: "not-found",
-        sources: ["sourcify", "etherscan"],
-      }),
+      fetchAbi: async () => MISS_ON_BOTH,
     });
 
     fetcher.observe([chainIdOn(ENDPOINT, "0x1"), callOn(ENDPOINT, WETH)], true);
     await flush();
 
-    expect(fetcher.getState(ENDPOINT, WETH)).toEqual({
-      kind: "not-found",
-      sources: ["sourcify", "etherscan"],
-    });
+    expect(fetcher.getState(ENDPOINT, WETH)).toEqual(MISS_ON_BOTH);
   });
 
   it("names a found Contract without a compilation name by its short address", async () => {
@@ -359,16 +371,13 @@ describe("Fetching a Contract's ABI", () => {
 
   it("reports no verified ABI on 404", async () => {
     const { fetcher, contracts } = setup({
-      fetchAbi: async () => ({ kind: "not-found", sources: ["sourcify"] }),
+      fetchAbi: async () => SOURCIFY_MISS,
     });
 
     fetcher.observe([chainIdOn(ENDPOINT, "0x1"), callOn(ENDPOINT, WETH)], true);
     await flush();
 
-    expect(fetcher.getState(ENDPOINT, WETH)).toEqual({
-      kind: "not-found",
-      sources: ["sourcify"],
-    });
+    expect(fetcher.getState(ENDPOINT, WETH)).toEqual(SOURCIFY_MISS);
     expect(contracts).toEqual({});
   });
 
@@ -434,7 +443,7 @@ describe("Automatic fetching turned off", () => {
 describe("Fetching on demand", () => {
   it("retries an address that was not found", async () => {
     const { fetcher, deps } = setup({
-      fetchAbi: async () => ({ kind: "not-found", sources: ["sourcify"] }),
+      fetchAbi: async () => SOURCIFY_MISS,
     });
     fetcher.observe([chainIdOn(ENDPOINT, "0x1"), callOn(ENDPOINT, WETH)], true);
     await flush();
@@ -483,7 +492,7 @@ describe("Inner Call targets of a Multicall", () => {
 
   it("are fetched once each, however often they are bundled", async () => {
     const { fetcher, deps } = setup({
-      fetchAbi: async () => ({ kind: "not-found", sources: ["sourcify"] }),
+      fetchAbi: async () => SOURCIFY_MISS,
     });
     const requests = [
       chainIdOn(ENDPOINT, "0x1"),
@@ -554,7 +563,7 @@ describe("ABI Source fetches at once", () => {
         return new Promise((resolve) =>
           pending.push(() => {
             inFlight--;
-            resolve({ kind: "not-found", sources: ["sourcify"] });
+            resolve(SOURCIFY_MISS);
           }),
         );
       },
@@ -581,21 +590,14 @@ describe("ABI Source fetches at once", () => {
     }
     expect(deps.fetchAbi).toHaveBeenCalledTimes(7);
     expect(maxInFlight).toBe(4);
-    expect(fetcher.getState(ENDPOINT, TARGETS[5])).toEqual({
-      kind: "not-found",
-      sources: ["sourcify"],
-    });
+    expect(fetcher.getState(ENDPOINT, TARGETS[5])).toEqual(SOURCIFY_MISS);
   });
 
   it("start a Fetch ABI press before the queued automatic fetches", async () => {
     const pending: (() => void)[] = [];
     const { fetcher, deps } = setup({
       fetchAbi: () =>
-        new Promise((resolve) =>
-          pending.push(() =>
-            resolve({ kind: "not-found", sources: ["sourcify"] }),
-          ),
-        ),
+        new Promise((resolve) => pending.push(() => resolve(SOURCIFY_MISS))),
     });
     fetcher.observe(
       [chainIdOn(ENDPOINT, "0x1"), multicallOn(ENDPOINT, TARGETS)],
@@ -615,11 +617,7 @@ describe("ABI Source fetches at once", () => {
     const pending: (() => void)[] = [];
     const { fetcher, deps, contracts } = setup({
       fetchAbi: () =>
-        new Promise((resolve) =>
-          pending.push(() =>
-            resolve({ kind: "not-found", sources: ["sourcify"] }),
-          ),
-        ),
+        new Promise((resolve) => pending.push(() => resolve(SOURCIFY_MISS))),
     });
     fetcher.observe(
       [chainIdOn(ENDPOINT, "0x1"), multicallOn(ENDPOINT, TARGETS)],
@@ -643,7 +641,7 @@ describe("ABI Source fetches at once", () => {
         if (++calls <= 4) {
           throw new Error("HTTP 500");
         }
-        return { kind: "not-found", sources: ["sourcify"] };
+        return SOURCIFY_MISS;
       },
     });
 
@@ -658,7 +656,7 @@ describe("ABI Source fetches at once", () => {
       kind: "failed",
     });
     expect(fetcher.getState(ENDPOINT, TARGETS[5])).toMatchObject({
-      kind: "not-found",
+      kind: "missed",
     });
   });
 });
@@ -679,7 +677,7 @@ describe("Setting an Etherscan API key", () => {
       if (failWithoutKey) {
         throw new Error("HTTP 500");
       }
-      return { kind: "not-found", sources: ["sourcify"] };
+      return SOURCIFY_MISS;
     };
     const setKey = (
       fetcher: { setEtherscanApiKey: (key: string) => void },
@@ -697,10 +695,7 @@ describe("Setting an Etherscan API key", () => {
     setKey(fetcher, "");
     fetcher.observe([chainIdOn(ENDPOINT, "0x1"), callOn(ENDPOINT, WETH)], true);
     await flush();
-    expect(fetcher.getState(ENDPOINT, WETH)).toEqual({
-      kind: "not-found",
-      sources: ["sourcify"],
-    });
+    expect(fetcher.getState(ENDPOINT, WETH)).toEqual(SOURCIFY_MISS);
 
     setKey(fetcher, "KEY");
     await flush();
@@ -732,7 +727,7 @@ describe("Setting an Etherscan API key", () => {
 
   it("re-fetches a miss when the key is replaced", async () => {
     const { fetcher, deps } = setup({
-      fetchAbi: async () => ({ kind: "not-found", sources: ["sourcify"] }),
+      fetchAbi: async () => SOURCIFY_MISS,
     });
     fetcher.setEtherscanApiKey("OLD");
     fetcher.observe([chainIdOn(ENDPOINT, "0x1"), callOn(ENDPOINT, WETH)], true);
@@ -745,12 +740,63 @@ describe("Setting an Etherscan API key", () => {
     expect(deps.fetchAbi).toHaveBeenCalledTimes(2);
   });
 
-  it("does not re-fetch a miss that asked Etherscan", async () => {
+  it.each<[string, AbiSourceOutcomes]>([
+    [
+      "Sourcify failed",
+      {
+        sourcify: { kind: "failed", reason: "HTTP 503" },
+        etherscan: { kind: "not-found" },
+      },
+    ],
+    [
+      "Etherscan needs a paid plan",
+      {
+        sourcify: { kind: "not-found" },
+        etherscan: { kind: "paid-plan", chainId: 8453 },
+      },
+    ],
+    [
+      "Etherscan says the key is invalid",
+      { sourcify: { kind: "not-found" }, etherscan: { kind: "invalid-key" } },
+    ],
+    [
+      "Etherscan is rate limited",
+      { sourcify: { kind: "not-found" }, etherscan: { kind: "rate-limit" } },
+    ],
+    [
+      "Etherscan failed",
+      {
+        sourcify: { kind: "not-found" },
+        etherscan: { kind: "failed", reason: "Query Timeout occured" },
+      },
+    ],
+  ])("re-fetches a miss where %s", async (_, outcomes) => {
     const { fetcher, deps } = setup({
-      fetchAbi: async () => ({
-        kind: "not-found",
-        sources: ["sourcify", "etherscan"],
-      }),
+      fetchAbi: async () => ({ kind: "missed", outcomes }),
+    });
+    fetcher.setEtherscanApiKey("OLD");
+    fetcher.observe([chainIdOn(ENDPOINT, "0x1"), callOn(ENDPOINT, WETH)], true);
+    await flush();
+
+    fetcher.setEtherscanApiKey("NEW");
+    await flush();
+    await flush();
+
+    expect(deps.fetchAbi).toHaveBeenCalledTimes(2);
+  });
+
+  it.each<[string, AbiSourceOutcomes]>([
+    ["asked Etherscan", NOT_FOUND_ON_BOTH],
+    [
+      "Etherscan does not serve the Chain",
+      {
+        sourcify: { kind: "not-found" },
+        etherscan: { kind: "unsupported-chain" },
+      },
+    ],
+  ])("does not re-fetch a miss that %s", async (_, outcomes) => {
+    const { fetcher, deps } = setup({
+      fetchAbi: async () => ({ kind: "missed", outcomes }),
     });
     fetcher.setEtherscanApiKey("OLD");
     fetcher.observe([chainIdOn(ENDPOINT, "0x1"), callOn(ENDPOINT, WETH)], true);
@@ -781,7 +827,7 @@ describe("Setting an Etherscan API key", () => {
 
   it("re-fetches nothing when the key is cleared", async () => {
     const { fetcher, deps } = setup({
-      fetchAbi: async () => ({ kind: "not-found", sources: ["sourcify"] }),
+      fetchAbi: async () => SOURCIFY_MISS,
     });
     fetcher.setEtherscanApiKey("KEY");
     fetcher.observe([chainIdOn(ENDPOINT, "0x1"), callOn(ENDPOINT, WETH)], true);
@@ -797,7 +843,7 @@ describe("Setting an Etherscan API key", () => {
 
   it("does not count the key the Panel starts with as a change", async () => {
     const { fetcher, deps } = setup({
-      fetchAbi: async () => ({ kind: "not-found", sources: ["sourcify"] }),
+      fetchAbi: async () => SOURCIFY_MISS,
     });
     fetcher.observe([chainIdOn(ENDPOINT, "0x1"), callOn(ENDPOINT, WETH)], true);
     await flush();
@@ -861,7 +907,7 @@ describe("Setting an Etherscan API key", () => {
 
   it("does not re-fetch when an edit ends on the same key", async () => {
     const { fetcher, deps } = setup({
-      fetchAbi: async () => ({ kind: "not-found", sources: ["sourcify"] }),
+      fetchAbi: async () => SOURCIFY_MISS,
     });
     fetcher.setEtherscanApiKey("KEY");
     fetcher.observe([chainIdOn(ENDPOINT, "0x1"), callOn(ENDPOINT, WETH)], true);
@@ -894,11 +940,7 @@ describe("Setting an Etherscan API key", () => {
     const pending: (() => void)[] = [];
     const { fetcher, deps } = setup({
       fetchAbi: () =>
-        new Promise((resolve) =>
-          pending.push(() =>
-            resolve({ kind: "not-found", sources: ["sourcify"] }),
-          ),
-        ),
+        new Promise((resolve) => pending.push(() => resolve(SOURCIFY_MISS))),
     });
     fetcher.setEtherscanApiKey("");
     fetcher.observe([chainIdOn(ENDPOINT, "0x1"), callOn(ENDPOINT, WETH)], true);
