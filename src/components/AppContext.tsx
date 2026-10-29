@@ -76,8 +76,8 @@ interface AppContext {
   // The toolbar's settings popover
   settingsOpen: boolean;
   setSettingsOpen: (open: boolean) => void;
-  // Counts the requests to focus the Etherscan API key field
-  etherscanApiKeyFocus: number;
+  // Counts the times the Etherscan API key field was asked to take the focus
+  etherscanApiKeyFocusCount: number;
   // Opens the settings with the focus in the Etherscan API key field
   openEtherscanApiKeySettings: () => void;
   abiFetcher: AbiFetcher;
@@ -102,7 +102,7 @@ export const AppContext = React.createContext<AppContext>({
   settingsOpen: false,
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   setSettingsOpen: (_open: boolean) => {},
-  etherscanApiKeyFocus: 0,
+  etherscanApiKeyFocusCount: 0,
   openEtherscanApiKeySettings: () => {},
   abiFetcher,
   endpointChains,
@@ -135,10 +135,10 @@ export const AppContextProvider = ({
   }, []);
 
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [etherscanApiKeyFocus, setEtherscanApiKeyFocus] = useState(0);
+  const [etherscanApiKeyFocusCount, setEtherscanApiKeyFocusCount] = useState(0);
   const openEtherscanApiKeySettings = useCallback(() => {
     setSettingsOpen(true);
-    setEtherscanApiKeyFocus((count) => count + 1);
+    setEtherscanApiKeyFocusCount((count) => count + 1);
   }, []);
 
   const { rpcRequestList, clearRpcRequestList } = useRpcRequestList();
@@ -184,7 +184,7 @@ export const AppContextProvider = ({
         updateSettings,
         settingsOpen,
         setSettingsOpen,
-        etherscanApiKeyFocus,
+        etherscanApiKeyFocusCount,
         openEtherscanApiKeySettings,
         abiFetcher,
         endpointChains,

@@ -470,7 +470,7 @@ describe("fetchContractAbi", () => {
     );
   });
 
-  it("fails with the implementation's outcomes when Etherscan says the key is invalid for it", async () => {
+  it("misses with the implementation's outcomes when Etherscan says the key is invalid for it", async () => {
     const { sources, fetch } = setupProxy({
       sourcify: { [PROXY]: proxyFound("FiatTokenProxy", IMPLEMENTATION) },
       apiKey: "BADKEY",

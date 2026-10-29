@@ -70,7 +70,7 @@ const createConcurrencyLimit = (limit: number) => {
 const IDLE: AbiFetchState = { kind: "idle" };
 
 // Etherscan answers a new key could change
-const ETHERSCAN_KEY_OUTCOMES = new Set([
+const ETHERSCAN_KEY_OUTCOMES = new Set<AbiSourceOutcomes["etherscan"]["kind"]>([
   "not-asked",
   "paid-plan",
   "invalid-key",
@@ -79,8 +79,8 @@ const ETHERSCAN_KEY_OUTCOMES = new Set([
 ]);
 
 // An attempt an Etherscan API key could change: Etherscan was not asked,
-// needs a paid plan, rejected the key or its rate, or a fetch failed (a
-// network error)
+// needs a paid plan, rejected the key or its rate, or failed; or Sourcify
+// failed, so Etherscan's ABI is all there is to find
 const mayFindWithKey = (state: AbiFetchState | undefined) =>
   state?.kind === "failed" ||
   (state?.kind === "missed" &&

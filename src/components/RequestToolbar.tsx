@@ -167,21 +167,28 @@ const SettingsButton = () => {
     updateSettings,
     settingsOpen,
     setSettingsOpen,
-    etherscanApiKeyFocus,
+    etherscanApiKeyFocusCount,
   } = useContext(AppContext);
   const etherscanApiKeyRef = useRef<InputRef>(null);
 
-  // A ⚙ beside an invalid Etherscan API key opens the settings at its field;
-  // the field mounts with the popover, so a frame later
+  // A ⚙ beside an invalid Etherscan API key opens the settings at its field.
+  // The field mounts with the popover: on its first opening it is there only
+  // once the popover has opened, otherwise a frame later
+  const focusPending = useRef(false);
+  const focusEtherscanApiKey = () => {
+    if (focusPending.current && etherscanApiKeyRef.current) {
+      focusPending.current = false;
+      etherscanApiKeyRef.current.focus();
+    }
+  };
   useEffect(() => {
-    if (etherscanApiKeyFocus === 0) {
+    if (etherscanApiKeyFocusCount === 0) {
       return;
     }
-    const frame = requestAnimationFrame(() =>
-      etherscanApiKeyRef.current?.focus(),
-    );
+    focusPending.current = true;
+    const frame = requestAnimationFrame(focusEtherscanApiKey);
     return () => cancelAnimationFrame(frame);
-  }, [etherscanApiKeyFocus]);
+  }, [etherscanApiKeyFocusCount]);
 
   return (
     <Popover
@@ -189,6 +196,13 @@ const SettingsButton = () => {
       placement="bottomRight"
       open={settingsOpen}
       onOpenChange={setSettingsOpen}
+      afterOpenChange={(open) => {
+        if (open) {
+          focusEtherscanApiKey();
+        } else {
+          focusPending.current = false;
+        }
+      }}
       content={
         <div className="rpc-table-settings">
           <Checkbox
