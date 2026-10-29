@@ -640,7 +640,7 @@ const openInBackground = async (profile, args) => {
     }
   };
   const waitSync = (ok, ms) => {
-    for (const end = Date.now() + ms; !ok() && Date.now() < end; )
+    for (const end = Date.now() + ms; !ok() && Date.now() < end;)
       Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 50);
     return ok();
   };

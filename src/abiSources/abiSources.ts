@@ -9,8 +9,7 @@ export type { AbiSourceName };
 
 // What Sourcify answered for an address it has no ABI for
 export type SourcifyOutcome =
-  | { kind: "not-found" }
-  | { kind: "failed"; reason: string };
+  { kind: "not-found" } | { kind: "failed"; reason: string };
 
 // What Etherscan answered for an address it has no ABI for; not asked
 // without a key
