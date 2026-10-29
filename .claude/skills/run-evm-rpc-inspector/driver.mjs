@@ -77,7 +77,7 @@ export const SLOT_IMPLEMENTATION = "0x6666666666666666666666666666666666666666";
 // Called on Base (`/paid`), which the fake Etherscan serves only on a paid
 // plan: PAID_PROXY is verified on the fake Sourcify without proxyResolution
 // and names PAID_IMPLEMENTATION, unverified, in its EIP-1967 slot, so the
-// miss is the implementation's
+// miss is the Implementation's
 export const PAID_PROXY = "0x1414141414141414141414141414141414141414";
 export const PAID_IMPLEMENTATION = "0x1515151515151515151515151515151515151515";
 // Inner Call targets of MULTICALL_FETCH_CALL only: INNER_TOKEN is verified
@@ -281,7 +281,7 @@ export const MULTICALL_FETCH_CALL = aggregate3Call(
   INNER_UNVERIFIED,
 );
 // The same on Base (`/paid`), to PAID_PROXY and PAID_PLAN_TARGET: both
-// targets miss their ABI, PAID_PROXY's as its implementation's
+// targets miss their ABI, PAID_PROXY's as its Implementation's
 export const MULTICALL_PAID_CALL = aggregate3Call(
   19,
   PAID_PROXY,
@@ -2240,8 +2240,8 @@ async function smoke() {
     await click(".rpc-table-settings-button");
     await key("Escape");
 
-    // A proxy whose own ABI Sourcify has, but not its implementation's: the
-    // miss is the implementation's, its short address in the prefix's tooltip
+    // A proxy whose own ABI Sourcify has, but not its Implementation's: the
+    // miss is the Implementation's, its short address in the prefix's tooltip
     const implementationMiss = `Implementation: ${paidPlan}`;
     const implementationTitle = "0x1515…1515";
     // The tooltip of the `Implementation: ` prefix in the first match of
@@ -2257,7 +2257,7 @@ async function smoke() {
       text.includes(implementationMiss),
     );
     check(
-      "Params of a proxy whose implementation misses read Implementation: and both outcomes, with ⚙",
+      "Params of a proxy whose Implementation misses read Implementation: and both outcomes, with ⚙",
       proxyParams.includes(implementationMiss) &&
         (await ev(
           `!!document.querySelector(".rpc-details-abi-fetch .rpc-details-settings-button")`,
@@ -2281,9 +2281,12 @@ async function smoke() {
       ".rpc-contract-header",
     );
     check(
-      "the proxy's Contract tab reads the same, the prefix's tooltip naming its short address",
+      "the proxy's Contract tab reads the same with ⚙, the prefix's tooltip naming its short address",
       proxyHeader.includes(implementationMiss) &&
-        headerPrefixTitle === implementationTitle,
+        headerPrefixTitle === implementationTitle &&
+        (await ev(
+          `!!document.querySelector(".rpc-contract-header .rpc-details-settings-button")`,
+        )),
       json({ proxyHeader, headerPrefixTitle }),
     );
     await shot("14c-implementation-miss-contract");
@@ -2300,9 +2303,12 @@ async function smoke() {
       ".rpc-details-inner-call",
     );
     check(
-      "the proxy as an Inner Call target reads the same, the prefix's tooltip naming its short address",
+      "the proxy as an Inner Call target reads the same with ⚙, the prefix's tooltip naming its short address",
       paidInnerListed(paidInnerCalls) &&
-        innerPrefixTitle === implementationTitle,
+        innerPrefixTitle === implementationTitle &&
+        (await ev(
+          `!!document.querySelector(".rpc-details-inner-call")?.querySelector(".rpc-details-settings-button")`,
+        )),
       json({ paidInnerCalls, innerPrefixTitle }),
     );
     await shot("14d-implementation-miss-inner-call");
@@ -2895,24 +2901,29 @@ async function smoke() {
       json(paidPlanParams.slice(-160)),
     );
     await shot("21-params-paid-plan-320");
-    // The same, prefixed as a proxy's implementation's
+    // The same, prefixed as a proxy's Implementation's
     await clickRow({ contract: "0x1414…1414" });
-    await narrowDetails();
+    const implementationWidth = await narrowDetails();
     await click(".rpc-details-tab", "Params");
     const implementationParams = await until(detailsBody, (text) =>
       text.includes(implementationMiss),
     );
     check(
       "the Implementation: prefix and both outcomes fit a 320 px details pane",
-      implementationParams.includes(implementationMiss) && (await noOverflow()),
-      json(implementationParams.slice(-160)),
+      implementationWidth === 320 &&
+        implementationParams.includes(implementationMiss) &&
+        (await noOverflow()),
+      json({ implementationWidth, params: implementationParams.slice(-160) }),
     );
     await shot("21-params-implementation-320");
     await click(".rpc-details-tab", "Contract");
-    await until(contractHeader, (text) => text.includes(implementationMiss));
+    const narrowProxyHeader = await until(contractHeader, (text) =>
+      text.includes(implementationMiss),
+    );
     check(
       "the proxy's Contract tab with the Implementation: prefix fits a 320 px details pane",
-      await noOverflow(),
+      narrowProxyHeader.includes(implementationMiss) && (await noOverflow()),
+      json(narrowProxyHeader),
     );
     await shot("21-contract-implementation-320");
 
