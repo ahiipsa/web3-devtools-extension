@@ -134,6 +134,20 @@ describe("postFromInspectedPage", () => {
     );
   });
 
+  it("never takes the outcome of a post from an earlier Panel session", async () => {
+    installInspectedWindow();
+    vi.stubGlobal("fetch", async () => new Response("this session"));
+    // A post the page finished after an earlier Panel closed
+    (globalThis as Record<string, unknown>).__evmRpcInspectorPosts = {
+      1: { done: true, status: 200, text: "an earlier session" },
+    };
+
+    expect(await postFromInspectedPage(ENDPOINT, BODY, 10_000)).toEqual({
+      status: 200,
+      text: "this session",
+    });
+  });
+
   it("fails when DevTools cannot evaluate in the page", async () => {
     installInspectedWindow(true);
 

@@ -1,6 +1,6 @@
 // The page global holding the outcome of each post the page is running, by
-// its number
-const OUTCOMES = "__evmRpcInspectorPosts";
+// its id
+const OUTCOMES_GLOBAL = "__evmRpcInspectorPosts";
 // inspectedWindow.eval does not await a promise, so the Panel polls for it
 const POLL_INTERVAL = 100;
 // How long past the page's own timeout the Panel waits for its outcome
@@ -17,7 +17,10 @@ type PageOutcome =
   | { done: true; status: number; text: string }
   | { done: true; error: string; timeout: boolean };
 
-let lastPost = 0;
+// The page outlives a Panel session: a post still running when DevTools
+// closes must not land on the next session's post of the same number
+const PANEL_SESSION = crypto.randomUUID();
+let lastPostNumber = 0;
 
 const timeoutError = () => {
   const error = new Error("the Endpoint did not answer in time");
@@ -33,7 +36,7 @@ const evalInPage = <T>(expression: string) =>
         if (exceptionInfo?.isException || exceptionInfo?.isError) {
           reject(
             new Error(
-              exceptionInfo.value ||
+              String(exceptionInfo.value ?? "") ||
                 exceptionInfo.description ||
                 "the inspected page could not send the request",
             ),
@@ -48,13 +51,13 @@ const evalInPage = <T>(expression: string) =>
 // Starts the fetch in the page and returns at once; its outcome lands in the
 // page global
 const startExpression = (
-  post: number,
+  postId: string,
   endpoint: string,
   body: string,
   timeout: number,
 ) => `(() => {
-  const outcomes = (window[${JSON.stringify(OUTCOMES)}] ??= {});
-  outcomes[${post}] = { done: false };
+  const outcomes = (window[${JSON.stringify(OUTCOMES_GLOBAL)}] ??= {});
+  outcomes[${JSON.stringify(postId)}] = { done: false };
   fetch(${JSON.stringify(endpoint)}, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -64,16 +67,16 @@ const startExpression = (
   })
     .then(async (response) => ({ done: true, status: response.status, text: await response.text() }))
     .catch((error) => ({ done: true, error: String(error?.message ?? error), timeout: error?.name === "TimeoutError" }))
-    .then((outcome) => { outcomes[${post}] = outcome; });
+    .then((outcome) => { outcomes[${JSON.stringify(postId)}] = outcome; });
   return true;
 })()`;
 
 // Takes the outcome off the page once it is done; null once the page has
 // navigated away and lost it
-const pollExpression = (post: number) => `(() => {
-  const outcomes = window[${JSON.stringify(OUTCOMES)}];
-  const outcome = outcomes?.[${post}] ?? null;
-  if (outcome?.done) delete outcomes[${post}];
+const pollExpression = (postId: string) => `(() => {
+  const outcomes = window[${JSON.stringify(OUTCOMES_GLOBAL)}];
+  const outcome = outcomes?.[${JSON.stringify(postId)}] ?? null;
+  if (outcome?.done) delete outcomes[${JSON.stringify(postId)}];
   return outcome;
 })()`;
 
@@ -91,12 +94,14 @@ export async function postFromInspectedPage(
   if (typeof chrome === "undefined" || !chrome.devtools?.inspectedWindow) {
     throw new Error("there is no inspected page to send the request from");
   }
-  const post = ++lastPost;
+  const postId = `${PANEL_SESSION}:${++lastPostNumber}`;
   const deadline = Date.now() + timeout + POLL_GRACE;
-  await evalInPage(startExpression(post, endpoint, body, timeout));
+  await evalInPage(startExpression(postId, endpoint, body, timeout));
 
   for (;;) {
-    const outcome = await evalInPage<PageOutcome | null>(pollExpression(post));
+    const outcome = await evalInPage<PageOutcome | null>(
+      pollExpression(postId),
+    );
     if (!outcome) {
       throw new Error("the inspected page navigated away");
     }
