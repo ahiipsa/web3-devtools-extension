@@ -36,41 +36,48 @@ export interface ContractTabActions {
   };
 }
 
+const CONTRACT_TAB_ACTIONS: Record<ContractTabKind, ContractTabActions> = {
+  own: {
+    save: "Save",
+    remove: {
+      button: "Delete",
+      question:
+        "Delete this Contract? Its RPC Requests will no longer be decoded.",
+      confirm: "Yes, delete",
+      done: "Contract deleted",
+      failed: "Failed to delete Contract",
+    },
+  },
+  fetched: {
+    save: "Save as mine",
+    remove: {
+      button: "Forget fetched ABI",
+      question:
+        "Forget the fetched ABI? It is fetched again the next time DevTools opens.",
+      confirm: "Forget",
+      done: "Fetched ABI forgotten",
+      failed: "Failed to forget the fetched ABI",
+    },
+  },
+  "built-in": { save: "Save as mine" },
+  none: { save: "Save" },
+};
+
 export const getContractTabActions = (
   kind: ContractTabKind,
   fetchAbisAutomatically: boolean,
 ): ContractTabActions => {
-  switch (kind) {
-    case "own":
-      return {
-        save: "Save",
-        remove: {
-          button: "Delete",
-          question:
-            "Delete this Contract? Its RPC Requests will no longer be decoded.",
-          confirm: "Yes, delete",
-          done: "Contract deleted",
-          failed: "Failed to delete Contract",
-        },
-      };
-    case "fetched":
-      return {
-        save: "Save as mine",
-        remove: {
-          button: "Forget fetched ABI",
-          question: fetchAbisAutomatically
-            ? "Forget the fetched ABI? It is fetched again the next time DevTools opens."
-            : "Forget the fetched ABI? Fetch ABI fetches it again.",
-          confirm: "Forget",
-          done: "Fetched ABI forgotten",
-          failed: "Failed to forget the fetched ABI",
-        },
-      };
-    case "built-in":
-      return { save: "Save as mine" };
-    case "none":
-      return { save: "Save" };
+  const actions = CONTRACT_TAB_ACTIONS[kind];
+  if (kind !== "fetched" || fetchAbisAutomatically || !actions.remove) {
+    return actions;
   }
+  return {
+    ...actions,
+    remove: {
+      ...actions.remove,
+      question: "Forget the fetched ABI? Fetch ABI fetches it again.",
+    },
+  };
 };
 
 // The row above the form: where the ABI comes from, and its action
