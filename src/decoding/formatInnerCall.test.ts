@@ -163,6 +163,27 @@ describe("getInnerCallOutcome", () => {
     ).toEqual({ kind: "failed", revert: undefined });
   });
 
+  it("names the other Contract whose ABI decoded a failed Inner Call's Revert", () => {
+    expect(
+      getInnerCallOutcome({
+        ...decoded,
+        success: false,
+        returnData: RETURNED,
+        revert: {
+          kind: "custom",
+          name: "InsufficientLiquidity",
+          signature: "InsufficientLiquidity()",
+          args: [],
+          from: "UniswapV2Pair",
+        },
+      }),
+    ).toEqual({
+      kind: "failed",
+      revert: "InsufficientLiquidity()",
+      revertSource: "from UniswapV2Pair",
+    });
+  });
+
   it("is no result without return data", () => {
     expect(getInnerCallOutcome(decoded)).toEqual({ kind: "none" });
   });

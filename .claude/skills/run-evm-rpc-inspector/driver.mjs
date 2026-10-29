@@ -107,6 +107,9 @@ const vaultRevert = (callData) => {
           args: [5n, amount],
         });
 };
+// Unverified; every eth_call to it reverts with the Vault's
+// InsufficientBalance(5, 9), as if bubbled up from a Vault it called
+export const BUBBLER = "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
 export const withdrawCall = (id, amount) => ({
   jsonrpc: "2.0",
   id,
@@ -357,12 +360,17 @@ const startNode = () =>
           jsonrpc: "2.0",
           id: r.id,
           ...(r.method === "eth_call" &&
-          String(r.params?.[0]?.to).toLowerCase() === VAULT
+          [VAULT, BUBBLER].includes(String(r.params?.[0]?.to).toLowerCase())
             ? {
                 error: {
                   code: 3,
                   message: "execution reverted",
-                  data: vaultRevert(r.params[0].data),
+                  data:
+                    String(r.params[0].to).toLowerCase() === BUBBLER
+                      ? vaultRevert(
+                          `0x2e1a7d4d${(9).toString(16).padStart(64, "0")}`,
+                        )
+                      : vaultRevert(r.params[0].data),
                 },
               }
             : r.method === "eth_call" &&
@@ -2426,6 +2434,43 @@ async function smoke() {
       (await rawFold()) === "false" && (await noOverflow()),
     );
     await shot("16-revert-320");
+
+    // A custom error the called address has no ABI for decodes with the
+    // stored Vault's, which declares it
+    await app.rpc({
+      jsonrpc: "2.0",
+      id: 45,
+      method: "eth_call",
+      params: [{ to: BUBBLER, data: "0x12345678" }, "latest"],
+    });
+    await clickRow({ contract: "0xbBbB…BBbB" });
+    await narrowDetails();
+    await click(".rpc-details-tab", "Response");
+    const bubbled =
+      /^Decoded revert\s+InsufficientBalance\(uint256 available, uint256 required\) from Vault\s+available\s+uint256\s+5\s+required\s+uint256\s+9\s+RPC error 3 · execution reverted\s+▶\s*Raw error$/;
+    const bubbledText = await responseSoon((text) => bubbled.test(text));
+    check(
+      "a bubbled-up custom error decodes with another Contract's ABI, from <Contract> muted, Raw error folded",
+      bubbled.test(bubbledText) &&
+        (await ev(
+          `document.querySelector(".rpc-details-revert .rpc-details-muted")?.innerText.trim()`,
+        )) === "from Vault" &&
+        (await rawFold()) === "false",
+      json(bubbledText),
+    );
+    await click(".rpc-details-tab", "Overview");
+    const bubbledStatus =
+      "Status error 3: execution reverted — InsufficientBalance(available: 5, required: 9) from Vault";
+    const bubbledOverview = await until(
+      () => ev(OVERVIEW),
+      (o) => !!o && o.fields.includes(bubbledStatus),
+    );
+    check(
+      "the Overview's Status shows the bubbled-up error from <Contract>",
+      !!bubbledOverview?.fields.includes(bubbledStatus),
+      json(bubbledOverview),
+    );
+    await shot("16-revert-bubbled-320");
 
     await app.rpc({ jsonrpc: "2.0", id: 43, method: "eth_gasPrice" }, "/bad");
     await clickRow({ method: "eth_gasPrice" });

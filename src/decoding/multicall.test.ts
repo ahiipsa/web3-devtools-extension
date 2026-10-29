@@ -19,6 +19,7 @@ import {
 import { RpcRequest } from "../types/main.ts";
 import { getMethodCategory } from "../capture/getMethodCategory.ts";
 import { Contract } from "../dal/contract.ts";
+import { buildErrorIndex } from "./decodeRevert.ts";
 
 // The aggregators as deployed, written out here independently of the module
 const multicall3Abi = parseAbi([
@@ -413,6 +414,49 @@ describe("getInnerCalls", () => {
         revert: { kind: "raw", data: custom },
       },
     ]);
+  });
+
+  it("a failed Inner Call's custom error decodes with another target's Contract", () => {
+    const data = encodeFunctionData({
+      abi: multicall3Abi,
+      functionName: "aggregate3",
+      args: [
+        [
+          { target: OTHER, allowFailure: true, callData: UNKNOWN_CALLDATA },
+          { target: TOKEN, allowFailure: true, callData: balanceOf },
+        ],
+      ],
+    });
+    const custom = encodeErrorResult({
+      abi: erc20Abi,
+      errorName: "InsufficientBalance",
+      args: [9n],
+    });
+    const result = encodeResults([
+      { success: false, returnData: custom },
+      { success: true, returnData: balance(1n) },
+    ]);
+    const request = rpcRequest("eth_call", data, result);
+
+    expect(
+      getInnerCalls(request, findContract, buildErrorIndex([usdc]))?.[0],
+    ).toEqual({
+      ...unknownCall,
+      success: false,
+      returnData: custom,
+      revert: {
+        kind: "custom",
+        name: "InsufficientBalance",
+        signature: "InsufficientBalance(uint256 required)",
+        args: [{ name: "required", type: "uint256", value: 9n }],
+        from: "USDC",
+      },
+    });
+    // Without an ErrorIndex only the target's own ABI is tried
+    expect(getInnerCalls(request, findContract)?.[0].revert).toEqual({
+      kind: "raw",
+      data: custom,
+    });
   });
 
   it("a result count that differs from the Inner Calls' pairs nothing", () => {

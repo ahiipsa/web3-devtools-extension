@@ -35,10 +35,11 @@ import {
 import { formatDuration } from "../table/rpcRequestRow.ts";
 import { getDetailsTabs, getShownDetailsTab } from "../details/detailsTabs.ts";
 import { getTabListScrollDelta } from "../details/tabListWheel.ts";
-import { useFindContract } from "../hooks/useFindContract.ts";
+import { useErrorIndex, useFindContract } from "../hooks/useFindContract.ts";
 import {
   findBuiltInContract,
   findBuiltInContractAt,
+  getInnerCallTargets,
   getInnerCalls,
   getResultCountMismatch,
   InnerCall,
@@ -50,7 +51,11 @@ import {
   getInnerCallOutcome,
 } from "../decoding/formatInnerCall.ts";
 import { getRpcRequestRevert, Revert } from "../decoding/decodeRevert.ts";
-import { formatRevert, formatRpcError } from "../decoding/formatRevert.ts";
+import {
+  formatRevert,
+  formatRevertSource,
+  formatRpcError,
+} from "../decoding/formatRevert.ts";
 import { getReturnData } from "../decoding/decodeRpcRequest.ts";
 import { hasRpcParams } from "../details/hasRpcParams.ts";
 import { formatHttpResponseBodyCut } from "../details/formatHttpResponseBody.ts";
@@ -126,14 +131,22 @@ export const RequestDetails = ({ request, onClose }: RequestDetailsProps) => {
     () => (contract ? decodeRpcRequest(request, contract.abi) : undefined),
     [contract, request],
   );
-  const revert = useMemo(
-    () => getRpcRequestRevert(request, contract?.abi),
-    [contract, request],
-  );
   const findContract = useFindContract();
+  const errorIndex = useErrorIndex();
+  // A custom error `to`'s ABI does not declare may have bubbled up from a
+  // Multicall's Inner Call target, else from any other stored Contract
+  const revert = useMemo(
+    () =>
+      getRpcRequestRevert(request, contract?.abi, {
+        index: errorIndex,
+        address: callParams?.to,
+        preferred: getInnerCallTargets(request),
+      }),
+    [contract, request, errorIndex, callParams?.to],
+  );
   const innerCalls = useMemo(
-    () => getInnerCalls(request, findContract),
-    [request, findContract],
+    () => getInnerCalls(request, findContract, errorIndex),
+    [request, findContract, errorIndex],
   );
 
   // By default the Contract tab is for `to`; Add ABI picks `to` or an Inner
@@ -377,7 +390,7 @@ const StatusLabel = (props: { status: RpcRequestStatus; revert?: Revert }) => {
         isFailedRpcRequestStatus(status) ? "rpc-details-failed" : undefined
       }
     >
-      {formatOverviewStatus(status, revert)}
+      <Segments segments={formatOverviewStatus(status, revert)} />
     </span>
   );
 };
@@ -741,6 +754,7 @@ const DecodedRevert = (props: {
   error: NonNullable<RpcResponseBody["error"]>;
 }) => {
   const { revert, error } = props;
+  const source = formatRevertSource(revert);
   return (
     <Section title="Decoded revert">
       <div className="rpc-details-revert">
@@ -748,6 +762,7 @@ const DecodedRevert = (props: {
           <>
             <div className="rpc-details-failed rpc-details-decoded-value">
               {revert.signature}
+              {source && <span className="rpc-details-muted"> {source}</span>}
             </div>
             <DecodedValues values={revert.args} empty="No arguments" />
           </>
@@ -805,6 +820,12 @@ const InnerCallResults = (props: {
                 {outcome.kind === "failed" && (
                   <div className="rpc-details-failed rpc-details-decoded-value">
                     ✗{outcome.revert !== undefined && ` ${outcome.revert}`}
+                    {outcome.revertSource && (
+                      <span className="rpc-details-muted">
+                        {" "}
+                        {outcome.revertSource}
+                      </span>
+                    )}
                   </div>
                 )}
                 {outcome.kind === "none" && (

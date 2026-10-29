@@ -4,7 +4,7 @@ import { Contract, FindContract, normalizeAddress } from "../dal/contract.ts";
 import { getContractCallParams } from "../utils/requestUtils.ts";
 import { findAbiFunction } from "./findAbiFunction.ts";
 import { decodeCall, Decoding, getReturnData } from "./decodeRpcRequest.ts";
-import { decodeRevert, Revert } from "./decodeRevert.ts";
+import { decodeRevert, ErrorIndex, Revert } from "./decodeRevert.ts";
 import { formatContractName } from "../details/formatAddress.ts";
 
 // Multicall3's aggregator functions; Multicall2's are the same functions
@@ -193,10 +193,13 @@ export const getResultCountMismatch = (
 };
 
 // The Inner Calls of a Multicall, each decoded with its target's Contract
-// and paired with its result; undefined for any other RPC Request
+// and paired with its result; undefined for any other RPC Request. With an
+// ErrorIndex, a failed Inner Call's custom error its target's ABI does not
+// declare is looked up in the other targets' ABIs, then in every stored one
 export function getInnerCalls(
   request: RpcRequest,
   findContract: FindContract,
+  errorIndex?: ErrorIndex,
 ): InnerCall[] | undefined {
   const multicall = getMulticallOutcomes(request);
   if (!multicall) {
@@ -206,6 +209,7 @@ export function getInnerCalls(
   const { calls, outcomes } = multicall;
   // Outcomes pair with Inner Calls by position, so a count that differs pairs nothing
   const paired = outcomes?.length === calls.length ? outcomes : undefined;
+  const targets = calls.map(({ target }) => target);
 
   return calls.map(({ target, callData, value }, index) => {
     const result = paired?.[index];
@@ -214,7 +218,15 @@ export function getInnerCalls(
     const contract = findDecodingContract(findContract, target, callData);
     const failed = result?.success === false;
     const revert = failed
-      ? decodeRevert(result.returnData, contract?.abi)
+      ? decodeRevert(
+          result.returnData,
+          contract?.abi,
+          errorIndex && {
+            index: errorIndex,
+            address: target,
+            preferred: targets,
+          },
+        )
       : undefined;
     return {
       target,

@@ -5,7 +5,7 @@ import { formatInlineValues } from "../decoding/formatDecodedValue.ts";
 import { count, formatReturnValues } from "../decoding/formatInnerCall.ts";
 import { getFunctionSelector } from "../decoding/selector.ts";
 import { Revert } from "../decoding/decodeRevert.ts";
-import { formatRevert } from "../decoding/formatRevert.ts";
+import { formatRevert, formatRevertSource } from "../decoding/formatRevert.ts";
 import { formatRpcRequestStatus } from "../capture/getRpcRequestStatus.ts";
 import { RpcRequestChain } from "../chains/endpointChains.ts";
 import { getChainName } from "../chains/chainNames.ts";
@@ -149,20 +149,27 @@ export function formatOverviewChain(chain: RpcRequestChain): OverviewSegment {
   }
 }
 
-// The Status, with an RPC error's message and its decoded Revert
+// The Status, with an RPC error's message and its decoded Revert, and which
+// other Contract decoded it muted after it
 export function formatOverviewStatus(
   status: RpcRequestStatus,
   revert?: Revert,
-): string {
+): OverviewSegment[] {
   const label = formatRpcRequestStatus(status);
   if (status.kind !== "error") {
-    return label;
+    return [{ text: label }];
   }
+  const text = `${label}: ${status.message}`;
   const decoded = revert && revert.kind !== "raw" && formatRevert(revert);
   // Most nodes already put an Error(string) in the message
-  const reason =
-    decoded && !status.message.includes(decoded) ? ` — ${decoded}` : "";
-  return `${label}: ${status.message}${reason}`;
+  if (!decoded || status.message.includes(decoded)) {
+    return [{ text }];
+  }
+  const source = formatRevertSource(revert);
+  return [
+    { text: `${text} — ${decoded}` },
+    ...(source ? [{ text: ` ${source}`, tone: "muted" as const }] : []),
+  ];
 }
 
 export const formatBatchPosition = ({ index, size }: BatchPosition) =>

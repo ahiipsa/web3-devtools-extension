@@ -33,6 +33,13 @@ export const formatRevert = (revert: Revert) => {
   }
 };
 
+// Which other Contract's ABI decoded a bubbled-up custom error, shown muted
+// after it; none when the first ABI tried decoded it
+export const formatRevertSource = (revert: Revert) =>
+  revert.kind === "custom" && revert.from !== undefined
+    ? `from ${revert.from}`
+    : undefined;
+
 export const formatRpcError = ({
   code,
   message,

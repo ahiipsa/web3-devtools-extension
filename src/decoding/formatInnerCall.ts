@@ -4,7 +4,7 @@ import {
   formatDecodedValue,
   formatInlineValues,
 } from "./formatDecodedValue.ts";
-import { formatRevert } from "./formatRevert.ts";
+import { formatRevert, formatRevertSource } from "./formatRevert.ts";
 import { DecodedValue } from "./decodeRpcRequest.ts";
 
 // The function's name, else the Selector
@@ -42,8 +42,9 @@ export const formatInnerCallResult = ({ decoding }: InnerCall) => {
 export type InnerCallOutcome =
   // The decoded result, else the raw return data
   | { kind: "succeeded"; value: string; decoded: boolean }
-  // Its Revert; none for empty revert data
-  | { kind: "failed"; revert?: string }
+  // Its Revert, none for empty revert data, and the other Contract whose ABI
+  // decoded it
+  | { kind: "failed"; revert?: string; revertSource?: string }
   // No result paired with it
   | { kind: "none" };
 
@@ -53,7 +54,12 @@ export const getInnerCallOutcome = (innerCall: InnerCall): InnerCallOutcome => {
     return { kind: "none" };
   }
   if (success === false) {
-    return { kind: "failed", revert: revert && formatRevert(revert) };
+    const revertSource = revert && formatRevertSource(revert);
+    return {
+      kind: "failed",
+      revert: revert && formatRevert(revert),
+      ...(revertSource && { revertSource }),
+    };
   }
   const result = formatInnerCallResult(innerCall);
   return result === undefined

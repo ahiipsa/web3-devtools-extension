@@ -261,9 +261,11 @@ describe("formatOverviewStatus", () => {
         kind: "error",
         message: "ERC20: transfer amount exceeds balance",
       }),
-    ).toBe(
-      "error 3: execution reverted — ERC20: transfer amount exceeds balance",
-    );
+    ).toEqual([
+      {
+        text: "error 3: execution reverted — ERC20: transfer amount exceeds balance",
+      },
+    ]);
   });
 
   it("leaves out a Revert the message already holds", () => {
@@ -272,19 +274,38 @@ describe("formatOverviewStatus", () => {
         { ...error, message: "execution reverted: Not enough" },
         { kind: "error", message: "Not enough" },
       ),
-    ).toBe("error 3: execution reverted: Not enough");
+    ).toEqual([{ text: "error 3: execution reverted: Not enough" }]);
   });
 
   it("leaves out revert data nothing decodes", () => {
-    expect(formatOverviewStatus(error, { kind: "raw", data: "0x1234" })).toBe(
-      "error 3: execution reverted",
-    );
-    expect(formatOverviewStatus(error)).toBe("error 3: execution reverted");
+    expect(
+      formatOverviewStatus(error, { kind: "raw", data: "0x1234" }),
+    ).toEqual([{ text: "error 3: execution reverted" }]);
+    expect(formatOverviewStatus(error)).toEqual([
+      { text: "error 3: execution reverted" },
+    ]);
+  });
+
+  it("names the other Contract whose ABI decoded the Revert, muted", () => {
+    expect(
+      formatOverviewStatus(error, {
+        kind: "custom",
+        name: "InsufficientLiquidity",
+        signature: "InsufficientLiquidity()",
+        args: [],
+        from: "UniswapV2Pair",
+      }),
+    ).toEqual([
+      { text: "error 3: execution reverted — InsufficientLiquidity()" },
+      { text: " from UniswapV2Pair", tone: "muted" },
+    ]);
   });
 
   it("is the label for any other Status", () => {
-    expect(formatOverviewStatus({ kind: "ok" })).toBe("ok");
-    expect(formatOverviewStatus({ kind: "http", code: 502 })).toBe("HTTP 502");
+    expect(formatOverviewStatus({ kind: "ok" })).toEqual([{ text: "ok" }]);
+    expect(formatOverviewStatus({ kind: "http", code: 502 })).toEqual([
+      { text: "HTTP 502" },
+    ]);
   });
 });
 

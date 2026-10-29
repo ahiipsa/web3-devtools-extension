@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { formatRevert, formatRpcError } from "./formatRevert.ts";
+import { Revert } from "./decodeRevert.ts";
+import {
+  formatRevert,
+  formatRevertSource,
+  formatRpcError,
+} from "./formatRevert.ts";
 
 describe("formatRevert", () => {
   it("is an Error(string)'s message", () => {
@@ -36,6 +41,26 @@ describe("formatRevert", () => {
     expect(formatRevert({ kind: "raw", data: "0xdeadbeef" })).toBe(
       "0xdeadbeef",
     );
+  });
+});
+
+describe("formatRevertSource", () => {
+  const custom: Revert = {
+    kind: "custom",
+    name: "InsufficientLiquidity",
+    signature: "InsufficientLiquidity()",
+    args: [],
+  };
+
+  it("names the other Contract whose ABI decoded the error", () => {
+    expect(formatRevertSource({ ...custom, from: "UniswapV2Pair" })).toBe(
+      "from UniswapV2Pair",
+    );
+  });
+
+  it("is nothing for a Revert the first ABI decoded", () => {
+    expect(formatRevertSource(custom)).toBeUndefined();
+    expect(formatRevertSource({ kind: "panic", code: 1n })).toBeUndefined();
   });
 });
 

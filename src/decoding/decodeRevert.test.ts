@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { Abi, encodeErrorResult, parseAbi } from "viem";
-import { decodeRevert, getRpcRequestRevert } from "./decodeRevert.ts";
+import { Abi, encodeErrorResult, getAddress, parseAbi } from "viem";
+import {
+  buildErrorIndex,
+  decodeRevert,
+  getRpcRequestRevert,
+} from "./decodeRevert.ts";
 import { RpcRequest } from "../types/main.ts";
+import { Contract } from "../dal/contract.ts";
 
 const solidityAbi = parseAbi([
   "error Error(string message)",
@@ -123,6 +128,112 @@ describe("decodeRevert", () => {
     });
     // An Error(string) Selector with a body that does not decode
     expect(decodeRevert("0x08c379a0ff")).toEqual({
+      kind: "raw",
+      data: "0x08c379a0ff",
+    });
+  });
+});
+
+describe("decodeRevert with the ABIs of other known Contracts", () => {
+  const poolAbi = parseAbi(["error InsufficientLiquidity()"]);
+  const ROUTER = "0x7a250d5630b4cf539739df2c5dacb4c659f2488d";
+  const POOL = "0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc";
+  const OTHER = "0x0000000000000000000000000000000000000001";
+  const pool: Contract = { address: POOL, name: "UniswapV2Pair", abi: poolAbi };
+  const insufficientLiquidity = encodeErrorResult({
+    abi: poolAbi,
+    errorName: "InsufficientLiquidity",
+  });
+
+  it("decodes an error only another Contract's ABI declares, with its name", () => {
+    const router: Contract = { address: ROUTER, name: "Router", abi: tokenAbi };
+    const index = buildErrorIndex([router, pool]);
+    expect(
+      decodeRevert(insufficientLiquidity, tokenAbi, { index, address: ROUTER }),
+    ).toEqual({
+      kind: "custom",
+      name: "InsufficientLiquidity",
+      signature: "InsufficientLiquidity()",
+      args: [],
+      from: "UniswapV2Pair",
+    });
+    // Without a Contract at the called address
+    expect(decodeRevert(insufficientLiquidity, undefined, { index })).toEqual(
+      expect.objectContaining({ from: "UniswapV2Pair" }),
+    );
+  });
+
+  it("prefers the called Contract's own ABI over another with the same Selector", () => {
+    const router: Contract = {
+      address: ROUTER,
+      name: "Router",
+      abi: parseAbi(["error InsufficientLiquidity()"]),
+    };
+    const index = buildErrorIndex([pool, router]);
+    expect(
+      decodeRevert(insufficientLiquidity, router.abi, {
+        index,
+        address: ROUTER,
+      }),
+    ).toEqual({
+      kind: "custom",
+      name: "InsufficientLiquidity",
+      signature: "InsufficientLiquidity()",
+      args: [],
+    });
+  });
+
+  it("prefers an Inner Call target's ABI over an unrelated stored Contract", () => {
+    const other: Contract = {
+      address: OTHER,
+      name: "Other",
+      abi: parseAbi(["error InsufficientLiquidity()"]),
+    };
+    const index = buildErrorIndex([other, pool]);
+    expect(
+      decodeRevert(insufficientLiquidity, undefined, {
+        index,
+        // In checksum case, as calldata may carry it
+        preferred: [ROUTER, getAddress(POOL)],
+      }),
+    ).toMatchObject({ from: "UniswapV2Pair" });
+    expect(
+      decodeRevert(insufficientLiquidity, undefined, { index }),
+    ).toMatchObject({ from: "Other" });
+  });
+
+  it("skips a Selector match whose arguments do not decode", () => {
+    const data = encodeErrorResult({
+      abi: tokenAbi,
+      errorName: "Unauthorized",
+      args: [HOLDER],
+    });
+    // Same Selector, but only the Selector: no address argument follows
+    const truncated = data.slice(0, 10) as `0x${string}`;
+    const index = buildErrorIndex([
+      { address: OTHER, name: "Token", abi: tokenAbi },
+    ]);
+    expect(decodeRevert(truncated, undefined, { index })).toEqual({
+      kind: "raw",
+      data: truncated,
+    });
+  });
+
+  it("keeps the revert data raw when no known ABI declares the error", () => {
+    const index = buildErrorIndex([
+      { address: OTHER, name: "Token", abi: tokenAbi },
+    ]);
+    expect(decodeRevert(insufficientLiquidity, tokenAbi, { index })).toEqual({
+      kind: "raw",
+      data: insufficientLiquidity,
+    });
+  });
+
+  it("does not look up an Error(string) that does not decode", () => {
+    const index = buildErrorIndex([
+      { address: OTHER, name: "Solidity", abi: solidityAbi },
+    ]);
+    expect(decodeRevert("0x08c379a0ff", undefined, { index })).toEqual({
       kind: "raw",
       data: "0x08c379a0ff",
     });
