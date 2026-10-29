@@ -124,12 +124,15 @@
   height: 20px;
 }
 
-/* Rows break by the 160px basis, then the box takes the free space */
+/* Rows break by the 160px basis, then the box grows up to 360px: a whole
+   checksummed address (about 304px of 12px system-ui on macOS) beside the
+   icon and the clear button; the rest of the line stays free before ⚙ */
 .rpc-table-search {
   display: flex;
   flex: 1 1 160px;
   align-items: center;
   min-width: 160px;
+  max-width: 360px;
   height: 20px;
   margin: 1px 3px;
   padding: 0 2px 0 8px;

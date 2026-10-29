@@ -2994,6 +2994,40 @@ async function smoke() {
       json(forgotten),
     );
     await shot("15-end");
+
+    // Wide Panel: DevTools docked to the bottom of the 1202 px window
+    if (await app.detailsOpen()) await key("Escape");
+    await app.devtools.evaluate(
+      `(async () => { const { Settings } = await import("./core/common/common.js"); Settings.Settings.instance().moduleSetting("currentDockState").set("bottom"); return 1 })()`,
+    );
+    const filterBox = () =>
+      ev(`(() => {
+        const box = (e) => e.getBoundingClientRect();
+        const input = document.querySelector(".rpc-table-search-input");
+        return { toolbar: Math.round(box(document.querySelector(".rpc-table-toolbar")).width),
+          box: Math.round(box(input.parentElement).width),
+          gap: Math.round(box(document.querySelector(".rpc-table-chip")).left - box(document.querySelector(".rpc-table-errors")).right),
+          chips: box(document.querySelector(".rpc-table-chip")).left,
+          fits: input.scrollWidth <= input.clientWidth }; })()`);
+    const wideBox = await until(filterBox, (b) => b.toolbar >= 1000);
+    check(
+      "the Filter box stops at 360 px on a wide Panel, the chips right after Errors",
+      // Errors, the divider, then the chip: 11 px
+      wideBox.box === 360 && wideBox.gap <= 12,
+      json(wideBox),
+    );
+    await click(".rpc-table-search-input");
+    // Checksummed, the wider way to write it
+    await type("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48");
+    const typedBox = await filterBox();
+    check(
+      "a whole address fits in the Filter box, which keeps its width",
+      typedBox.fits &&
+        typedBox.box === wideBox.box &&
+        typedBox.chips === wideBox.chips,
+      json(typedBox),
+    );
+    await shot("16-wide-filter");
     // Both bars, for a human to compare by eye
     if (bars)
       await app.stackShots("03-filter-bars", [
