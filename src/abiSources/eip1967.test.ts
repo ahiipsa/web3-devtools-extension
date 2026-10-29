@@ -1,7 +1,15 @@
 import { describe, expect, it, vi } from "vitest";
 import { readEip1967Implementation } from "./eip1967.ts";
+import { EndpointTransport } from "./endpointRpc.ts";
 
 const ENDPOINT = "https://rpc.example/v1";
+
+// Only the Panel reaches the Endpoint; the fallback from the page has its
+// own tests
+const fromPanel = (fetchFn: typeof fetch): EndpointTransport => ({
+  fetch: fetchFn,
+  postFromPage: () => Promise.reject(new Error("not sent from the page")),
+});
 const PROXY = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48";
 const IMPLEMENTATION = "0x43506849d7c04f9138d1a2050bbf3a0c054402dd";
 const BEACON = "0x5a2a4f2f3c18f09179b6703e63d9edd165909073";
@@ -49,9 +57,9 @@ describe("readEip1967Implementation", () => {
       ),
     });
 
-    expect(await readEip1967Implementation(ENDPOINT, PROXY, fetchFn)).toBe(
-      IMPLEMENTATION,
-    );
+    expect(
+      await readEip1967Implementation(ENDPOINT, PROXY, fromPanel(fetchFn)),
+    ).toBe(IMPLEMENTATION);
     expect(fetchFn).toHaveBeenCalledWith(ENDPOINT, expect.anything());
     expect(sentBodies(fetchFn)).toEqual([
       {
@@ -67,9 +75,9 @@ describe("readEip1967Implementation", () => {
       IMPLEMENTATION,
     );
 
-    expect(await readEip1967Implementation(ENDPOINT, PROXY, fetchFn)).toBe(
-      IMPLEMENTATION,
-    );
+    expect(
+      await readEip1967Implementation(ENDPOINT, PROXY, fromPanel(fetchFn)),
+    ).toBe(IMPLEMENTATION);
     expect(sentBodies(fetchFn)).toEqual([
       {
         method: "eth_getStorageAt",
@@ -87,7 +95,7 @@ describe("readEip1967Implementation", () => {
     const fetchFn = node({}, IMPLEMENTATION);
 
     expect(
-      await readEip1967Implementation(ENDPOINT, PROXY, fetchFn),
+      await readEip1967Implementation(ENDPOINT, PROXY, fromPanel(fetchFn)),
     ).toBeUndefined();
     expect(sentBodies(fetchFn).map(({ method }) => method)).toEqual([
       "eth_getStorageAt",
@@ -99,7 +107,7 @@ describe("readEip1967Implementation", () => {
     const fetchFn = node({ [`${PROXY}:${BEACON_SLOT}`]: word(BEACON) });
 
     expect(
-      await readEip1967Implementation(ENDPOINT, PROXY, fetchFn),
+      await readEip1967Implementation(ENDPOINT, PROXY, fromPanel(fetchFn)),
     ).toBeUndefined();
   });
 
@@ -109,9 +117,9 @@ describe("readEip1967Implementation", () => {
       [`${PROXY}:${BEACON_SLOT}`]: "0x0",
     });
 
-    expect(await readEip1967Implementation(ENDPOINT, PROXY, fetchFn)).toBe(
-      IMPLEMENTATION,
-    );
+    expect(
+      await readEip1967Implementation(ENDPOINT, PROXY, fromPanel(fetchFn)),
+    ).toBe(IMPLEMENTATION);
   });
 
   it("gives up on an Endpoint that does not answer", async () => {
@@ -123,7 +131,7 @@ describe("readEip1967Implementation", () => {
     );
 
     await expect(
-      readEip1967Implementation(ENDPOINT, PROXY, fetchFn),
+      readEip1967Implementation(ENDPOINT, PROXY, fromPanel(fetchFn)),
     ).rejects.toThrow("the Endpoint did not answer in 10 s");
   });
 
@@ -140,7 +148,7 @@ describe("readEip1967Implementation", () => {
     );
 
     await expect(
-      readEip1967Implementation(ENDPOINT, PROXY, fetchFn),
+      readEip1967Implementation(ENDPOINT, PROXY, fromPanel(fetchFn)),
     ).rejects.toThrow("method not found");
   });
 });

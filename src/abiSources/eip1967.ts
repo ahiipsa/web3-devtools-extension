@@ -1,4 +1,8 @@
-import { sendRpcRequest } from "./endpointRpc.ts";
+import {
+  DEFAULT_ENDPOINT_TRANSPORT,
+  EndpointTransport,
+  sendRpcRequest,
+} from "./endpointRpc.ts";
 import { parseNonZeroAddress } from "./address.ts";
 
 // bytes32(uint256(keccak256("eip1967.proxy.implementation")) - 1)
@@ -24,7 +28,7 @@ const wordToAddress = (word: unknown) =>
 export async function readEip1967Implementation(
   endpoint: string,
   address: `0x${string}`,
-  fetchFn: typeof fetch = fetch,
+  transport: EndpointTransport = DEFAULT_ENDPOINT_TRANSPORT,
 ): Promise<`0x${string}` | undefined> {
   const readSlot = async (slot: string) =>
     wordToAddress(
@@ -32,7 +36,7 @@ export async function readEip1967Implementation(
         endpoint,
         "eth_getStorageAt",
         [address, slot, "latest"],
-        fetchFn,
+        transport,
       ),
     );
 
@@ -49,7 +53,7 @@ export async function readEip1967Implementation(
       endpoint,
       "eth_call",
       [{ to: beacon, data: IMPLEMENTATION_SELECTOR }, "latest"],
-      fetchFn,
+      transport,
     ),
   );
 }

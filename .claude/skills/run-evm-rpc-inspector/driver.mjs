@@ -78,6 +78,8 @@ export const SLOT_IMPLEMENTATION = "0x6666666666666666666666666666666666666666";
 // on the fake Sourcify, INNER_UNVERIFIED is not
 export const INNER_TOKEN = "0x7777777777777777777777777777777777777777";
 export const INNER_UNVERIFIED = "0x8888888888888888888888888888888888888888";
+// Called on `/strict` only, whose CORS lets only the dApp page in
+export const STRICT_TOKEN = "0x1313131313131313131313131313131313131313";
 // Verified on the fake Sourcify as Vault; every eth_call to it reverts, by
 // its `withdraw(amount)`: 1 Error("Not enough"), 2 a Panic 0x11, any other
 // amount the Vault's InsufficientBalance(available, required)
@@ -160,6 +162,7 @@ export const SOURCIFY = {
     abi: BALANCE_OF_ABI,
     compilation: { name: "SlotToken" },
   },
+  [STRICT_TOKEN]: { abi: BALANCE_OF_ABI, compilation: { name: "StrictToken" } },
   [VAULT]: { abi: VAULT_ABI, compilation: { name: "Vault" } },
   [VAULT_V2]: { abi: VAULT_ABI, compilation: { name: "VaultV2" } },
 };
@@ -334,8 +337,12 @@ const nodeLog = [];
 const startNode = () =>
   new Promise((ready) => {
     const server = http.createServer((req, res) => {
-      // Open CORS, like public RPC nodes, so the Panel can ask for eth_chainId
-      res.setHeader("access-control-allow-origin", "*");
+      // Open CORS, like public RPC nodes, so the Panel can ask for eth_chainId;
+      // `/strict` lets only the dApp page in, like a dApp's own RPC proxy
+      res.setHeader(
+        "access-control-allow-origin",
+        req.url === "/strict" ? `http://${req.headers.host}` : "*",
+      );
       res.setHeader("access-control-allow-headers", "content-type");
       if (req.method === "OPTIONS") return res.writeHead(204).end();
       if (req.method === "GET") return res.end(DAPP);
@@ -915,6 +922,8 @@ export async function launch({ realAbiSources = false } = {}) {
     sourcifyUrls,
     etherscanUrls,
     nodeLog,
+    // The dApp page's origin, which its RPC Requests carry
+    origin,
     // Sends one request body (object, batch array or raw string) from the dApp
     // page; another `path` is another Endpoint
     rpc: async (body, path = "/rpc") => {
@@ -1726,6 +1735,47 @@ async function smoke() {
       "the Panel asks an Endpoint for its chain id once",
       ownChainIds() === 1 && daiFetched(),
       JSON.stringify(app.nodeLog.filter((r) => r.path === "/rpc2")),
+    );
+
+    // An Endpoint whose CORS lets only the dApp page in, and which the page
+    // never asks for eth_chainId: the Panel asks it from the page
+    // The Endpoint column shows the host only, so count eth_chainId rows
+    const chainIdRows = async () =>
+      (await app.rowCells()).filter(
+        ([method]) => method?.split(" ")[0] === "eth_chainId",
+      ).length;
+    const chainIdRowsBefore = await chainIdRows();
+    await app.rpc(callTo(16, STRICT_TOKEN), "/strict");
+    const strictChainIds = () =>
+      app.nodeLog.filter(
+        (r) => r.path === "/strict" && r.method === "eth_chainId",
+      );
+    await until(strictChainIds, (sent) => sent.length > 0);
+    check(
+      "the Panel asks a CORS-restricted Endpoint for its chain id from the page, with the page's origin",
+      json(strictChainIds().map((r) => r.origin)) === json([app.origin]),
+      JSON.stringify(app.nodeLog.filter((r) => r.path === "/strict")),
+    );
+    check(
+      "an eth_call on the CORS-restricted Endpoint decodes from Sourcify",
+      await callsContractSoon("StrictToken", "balanceOf"),
+    );
+    // Time for the page-side eth_chainId to reach the capture, if it would
+    await app.sleep(DUPLICATE_WINDOW);
+    // The details hide the Chain column
+    if (await app.detailsOpen()) await key("Escape");
+    const strictRows = (await app.rowCells()).filter(
+      (cells) => cells[2] === "StrictToken",
+    );
+    check(
+      "the CORS-restricted Endpoint's row is on Ethereum",
+      strictRows.length === 1 && strictRows[0][1] === "Ethereum",
+      json(strictRows),
+    );
+    check(
+      "the Panel lists no row for its own page-side eth_chainId",
+      (await chainIdRows()) === chainIdRowsBefore,
+      `${chainIdRowsBefore} eth_chainId rows before, ${await chainIdRows()} after`,
     );
 
     check(

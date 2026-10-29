@@ -22,6 +22,8 @@ By default, when the inspected page calls a contract (`eth_call`, `eth_estimateG
 - **To the RPC endpoint the page itself used**: one `eth_chainId` request, to learn the chain id the Panel's Chain column shows and ABIs are fetched for, if the page has not asked for it itself within a second. Once per endpoint while DevTools stays open, whether or not ABIs are fetched automatically.
 - **To the same RPC endpoint**, for each contract it fetches an ABI for whose ABI source says nothing about it being a proxy: up to two `eth_getStorageAt` requests reading the contract's EIP-1967 proxy slots and, for a beacon proxy, one `eth_call` of `implementation()` on the beacon, to find a proxy's implementation. The implementation's ABI is then fetched from Sourcify and Etherscan as above. Once per address and chain while DevTools stays open.
 
+An RPC endpoint that refuses requests from the extension, such as a dApp's own RPC proxy that answers only its own site, gets these requests from the inspected page itself instead: the extension asks DevTools to run them in the page, so they go out with the page's origin, without its cookies, and show in the page's own Network tab. They are the same requests to the same endpoint, and nothing else is sent.
+
 Nothing else is sent: no calldata, no responses, no page URLs and no information about you. The contract addresses and chain ids are already public on chain. The privacy policies of Sourcify and Etherscan apply to the requests they receive.
 
 **To turn this off**, click the gear button at the right end of the Panel's filter toolbar and uncheck "Fetch ABIs automatically". Nothing is then sent but the one `eth_chainId` per RPC endpoint above, which goes to the endpoint the page already talks to, unless you press "Fetch ABI" on a Contract tab (also reached through "Add ABI" on a Multicall's bundled call). To stop only the requests to Etherscan, clear the "Etherscan API key" field there.
@@ -32,7 +34,7 @@ The extension contains no analytics or tracking and shares no data with the deve
 
 - `storage`: to save Contracts and settings in `chrome.storage.local`.
 
-The extension requests no host permissions and no access to the websites you visit outside of DevTools. Sourcify, Etherscan and the RPC endpoints are reached as any web page would reach them, through their open CORS.
+The extension requests no host permissions and no access to the websites you visit outside of DevTools. Sourcify, Etherscan and the RPC endpoints are reached as any web page would reach them, through their open CORS; an RPC endpoint whose CORS lets in only its own site is reached from the inspected page, as described above.
 
 ## Deleting your data
 

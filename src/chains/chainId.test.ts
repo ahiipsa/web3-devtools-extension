@@ -1,8 +1,16 @@
 import { describe, expect, it, vi } from "vitest";
 import { RpcRequest } from "../types/main.ts";
 import { getCapturedChainId, requestChainId } from "./chainId.ts";
+import { EndpointTransport } from "../abiSources/endpointRpc.ts";
 
 const ENDPOINT = "https://rpc.example/v1";
+
+// Only the Panel reaches the Endpoint; the fallback from the page has its
+// own tests
+const fromPanel = (fetchFn: typeof fetch): EndpointTransport => ({
+  fetch: fetchFn,
+  postFromPage: () => Promise.reject(new Error("not sent from the page")),
+});
 
 const rpcRequest = (
   method: string,
@@ -58,7 +66,7 @@ describe("requestChainId", () => {
   it("sends one eth_chainId POST to the Endpoint and reads its result", async () => {
     const fetchFn = respond(200, { jsonrpc: "2.0", id: 1, result: "0x1" });
 
-    expect(await requestChainId(ENDPOINT, fetchFn)).toBe(1);
+    expect(await requestChainId(ENDPOINT, fromPanel(fetchFn))).toBe(1);
     expect(fetchFn).toHaveBeenCalledTimes(1);
     const [url, init] = fetchFn.mock.calls[0] as unknown as [
       string,
@@ -72,9 +80,9 @@ describe("requestChainId", () => {
   });
 
   it("fails on an HTTP error", async () => {
-    await expect(requestChainId(ENDPOINT, respond(401, {}))).rejects.toThrow(
-      "HTTP 401",
-    );
+    await expect(
+      requestChainId(ENDPOINT, fromPanel(respond(401, {}))),
+    ).rejects.toThrow("HTTP 401");
   });
 
   it("fails on an RPC error", async () => {
@@ -83,7 +91,7 @@ describe("requestChainId", () => {
       id: 1,
       error: { code: -32601, message: "method not found" },
     });
-    await expect(requestChainId(ENDPOINT, fetchFn)).rejects.toThrow(
+    await expect(requestChainId(ENDPOINT, fromPanel(fetchFn))).rejects.toThrow(
       "method not found",
     );
   });

@@ -1,5 +1,9 @@
 import { RpcRequest } from "../types/main.ts";
-import { sendRpcRequest } from "../abiSources/endpointRpc.ts";
+import {
+  DEFAULT_ENDPOINT_TRANSPORT,
+  EndpointTransport,
+  sendRpcRequest,
+} from "../abiSources/endpointRpc.ts";
 
 const parseChainId = (value: unknown) =>
   typeof value === "string" && /^0x[0-9a-f]+$/i.test(value)
@@ -17,9 +21,9 @@ export function getCapturedChainId(request: RpcRequest): number | undefined {
 // Throws an Error whose message is fit to show the user
 export async function requestChainId(
   endpoint: string,
-  fetchFn: typeof fetch = fetch,
+  transport: EndpointTransport = DEFAULT_ENDPOINT_TRANSPORT,
 ): Promise<number> {
-  const result = await sendRpcRequest(endpoint, "eth_chainId", [], fetchFn);
+  const result = await sendRpcRequest(endpoint, "eth_chainId", [], transport);
   const chainId = parseChainId(result);
   if (chainId === undefined) {
     throw new Error("invalid eth_chainId response");

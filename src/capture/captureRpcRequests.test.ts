@@ -4,6 +4,7 @@ import {
   CapturedNetworkEntry,
   HTTP_RESPONSE_BODY_LIMIT,
 } from "./captureRpcRequests.ts";
+import { nextOwnRpcRequestId } from "./ownRpcRequestId.ts";
 
 const networkEntry = (
   overrides: Partial<CapturedNetworkEntry>,
@@ -40,6 +41,34 @@ describe("captureRpcRequests", () => {
         hasRpcResponseBody: true,
       },
     ]);
+  });
+
+  it("lists none of the Panel's own RPC Requests, sent from the inspected page", () => {
+    expect(
+      captureRpcRequests(
+        networkEntry({
+          requestText: JSON.stringify({
+            jsonrpc: "2.0",
+            id: nextOwnRpcRequestId(),
+            method: "eth_chainId",
+          }),
+        }),
+      ),
+    ).toEqual([]);
+  });
+
+  it("lists an RPC Request whose string id only looks like the Panel's", () => {
+    const captured = captureRpcRequests(
+      networkEntry({
+        requestText: JSON.stringify({
+          jsonrpc: "2.0",
+          id: "my-evm-rpc-inspector:1",
+          method: "eth_chainId",
+        }),
+      }),
+    );
+
+    expect(captured).toHaveLength(1);
   });
 
   describe("Batch position", () => {

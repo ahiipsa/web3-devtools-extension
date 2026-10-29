@@ -1,4 +1,5 @@
 import { RpcRequest, RpcRequestBody, RpcResponseBody } from "../types/main.ts";
+import { isOwnRpcRequestId } from "./ownRpcRequestId.ts";
 
 export type RpcExchange = Pick<RpcRequest, "requestBody" | "response">;
 
@@ -13,11 +14,14 @@ const parseJson = (text: string): unknown => {
   }
 };
 
+// The Panel's own RPC Requests, sent from the inspected page, are not the
+// page's
 const isRpcRequestBody = (value: unknown): value is RpcRequestBody =>
   typeof value === "object" &&
   value !== null &&
   (value as RpcRequestBody).jsonrpc === "2.0" &&
-  typeof (value as RpcRequestBody).method === "string";
+  typeof (value as RpcRequestBody).method === "string" &&
+  !isOwnRpcRequestId((value as RpcRequestBody).id);
 
 const isRpcResponseBody = (value: unknown): value is RpcResponseBody =>
   typeof value === "object" &&
