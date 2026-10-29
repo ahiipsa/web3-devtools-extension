@@ -3002,30 +3002,38 @@ async function smoke() {
     );
     const filterBox = () =>
       ev(`(() => {
-        const box = (e) => e.getBoundingClientRect();
-        const input = document.querySelector(".rpc-table-search-input");
-        return { toolbar: Math.round(box(document.querySelector(".rpc-table-toolbar")).width),
-          box: Math.round(box(input.parentElement).width),
-          gap: Math.round(box(document.querySelector(".rpc-table-chip")).left - box(document.querySelector(".rpc-table-errors")).right),
-          chips: box(document.querySelector(".rpc-table-chip")).left,
+        const rect = (selector) => document.querySelector(selector).getBoundingClientRect();
+        const input = document.querySelector(".rpc-table-search-input"), chip = rect(".rpc-table-chip");
+        return { toolbarWidth: Math.round(rect(".rpc-table-toolbar").width),
+          boxWidth: Math.round(rect(".rpc-table-search").width),
+          chipLeft: Math.round(chip.left),
+          errorsToChip: Math.round(chip.left - rect(".rpc-table-errors").right),
+          focused: document.activeElement === input,
+          value: input.value,
           fits: input.scrollWidth <= input.clientWidth }; })()`);
-    const wideBox = await until(filterBox, (b) => b.toolbar >= 1000);
+    const wideBox = await until(filterBox, (b) => b.toolbarWidth >= 1000);
     check(
       "the Filter box stops at 360 px on a wide Panel, the chips right after Errors",
-      // Errors, the divider, then the chip: 11 px
-      wideBox.box === 360 && wideBox.gap <= 12,
+      // Errors' padding, the divider and the chip's margin make 11 px
+      wideBox.boxWidth === 360 && wideBox.errorsToChip <= 12,
       json(wideBox),
     );
-    await click(".rpc-table-search-input");
+    // The focus is still in the Panel from the steps above
+    await key("f", "meta");
+    const focusedBox = await until(filterBox, (b) => b.focused);
     // Checksummed, the wider way to write it
-    await type("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48");
-    const typedBox = await filterBox();
+    const address = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48";
+    await type(address);
+    const typedBox = await until(filterBox, (b) => b.value === address);
     check(
-      "a whole address fits in the Filter box, which keeps its width",
-      typedBox.fits &&
-        typedBox.box === wideBox.box &&
-        typedBox.chips === wideBox.chips,
-      json(typedBox),
+      "⌘+F and a whole address typed into the Filter box move neither the box nor the chips",
+      focusedBox.focused &&
+        typedBox.fits &&
+        [focusedBox, typedBox].every(
+          (b) =>
+            b.boxWidth === wideBox.boxWidth && b.chipLeft === wideBox.chipLeft,
+        ),
+      json({ focusedBox, typedBox }),
     );
     await shot("16-wide-filter");
     // Both bars, for a human to compare by eye
