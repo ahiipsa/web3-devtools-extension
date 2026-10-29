@@ -42,7 +42,7 @@ Load the `build/` folder as an unpacked extension (see [Install](#install)), and
 npm test        # unit tests (Vitest)
 npm run lint
 npm run build   # typecheck and production build into build/
-npm run icons   # regenerate public/icons/*.png from assets/icon.svg (needs rsvg-convert: brew install librsvg)
+npm run icons   # regenerate public/icons/*.png and store/icon-128.png from assets/ (needs rsvg-convert: brew install librsvg)
 ```
 
 Project layout:
@@ -50,7 +50,8 @@ Project layout:
 - `src/`: the Panel (React), RPC capture, Decoding, Contract storage and fetching ABIs from ABI Sources (`src/abiSources/`)
 - `manifest.ts`: source of the generated `manifest.json`; the version comes from `package.json`
 - `public/`: popup and icons, copied into the build as-is
-- `assets/icon.svg`: source of the PNG icons in `public/icons/`, regenerated with `npm run icons`
+- `assets/icon.svg`: source of the PNG icons in `public/icons/`, regenerated with `npm run icons`; `assets/store-icon.svg` pads it into the store icon
+- `store/`: the Chrome Web Store listing (`listing.md`), its icon and screenshots, and `screenshots.mjs`, which retakes them
 - `GLOSSARY.md` and `docs/adr/`: domain language and architecture decisions
 
 ## Release
@@ -58,7 +59,7 @@ Project layout:
 1. Set the new version in `package.json`.
 2. Run `npm run release` (needs `zip`, available on macOS and Linux).
 
-This writes `release/evm-rpc-inspector-<version>.zip`, ready to upload to the Chrome Web Store.
+This writes `release/evm-rpc-inspector-<version>.zip`, ready to upload to the Chrome Web Store with the texts, icon and screenshots in [`store/listing.md`](store/listing.md). Retake the screenshots when the Panel's look changes.
 
 ## Acknowledgements
 

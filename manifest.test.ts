@@ -48,6 +48,11 @@ describe("buildManifest", () => {
     }
   });
 
+  it("has a 128×128 store icon", () => {
+    const icon = readFileSync(new URL("./store/icon-128.png", import.meta.url));
+    expect(pngSize(icon)).toEqual({ width: 128, height: 128 });
+  });
+
   it("points the toolbar popup at an existing page", () => {
     const manifest = buildManifest(pkg);
     expect(() => readPublic(manifest.action.default_popup)).not.toThrow();

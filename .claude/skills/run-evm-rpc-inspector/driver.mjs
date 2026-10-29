@@ -586,8 +586,9 @@ const playwrightSwitches = () => {
     ),
   ).chromiumSwitches;
 };
-// The window launchPersistentContext opens for a 1200×800 viewport on macOS
-const WINDOW_SIZE = "--window-size=1202,870";
+// The window launchPersistentContext opens for a 1200×800 viewport on macOS;
+// WINDOW_SIZE=w,h overrides it (a hidden window resized later stops painting)
+const WINDOW_SIZE = `--window-size=${process.env.WINDOW_SIZE ?? "1202,870"}`;
 
 const waitFor = async (read, what, timeout = 30_000) => {
   for (const end = Date.now() + timeout; Date.now() < end; await sleep(100)) {
@@ -758,7 +759,9 @@ const launchPlaywright = async (profile, args) => {
   };
 };
 
-export async function launch() {
+// `realAbiSources` lets the Panel reach the real Sourcify and Etherscan, for a
+// real dApp (store screenshots); the checks always use the fake ones
+export async function launch({ realAbiSources = false } = {}) {
   const node = await startNode();
   const origin = `http://127.0.0.1:${node.address().port}`;
   const profile = mkdtempSync(join(tmpdir(), "evm-rpc-profile-"));
@@ -799,7 +802,9 @@ export async function launch() {
     /^chrome-extension:\/\/[a-z]+\/index\.html/.test(u),
   );
   await panel.send("Runtime.enable");
-  const { sourcifyUrls, etherscanUrls } = await interceptAbiSources(panel);
+  const { sourcifyUrls, etherscanUrls } = realAbiSources
+    ? { sourcifyUrls: [], etherscanUrls: [] }
+    : await interceptAbiSources(panel);
   for (
     let i = 0;
     i < 50 && !(await panel.evaluate(`!!document.querySelector(".rpc-table")`));
