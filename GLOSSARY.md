@@ -52,6 +52,10 @@ _Avoid_: Revert reason, failure reason, error data
 A labelled on-chain address together with the one ABI used to decode RPC Requests sent to it, added by the user or fetched from an ABI Source. Identified by address alone: case-insensitive and independent of Chain. For a proxy, the ABI is the implementation's. A fetched Contract keeps the ABI Source it came from until the user saves it as their own.
 _Avoid_: Address book entry, account
 
+**Implementation**:
+The contract a proxy forwards its calls to, whose ABI decodes RPC Requests sent to the proxy: the address in the proxy's EIP-1967 slots, or the one an ABI Source names for it. A proxy's Contract holds its Implementation's ABI.
+_Avoid_: Logic contract, target, delegate
+
 **ABI Source**:
 A public registry of verified contracts (Sourcify, Etherscan) the extension fetches a Contract's ABI from, by Chain and address.
 _Avoid_: Explorer (the site links lead to), verifier

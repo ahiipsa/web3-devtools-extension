@@ -29,7 +29,7 @@ FEATURES
 • Filter by text, by errors and by method category (calls, transactions, logs, chain, other), and move through the list with the keyboard, like the Network tab.
 
 PRIVACY
-The extension needs only the "storage" permission and requests no host access. Captured traffic stays in memory and is never sent anywhere. To decode calls, the extension sends contract addresses and the chain id, which are public on chain, to Sourcify, and to Etherscan with your API key if you enter one. It also asks the page's own RPC endpoint for its chain id and, to find a proxy's implementation, reads the proxy's EIP-1967 slots there. Automatic ABI fetching can be turned off. No analytics, no tracking.
+The extension needs only the "storage" permission and requests no host access. Captured traffic stays in memory and is never sent anywhere. To decode calls, the extension sends contract addresses and the chain id, which are public on chain, to Sourcify, and to Etherscan with your API key if you enter one. It also asks the page's own RPC endpoint for its chain id and, to find a proxy's implementation, reads the proxy's EIP-1967 slots there, from the page itself when the endpoint refuses the extension. Automatic ABI fetching can be turned off. No analytics, no tracking.
 
 Open source under the MIT license: https://github.com/ahiipsa/web3-devtools-extension
 ```
@@ -76,7 +76,7 @@ Saves the user's contracts (address, name and ABI) and the panel's settings (aut
 
 - to Sourcify: contract addresses and chain ids;
 - to Etherscan, only with the user's key: contract addresses, chain ids and the key itself, sent to the service that issued it (not "Authentication information" collected by the developer);
-- to the page's own RPC endpoint: one `eth_chainId`, and for a possible proxy up to two `eth_getStorageAt` reads of its EIP-1967 slots and one beacon `implementation()` call.
+- to the page's own RPC endpoint: one `eth_chainId`, and for a possible proxy up to two `eth_getStorageAt` reads of its EIP-1967 slots and one beacon `implementation()` call; from the page itself, with its origin and without its cookies, when the endpoint refuses the extension.
 
 **Certifications**: tick all three (no sale of data, no use unrelated to the single purpose, no use for creditworthiness or lending).
 
