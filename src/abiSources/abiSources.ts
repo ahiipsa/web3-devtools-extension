@@ -45,8 +45,9 @@ export type FetchedAbi =
     }
   | { kind: "missed"; outcomes: AbiSourceOutcomes };
 
-// The ABI to save for an address: for a proxy, the implementation's. A miss
-// that is a proxy's implementation's carries its address
+// The ABI to save for an address: for a proxy, the implementation's. When
+// the ABI Sources missed the implementation's ABI, the miss carries the
+// implementation's address
 export type ContractAbi =
   | {
       kind: "found";
@@ -129,8 +130,7 @@ export interface ContractAbiSources extends AbiSources {
 // fetch; a failure to fetch the implementation's ABI, or Etherscan needing
 // a paid plan for it, is the outcome, so no proxy's own ABI gets saved for
 // good. Without either ABI, the miss is the
-// implementation's, whose ABI would be saved. A miss of the implementation
-// carries its address.
+// implementation's, whose ABI would be saved.
 export async function fetchContractAbi(
   sources: ContractAbiSources,
   chainId: number,

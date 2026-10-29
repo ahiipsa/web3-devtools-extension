@@ -88,8 +88,8 @@ export const formatAbiFetchState = (
     case "fetching":
       return { segments: [muted("Fetching ABI…")] };
     case "missed":
-      // What the ABI Sources answered, not what they would answer now; for
-      // a proxy's implementation, said to be its
+      // What the ABI Sources answered, not what they would answer now,
+      // marked as the implementation's when they answered for a proxy's
       return {
         segments: [
           ...(state.implementation

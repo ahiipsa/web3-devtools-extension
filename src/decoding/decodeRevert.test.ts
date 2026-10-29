@@ -5,6 +5,7 @@ import {
   decodeRevert,
   getRpcRequestRevert,
 } from "./decodeRevert.ts";
+import { formatRevertSource } from "./formatRevert.ts";
 import { RpcRequest } from "../types/main.ts";
 import { Contract } from "../dal/contract.ts";
 
@@ -285,6 +286,20 @@ describe("decodeRevert with the ABIs of other known Contracts", () => {
         ]),
       }),
     ).toMatchObject({ from: "FiatTokenV2_2", alsoFrom: ["DAI"] });
+    expect(
+      formatRevertSource(
+        decodeRevert(insufficientLiquidity, undefined, {
+          index: buildErrorIndex([
+            proxy,
+            declaring("0x0000000000000000000000000000000000000004", "DAI"),
+            implementation,
+          ]),
+        })!,
+      ),
+    ).toEqual({
+      text: "from FiatTokenV2_2 +1",
+      title: "Declared by FiatTokenV2_2, DAI",
+    });
   });
 
   it("names no other Contract when only one declares the error", () => {
