@@ -83,9 +83,13 @@ export const ContractForm = (props: ContractInfoProps) => {
 
   // Inline confirmation instead of a browser confirm() dialog
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [confirmingDeleteOf, setConfirmingDeleteOf] = useState(contract);
+  if (contract !== confirmingDeleteOf) {
+    setConfirmingDeleteOf(contract);
+    setConfirmingDelete(false);
+  }
 
   useEffect(() => {
-    setConfirmingDelete(false);
     // A fetched Contract that lands while the user types keeps their edits
     if (contract?.source && form.isFieldsTouched()) {
       return;

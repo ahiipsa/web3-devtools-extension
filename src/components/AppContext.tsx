@@ -164,12 +164,15 @@ export const AppContextProvider = ({
   }, [loaded, settings.etherscanApiKey]);
 
   // Drop the selection when the list is cleared (Clear button or navigation)
-  useEffect(() => {
-    if (rpcRequestList.length === 0) {
+  const listEmpty = rpcRequestList.length === 0;
+  const [wasListEmpty, setWasListEmpty] = useState(listEmpty);
+  if (listEmpty !== wasListEmpty) {
+    setWasListEmpty(listEmpty);
+    if (listEmpty) {
       setRequestId(null);
       setContractTabTarget(null);
     }
-  }, [rpcRequestList.length, setRequestId]);
+  }
 
   return (
     <AppContext.Provider

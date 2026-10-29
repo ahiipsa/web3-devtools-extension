@@ -73,6 +73,7 @@ const parseJsonAbi = (json: string): unknown[] => {
   } catch (error) {
     throw new Error(
       withLine("ABI is not valid JSON", getJsonErrorLine(json, error)),
+      { cause: error },
     );
   }
   if (Array.isArray(parsed)) {
@@ -152,6 +153,7 @@ const parseHumanReadableAbi = (text: string): unknown[] => {
     const at = findFaultyLine(lines);
     throw new Error(
       withLine(formatParseAbiError(error), at === -1 ? undefined : at + 1),
+      { cause: error },
     );
   }
 };

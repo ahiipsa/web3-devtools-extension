@@ -47,6 +47,7 @@ export async function fetchFromSourcify(
     if (error instanceof Error && error.name === "TimeoutError") {
       throw new Error(
         `Sourcify did not answer in ${SOURCIFY_TIMEOUT / 1000} s`,
+        { cause: error },
       );
     }
     throw error;
