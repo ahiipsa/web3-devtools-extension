@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Fetch verified ABIs</title>
+<style>
+body { margin: 0; }
+:root { --bg:#161514; --surface:#1f1d1b; --ink:#f5f5f4; --muted:#a8a29e; --line:#3a3633; --accent:#93c5fd; --soft:#1e3a8a }
+</style>
+</head>
+<body>
+<div style="position: relative; width: 1280px; height: 800px; overflow: hidden; background: var(--bg); color: var(--ink); font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif">
+  <svg aria-hidden="true" width="1280" height="800" viewBox="0 0 1280 800" style="position: absolute; left: 0; top: 0"><path d="M520 800C510 680 590 570 720 530C900 475 1100 470 1280 360V800Z" fill="var(--soft)" opacity="0.55"></path></svg>
+
+  <div style="position: absolute; left: 72px; top: 256px; width: 420px; display: flex; flex-direction: column; gap: 16px">
+    <svg aria-hidden="true" width="72" height="72" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3v4a1 1 0 0 0 1 1h4"></path><path d="M17 21h-10a2 2 0 0 1 -2 -2v-14a2 2 0 0 1 2 -2h7l5 5v11a2 2 0 0 1 -2 2z"></path><path d="M10 13l-1 2l1 2"></path><path d="M14 13l1 2l-1 2"></path></svg>
+    <h1 style="margin: 0; font-size: 76px; line-height: 84px; font-weight: 650; letter-spacing: -0.02em">Fetch</h1>
+    <p style="margin: 0; font-size: 34px; line-height: 44px; font-weight: 400; color: var(--muted)">Verified ABIs from Sourcify and Etherscan</p>
+  </div>
+
+  <div style="position: absolute; left: 540px; top: 96px; width: 668px; height: 608px; box-sizing: border-box; padding: 32px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; font-size: 22px; line-height: 32px">
+    <div style="font-size: 28px; line-height: 36px; font-weight: 600; margin-bottom: 24px">Contract</div>
+    <div style="padding: 16px 0; border-top: 1px solid var(--line); height: 128px; box-sizing: border-box">
+      <div style="color: var(--muted)">Address</div>
+      <div style="margin-top: 8px; font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-size: 20px; font-weight: 500">0xF18056Bbd320E96A48e3Fbf8bC06…ac99</div>
+    </div>
+    <div style="height: 176px"></div>
+    <div style="padding: 16px 0; border-top: 1px solid var(--line); height: 128px; box-sizing: border-box">
+      <div style="color: var(--muted)">ABI sources</div>
+      <div style="margin-top: 8px">Sourcify, Etherscan or your own</div>
+    </div>
+  </div>
+
+  <div style="position: absolute; left: 500px; top: 320px; width: 748px; height: 168px; box-sizing: border-box; padding: 24px 40px; display: flex; flex-direction: column; justify-content: center; gap: 12px; background: var(--surface); border: 2px solid var(--accent); border-radius: 8px">
+    <div style="font-size: 32px; line-height: 40px; font-weight: 600">CurveFactory</div>
+    <div style="font-size: 24px; line-height: 32px; color: var(--accent)">From Sourcify · 25 functions · 7 events</div>
+  </div>
+</div>
+</body>
+</html>

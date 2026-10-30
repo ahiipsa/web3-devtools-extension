@@ -38,7 +38,8 @@ To load your build, open `chrome://extensions`, enable "Developer mode", click "
 npm test        # unit tests (Vitest)
 npm run lint
 npm run build   # typecheck and production build into build/
-npm run icons   # regenerate public/icons/*.png, the store icon and promo tiles (needs rsvg-convert: brew install librsvg)
+npm run icons   # regenerate public/icons/*.png and the store icon (needs rsvg-convert: brew install librsvg)
+npm run store-images   # render the store screenshots and promo tiles from store/designs/ (needs sips, on macOS)
 ```
 
 Project layout:
@@ -47,7 +48,7 @@ Project layout:
 - `manifest.ts`: source of the generated `manifest.json`; the version comes from `package.json`
 - `public/`: popup and icons, copied into the build as-is
 - `assets/icon.svg`: source of the PNG icons in `public/icons/`, regenerated with `npm run icons`; `assets/store-icon.svg` pads it into the store icon
-- `store/`: the Chrome Web Store listing (`listing.md`), its icon, promo tiles and screenshots, and `screenshots.mjs`, which retakes them
+- `store/`: the Chrome Web Store listing (`listing.md`), its icon, promo tiles and screenshots rendered from `designs/`, and in `panel-screenshots/` real captures of the Panel, which `screenshots.mjs` retakes
 - `GLOSSARY.md` and `docs/adr/`: domain language and architecture decisions
 
 ## Release
@@ -55,7 +56,7 @@ Project layout:
 1. Set the new version in `package.json`.
 2. Run `npm run release` (needs `zip`, available on macOS and Linux).
 
-This writes `release/evm-rpc-inspector-<version>.zip`, ready to upload to the Chrome Web Store with the texts, icon and screenshots in [`store/listing.md`](store/listing.md). Retake the screenshots when the Panel's look changes.
+This writes `release/evm-rpc-inspector-<version>.zip`, ready to upload to the Chrome Web Store with the texts, icon and screenshots in [`store/listing.md`](store/listing.md). Update `store/designs/` and rerun `npm run store-images` when the Panel changes.
 
 ## Acknowledgements
 

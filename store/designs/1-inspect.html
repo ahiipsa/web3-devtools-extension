@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Inspect every call</title>
+<style>
+body { margin: 0; }
+:root { --bg:#161514; --surface:#1f1d1b; --ink:#f5f5f4; --muted:#a8a29e; --line:#3a3633; --accent:#93c5fd; --soft:#1e3a8a }
+</style>
+</head>
+<body>
+<div style="position: relative; width: 1280px; height: 800px; overflow: hidden; background: var(--bg); color: var(--ink); font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif">
+  <svg aria-hidden="true" width="1280" height="800" viewBox="0 0 1280 800" style="position: absolute; left: 0; top: 0"><path d="M470 800C400 640 470 470 640 400C800 335 1010 345 1280 270V800Z" fill="var(--soft)" opacity="0.55"></path></svg>
+
+  <div style="position: absolute; left: 72px; top: 256px; width: 400px; display: flex; flex-direction: column; gap: 16px">
+    <svg aria-hidden="true" width="72" height="72" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 15m-4 0a4 4 0 1 0 8 0a4 4 0 1 0 -8 0"></path><path d="M18.5 18.5l2.5 2.5"></path><path d="M4 6h16"></path><path d="M4 12h4"></path><path d="M4 18h4"></path></svg>
+    <h1 style="margin: 0; font-size: 76px; line-height: 84px; font-weight: 650; letter-spacing: -0.02em">Inspect</h1>
+    <p style="margin: 0; font-size: 34px; line-height: 44px; font-weight: 400; color: var(--muted)">Every JSON-RPC call of your dApp</p>
+  </div>
+
+  <div style="position: absolute; left: 520px; top: 96px; width: 700px; height: 608px; box-sizing: border-box; padding: 24px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; font-size: 20px; line-height: 28px">
+    <div style="display: grid; grid-template-columns: 160px 150px minmax(0, 1fr); gap: 16px; padding: 8px 8px 16px; font-weight: 600; border-bottom: 1px solid var(--line)">
+      <div>Method</div><div>Chain</div><div>Contract</div>
+    </div>
+      <div style="display: grid; grid-template-columns: 160px 150px minmax(0, 1fr); gap: 16px; padding: 16px 8px; border-bottom: 1px solid var(--line); color: var(--muted)">
+        <div style="font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-size: 18px">eth_chainId</div><div>Ethereum</div><div></div>
+      </div>
+      <div style="display: grid; grid-template-columns: 160px 150px minmax(0, 1fr); gap: 16px; padding: 16px 8px; border-bottom: 1px solid var(--line); color: var(--muted)">
+        <div style="font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-size: 18px">eth_feeHistory</div><div>Ethereum</div><div></div>
+      </div>
+      <div style="display: grid; grid-template-columns: 160px 150px minmax(0, 1fr); gap: 16px; padding: 16px 8px; border-bottom: 1px solid var(--line); color: var(--muted)">
+        <div style="font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-size: 18px">eth_call</div><div>Ethereum</div><div>Vyper_contract</div>
+      </div>
+    <div style="height: 94px"></div>
+      <div style="display: grid; grid-template-columns: 160px 150px minmax(0, 1fr); gap: 16px; padding: 16px 8px; border-bottom: 1px solid var(--line); color: var(--muted)">
+        <div style="font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-size: 18px">eth_call</div><div>Ethereum</div><div>CurveTwocryptoFactory</div>
+      </div>
+      <div style="display: grid; grid-template-columns: 160px 150px minmax(0, 1fr); gap: 16px; padding: 16px 8px; border-bottom: 1px solid var(--line); color: var(--muted)">
+        <div style="font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-size: 18px">eth_call</div><div>Ethereum</div><div>CurveTricryptoFactory</div>
+      </div>
+      <div style="display: grid; grid-template-columns: 160px 150px minmax(0, 1fr); gap: 16px; padding: 16px 8px; border-bottom: 1px solid var(--line); color: var(--muted)">
+        <div style="font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-size: 18px">eth_chainId</div><div>Ethereum</div><div></div>
+      </div>
+  </div>
+
+  <div style="position: absolute; left: 488px; top: 349px; width: 764px; height: 108px; box-sizing: border-box; padding: 0 32px; display: grid; grid-template-columns: 200px 150px minmax(0, 1fr); gap: 16px; align-items: center; background: var(--surface); border: 2px solid var(--accent); border-radius: 8px; font-size: 26px; line-height: 34px">
+    <div style="font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-size: 24px; font-weight: 500">eth_call</div>
+    <div>Ethereum</div>
+    <div style="font-weight: 600">CurveFactory</div>
+  </div>
+</div>
+</body>
+</html>

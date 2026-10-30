@@ -40,15 +40,15 @@ Open source under the MIT license: https://github.com/ahiipsa/web3-devtools-exte
 
 **Marquee promo tile**: `store/promo-marquee.png` (1400×560, optional; shown only if the store features the extension)
 
-Both tiles are rendered from `store/promo-*.svg` by `npm run icons`; the marquee shows `store/screenshots/1-table.png`, so rerun it after retaking the screenshots.
+**Screenshots** (1280×800, in this order):
 
-**Screenshots** (1280×800, in this order; retake with `WINDOW_SIZE=1440,870 node store/screenshots.mjs` after `npm run build`):
+1. `store/screenshots/1-inspect.png`: the RPC Requests of curve.finance, decoded
+2. `store/screenshots/2-decode.png`: a decoded return value
+3. `store/screenshots/3-multicall.png`: a Multicall3 call of app.ens.domains with its Inner Calls
+4. `store/screenshots/4-reverts.png`: decoded reverts (example values)
+5. `store/screenshots/5-abi.png`: a Contract fetched from Sourcify, with Etherscan as another ABI Source
 
-1. `store/screenshots/1-table.png`: the RPC Requests of curve.finance, decoded
-2. `store/screenshots/2-overview.png`: an RPC Request's Overview
-3. `store/screenshots/3-response.png`: a decoded return value
-4. `store/screenshots/4-multicall.png`: a Multicall3 call of app.ens.domains with its Inner Calls
-5. `store/screenshots/5-contract.png`: a Contract fetched from Sourcify
+The screenshots and both tiles are mockups rendered from `store/designs/*.html` by `npm run store-images`; their values come from `store/panel-screenshots/`, except the example reverts. Real captures of the Panel stay in `store/panel-screenshots/`; retake them with `WINDOW_SIZE=1440,870 node store/screenshots.mjs` after `npm run build`.
 
 **Official URL**: none
 
