@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Open up Multicalls</title>
+<style>
+body { margin: 0; }
+:root { --bg:#161514; --surface:#1f1d1b; --ink:#f5f5f4; --muted:#a8a29e; --line:#3a3633; --accent:#93c5fd; --soft:#1e3a8a }
+</style>
+</head>
+<body>
+<div style="position: relative; width: 1280px; height: 800px; overflow: hidden; background: var(--bg); color: var(--ink); font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif">
+  <svg aria-hidden="true" width="1280" height="800" viewBox="0 0 1280 800" style="position: absolute; left: 0; top: 0"><path d="M0 800V520C120 430 250 470 330 590C380 665 410 735 430 800Z" fill="var(--soft)" opacity="0.55"></path><path d="M380 0H1280V230C1090 300 860 360 650 380C520 390 470 320 440 220C420 150 400 70 380 0Z" fill="var(--soft)" opacity="0.55"></path></svg>
+
+  <div style="position: absolute; left: 72px; top: 256px; width: 420px; display: flex; flex-direction: column; gap: 16px">
+    <svg aria-hidden="true" width="72" height="72" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4l-8 4l8 4l8 -4l-8 -4"></path><path d="M4 12l8 4l8 -4"></path><path d="M4 16l8 4l8 -4"></path></svg>
+    <h1 style="margin: 0; font-size: 76px; line-height: 84px; font-weight: 650; letter-spacing: -0.02em">Open up</h1>
+    <p style="margin: 0; font-size: 34px; line-height: 44px; font-weight: 400; color: var(--muted)">Every inner call of a Multicall</p>
+  </div>
+
+  <div style="position: absolute; left: 540px; top: 96px; width: 668px; height: 608px; box-sizing: border-box; padding: 32px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; font-size: 22px; line-height: 32px">
+    <div style="font-size: 28px; line-height: 36px; font-weight: 600; margin-bottom: 24px">Inner Calls</div>
+    <div style="padding: 16px 0; border-top: 1px solid var(--line); height: 128px; box-sizing: border-box">
+      <div><span style="color: var(--muted)">#1</span> ENSRegistryWithFallback</div>
+      <div style="margin-top: 8px; font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-size: 20px; color: var(--muted)">owner(node: 0xee6c…5835)</div>
+    </div>
+    <div style="height: 176px"></div>
+    <div style="padding: 16px 0; border-top: 1px solid var(--line); height: 128px; box-sizing: border-box">
+      <div><span style="color: var(--muted)">#3</span> BaseRegistrarImplementation</div>
+      <div style="margin-top: 8px; font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-size: 20px; color: var(--muted)">ownerOf(tokenId: 7923…2508)</div>
+    </div>
+  </div>
+
+  <div style="position: absolute; left: 500px; top: 320px; width: 748px; height: 168px; box-sizing: border-box; padding: 24px 40px; display: flex; flex-direction: column; justify-content: center; gap: 12px; background: var(--surface); border: 2px solid var(--accent); border-radius: 8px">
+    <div style="font-size: 28px; line-height: 36px; font-weight: 600"><span style="color: var(--muted); font-weight: 400">#2</span> NameWrapper</div>
+    <div style="font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-size: 24px; line-height: 32px; font-weight: 500">ownerOf(id: 1078…7205)</div>
+  </div>
+</div>
+</body>
+</html>

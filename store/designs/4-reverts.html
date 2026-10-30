@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Explain reverts</title>
+<style>
+body { margin: 0; }
+:root { --bg:#161514; --surface:#1f1d1b; --ink:#f5f5f4; --muted:#a8a29e; --line:#3a3633; --accent:#93c5fd; --soft:#1e3a8a }
+</style>
+</head>
+<body>
+<div style="position: relative; width: 1280px; height: 800px; overflow: hidden; background: var(--bg); color: var(--ink); font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif">
+  <svg aria-hidden="true" width="1280" height="800" viewBox="0 0 1280 800" style="position: absolute; left: 0; top: 0"><path d="M0 360C150 330 280 400 340 540C375 625 400 715 420 800H0Z" fill="var(--soft)" opacity="0.55"></path></svg>
+
+  <div style="position: absolute; left: 72px; top: 256px; width: 420px; display: flex; flex-direction: column; gap: 16px">
+    <svg aria-hidden="true" width="72" height="72" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4"></path><path d="M10.363 3.591l-8.106 13.534a1.914 1.914 0 0 0 1.636 2.871h16.214a1.914 1.914 0 0 0 1.636 -2.87l-8.106 -13.536a1.914 1.914 0 0 0 -3.274 0z"></path><path d="M12 16h.01"></path></svg>
+    <h1 style="margin: 0; font-size: 76px; line-height: 84px; font-weight: 650; letter-spacing: -0.02em">Explain</h1>
+    <p style="margin: 0; font-size: 34px; line-height: 44px; font-weight: 400; color: var(--muted)">Reverts, panics and custom errors</p>
+  </div>
+
+  <div style="position: absolute; left: 540px; top: 96px; width: 668px; height: 608px; box-sizing: border-box; padding: 32px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; font-size: 22px; line-height: 32px">
+    <div style="font-size: 28px; line-height: 36px; font-weight: 600; margin-bottom: 24px">Status</div>
+    <div style="padding: 16px 0; border-top: 1px solid var(--line); height: 128px; box-sizing: border-box">
+      <div style="color: var(--muted)">Error(string)</div>
+      <div style="margin-top: 8px">ERC20: transfer amount exceeds balance</div>
+    </div>
+    <div style="height: 176px"></div>
+    <div style="padding: 16px 0; border-top: 1px solid var(--line); height: 128px; box-sizing: border-box">
+      <div style="color: var(--muted)">Panic</div>
+      <div style="margin-top: 8px">Panic 0x11 (arithmetic overflow)</div>
+    </div>
+  </div>
+
+  <div style="position: absolute; left: 500px; top: 320px; width: 748px; height: 168px; box-sizing: border-box; padding: 24px 40px; display: flex; flex-direction: column; justify-content: center; gap: 12px; background: var(--surface); border: 2px solid var(--accent); border-radius: 8px">
+    <div style="font-size: 24px; line-height: 32px; color: var(--muted)">Custom error</div>
+    <div style="font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-size: 26px; line-height: 34px; font-weight: 500">InsufficientOutputAmount(998, 1000)</div>
+  </div>
+</div>
+</body>
+</html>

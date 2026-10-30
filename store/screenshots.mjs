@@ -1,5 +1,5 @@
-// Takes the Chrome Web Store screenshots (1280×800) of the Panel on real dApps,
-// with the real Sourcify. Run after `npm run build`:
+// Takes real captures (1280×800) of the Panel on real dApps, with the real
+// Sourcify, into store/panel-screenshots/. Run after `npm run build`:
 //   WINDOW_SIZE=1440,870 node store/screenshots.mjs
 // DevTools are docked right at 1170×731 CSS px (16:10, the most a 900 px tall
 // screen leaves), captured at 2× and scaled down to 1280×800 with `sips`
@@ -9,7 +9,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { launch } from "../.claude/skills/run-evm-rpc-inspector/driver.mjs";
 
-const OUT = new URL("./screenshots/", import.meta.url).pathname;
+const OUT = new URL("./panel-screenshots/", import.meta.url).pathname;
 const DEVTOOLS_WIDTH = 1170;
 const raw = mkdtempSync(join(tmpdir(), "evm-rpc-store-"));
 
