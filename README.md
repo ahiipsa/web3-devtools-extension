@@ -9,11 +9,7 @@ A Chrome DevTools extension that lets web3 developers inspect and decode the EVM
 
 ## Install
 
-Build `release/evm-rpc-inspector-<version>.zip` (see [Release](#release)), then:
-
-1. Unzip the archive.
-2. Open `chrome://extensions` and enable "Developer mode".
-3. Click "Load unpacked" and select the unzipped folder.
+Install it from the [Chrome Web Store](https://chromewebstore.google.com/detail/evm-rpc-inspector/lgkidagchabgblmijboeeadlbaaeajdn).
 
 ## Usage
 
@@ -36,7 +32,7 @@ npm install
 npm run watch   # rebuild into build/ on every change
 ```
 
-Load the `build/` folder as an unpacked extension (see [Install](#install)), and reload it from `chrome://extensions` after a rebuild.
+To load your build, open `chrome://extensions`, enable "Developer mode", click "Load unpacked" and select the `build/` folder. Reload it there after a rebuild. A zip from `npm run release` (see [Release](#release)) loads the same way once unzipped.
 
 ```sh
 npm test        # unit tests (Vitest)
